@@ -6,3 +6,14 @@ build/
 
 # Issued per machine and per bundle id; not a source file.
 *.provisionprofile
+
+# Never. Signing material and credentials belong in the keychain and in
+# ~/.appstoreconnect, not in a repository that is about to be public.
+*.p12
+*.p8
+*.key
+*.pem
+*.cer
+*.csr
+*.mobileprovision
+.env
