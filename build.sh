@@ -39,6 +39,29 @@ echo "==> Registering with Launch Services"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
   -f "$(cd "$APP" && pwd)"
 
+# A running copy keeps the code it launched with, so rebuilding under it changes
+# nothing on screen. If Quill was already open, it is restarted onto the new
+# build. The quit goes through AppleScript rather than a kill so that documents
+# are given the chance to save; if something is holding it up, the restart is
+# skipped and said so rather than forced.
+if pgrep -f "$(cd "$APP" && pwd)/Contents/MacOS/Quill" > /dev/null 2>&1; then
+  echo "==> Restarting the running copy"
+  osascript -e 'quit app "Quill"' > /dev/null 2>&1 || true
+
+  for _ in $(seq 1 20); do
+    pgrep -f "$(cd "$APP" && pwd)/Contents/MacOS/Quill" > /dev/null 2>&1 || break
+    sleep 0.25
+  done
+
+  if pgrep -f "$(cd "$APP" && pwd)/Contents/MacOS/Quill" > /dev/null 2>&1; then
+    echo "    Quill did not quit, most likely an unsaved document is asking."
+    echo "    Left it alone. Quit it yourself and run: open $APP"
+  else
+    open "$APP"
+    echo "    Running the new build."
+  fi
+fi
+
 echo
 echo "Built $APP"
 echo "Run it with:  open $APP"

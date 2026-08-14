@@ -484,6 +484,17 @@ final class EditorViewController: NSViewController {
         textView.setSelectedRange(selection)
     }
 
+    /// Rect of the table the caret is in, in the given view's coordinates, so a
+    /// control can be put on its corner. Nil when the caret is elsewhere.
+    func caretTableRect(in target: NSView) -> NSRect? {
+        guard let storage = textView.textStorage,
+              let line = caretTableLine(),
+              let table = TableFormatter.table(
+                atLine: line, in: parsed, text: storage.string as NSString),
+              let rect = textView.rect(for: table.range) else { return nil }
+        return textView.convert(rect, to: target)
+    }
+
     /// Opens the table editor on the table the caret is in.
     ///
     /// Returns false when there is no table there, so the Table command can fall

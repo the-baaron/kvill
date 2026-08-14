@@ -80,6 +80,26 @@ enum SelfTest {
                   rows.map(\.count).description)
             check("table: text around it is untouched",
                   editor.text.hasPrefix("Before.") && editor.text.hasSuffix("After."), "")
+
+            // The badge is the only way to find the editor without knowing the
+            // shortcut, so whether it shows up is worth a check of its own.
+            let inTableAgain = (editor.text as NSString).range(of: "| 1").location + 2
+            editor.textView.setSelectedRange(NSRange(location: inTableAgain, length: 0))
+            controller.view.layoutSubtreeIfNeeded()
+            let badges = controller.view.subviews.compactMap { $0 as? TableBadgeView }
+            check("table badge: appears with the caret in a table",
+                  badges.first?.isHidden == false, "\(badges.count) found")
+            check("table badge: sits over the table",
+                  (badges.first?.frame.width ?? 0) > 40
+                    && (badges.first?.frame.width ?? 0) < 200,
+                  badges.first.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none")
+
+            editor.textView.setSelectedRange(
+                NSRange(location: (editor.text as NSString).range(of: "After.").location, length: 0))
+            controller.view.layoutSubtreeIfNeeded()
+            check("table badge: goes when the caret leaves",
+                  badges.first?.alphaValue ?? 1 < 1 || badges.first?.isHidden == true,
+                  "alpha \(String(format: "%.2f", badges.first?.alphaValue ?? -1))")
         }
 
         controller.loadText(text)
