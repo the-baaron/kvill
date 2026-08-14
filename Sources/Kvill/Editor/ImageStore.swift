@@ -57,6 +57,12 @@ final class ImageStore {
         let path = url.path
         if failed.contains(path) { return nil }
 
+        // Under the sandbox, opening a document grants that document and not the
+        // picture beside it. Opening the folder grants both, so this asks for
+        // the folder's scope before reading. Without it the read is refused and
+        // the image is remembered as broken when it is only unreachable.
+        _ = FolderAccess.isReachable(url)
+
         let attributes = try? FileManager.default.attributesOfItem(atPath: path)
         let key = Key(
             path: path,
@@ -66,7 +72,10 @@ final class ImageStore {
         if let cached = cache[key] { return cached }
 
         guard let image = NSImage(contentsOf: url), image.size.width > 0, image.size.height > 0 else {
-            failed.insert(path)
+            // Not recorded as failed when the folder simply has not been opened
+            // yet: opening it should make the image appear, not leave it
+            // permanently marked as missing.
+            if FileManager.default.isReadableFile(atPath: path) { failed.insert(path) }
             return nil
         }
         cache[key] = image

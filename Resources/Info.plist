@@ -22,6 +22,21 @@
 			<string>MarkdownDocument</string>
 		</dict>
 		<dict>
+			<!-- A folder is not opened as a document: the controller intercepts
+			     it, shows its tree and takes the read access that comes with
+			     choosing it. Declared here so the Finder will hand one over. -->
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>None</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+			</array>
+		</dict>
+		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Plain Text Document</string>
 			<key>CFBundleTypeRole</key>

@@ -60,6 +60,8 @@ enum ScreenshotRenderer {
     /// Runs the render and returns a process exit code.
     static func run(_ request: Request) -> Int32 {
         let manager = ThemeManager.shared
+        let saved = manager.settingsSnapshot
+        defer { manager.restore(saved) }
         if let theme = request.theme {
             guard Palettes.theme(id: theme) != nil else {
                 FileHandle.standardError.write(Data("Unknown theme: \(theme)\n".utf8))

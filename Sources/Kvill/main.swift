@@ -68,6 +68,18 @@ if let index = CommandLine.arguments.firstIndex(of: "--specimens"),
     exit(SpecimenSheet.render(to: CommandLine.arguments[index + 1]))
 }
 
+// The sidebar, drawn on its own, for the same reason.
+if let index = CommandLine.arguments.firstIndex(of: "--tree"),
+   CommandLine.arguments.count > index + 2 {
+    startHeadless()
+    let themeIndex = CommandLine.arguments.firstIndex(of: "--theme")
+    exit(TreeSheet.render(
+        URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true),
+        to: CommandLine.arguments[index + 2],
+        theme: themeIndex.flatMap { CommandLine.arguments.count > $0 + 1
+            ? CommandLine.arguments[$0 + 1] : nil }))
+}
+
 if let request = ScreenshotRenderer.parse(CommandLine.arguments) {
     // Headless PNG render: no document controller, no menu, no untitled window.
     startHeadless()

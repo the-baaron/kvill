@@ -241,6 +241,35 @@ final class ThemeManager {
         return appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
+    /// Every display setting, so a headless render can put them back.
+    ///
+    /// A render is a read. `--render --theme nord` used to leave the user's own
+    /// copy of Kvill set to Nord, which meant taking screenshots changed the
+    /// app, silently and permanently.
+    var settingsSnapshot: [String: Any?] {
+        let keys = [
+            Key.palette, Key.preset, Key.size, Key.width, Key.followSystem,
+            Key.lightPalette, Key.darkPalette,
+        ]
+        return Dictionary(uniqueKeysWithValues: keys.map { ($0, defaults.object(forKey: $0)) })
+    }
+
+    func restore(_ snapshot: [String: Any?]) {
+        for (key, value) in snapshot {
+            if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        // The stored properties have to come back too. Putting only the defaults
+        // back left the manager still holding the render's theme, so the next
+        // rebuild in the same process would have written it out again.
+        followsSystemAppearance = defaults.bool(forKey: Key.followSystem)
+        lightPaletteID = defaults.string(forKey: Key.lightPalette) ?? Palettes.paper.id
+        darkPaletteID = defaults.string(forKey: Key.darkPalette) ?? Palettes.ink.id
+        presetID = defaults.string(forKey: Key.preset) ?? TypographyPreset.editorial.id
+        textSize = TextSize(rawValue: defaults.string(forKey: Key.size) ?? "") ?? .medium
+        lineWidth = LineWidth(rawValue: defaults.string(forKey: Key.width) ?? "") ?? .normal
+        rebuild()
+    }
+
     /// Picks a palette explicitly. Doing so turns off following the system, since
     /// the two settings would otherwise fight each other on the next appearance change.
     func selectPalette(id: String) {

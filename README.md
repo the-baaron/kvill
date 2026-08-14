@@ -99,6 +99,17 @@ Return continues a list or quote and ends it on an empty item. Tab and Shift-Tab
 indent list items. Clicking a checkbox toggles it. Command-clicking a link opens
 it.
 
+## Folders
+
+**File › Open Folder…**, or drop a folder on the icon, and its Markdown files
+appear down the side of the window. Click one to open it. Sub-folders are
+included; folders with no Markdown in them are not.
+
+Opening a folder does one other thing worth knowing: macOS then lets Kvill read
+everything inside it, which is what makes images stored beside your documents
+load. Kvill remembers the folders you have opened, so it only has to be done
+once.
+
 ## Images
 
 Drag an image in and Kvill writes the Markdown for it. A file already inside the
@@ -133,16 +144,11 @@ to 58% of the body size. If it still will not fit, the grid is abandoned
 altogether and the row falls back to plain monospace source with its pipes
 showing, because half a grid looks worse than none.
 
-## Roadmap
-
-- Opening a folder shows a file tree, while opening a file stays one window,
-  one file.
-
 ## Known limits
 
-- Images referenced beside a document do not load unless you opened the folder
-  rather than the file. The sandbox grants access to what you chose, and a
-  neighbouring file is not that.
+- Images referenced beside a document need the folder to have been opened at
+  least once. macOS grants access to what you chose, and a neighbouring file is
+  not that; opening the folder grants all of it, and Kvill remembers.
 - The emphasis matcher is a pragmatic approximation of the CommonMark flanking
   rules, not the full algorithm. It handles real prose, including `snake_case`,
   but a deliberately pathological nesting case may differ from a strict parser.

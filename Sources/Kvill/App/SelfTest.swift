@@ -186,6 +186,75 @@ enum SelfTest {
                   BackgroundService.loginItemStatus)
         }
 
+        // --- The file tree ----------------------------------------------------
+        do {
+            // A folder with Markdown at two levels, plus a file that should not
+            // be listed and a folder holding nothing that should not appear.
+            let root = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("kvill-tree-\(ProcessInfo.processInfo.processIdentifier)")
+            let nested = root.appendingPathComponent("nested")
+            let empty = root.appendingPathComponent("empty")
+            try? FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+            try? "# one".write(to: root.appendingPathComponent("one.md"),
+                               atomically: true, encoding: .utf8)
+            try? "# two".write(to: nested.appendingPathComponent("two.md"),
+                               atomically: true, encoding: .utf8)
+            try? "not markdown".write(to: root.appendingPathComponent("notes.rtf"),
+                                      atomically: true, encoding: .utf8)
+
+            let tree = FileTreeView()
+            tree.show(root)
+            let listed = tree.listedForTest
+            check("file tree: lists the Markdown", listed.contains("one"), listed.joined(separator: ", "))
+            check("file tree: descends into folders", listed.contains("two"),
+                  listed.joined(separator: ", "))
+            check("file tree: leaves other files out", !listed.contains("notes"),
+                  listed.joined(separator: ", "))
+            check("file tree: leaves empty folders out", !listed.contains("empty"),
+                  listed.joined(separator: ", "))
+
+            check("file tree: opening a folder grants what is inside it",
+                  FolderAccess.isReachable(nested.appendingPathComponent("two.md")), "")
+
+            // A blank sidebar and a broken sidebar look identical, so the rows
+            // themselves are counted: root, nested, the file inside it, one.md.
+            tree.prepareForRender()
+            check("file tree: shows a row per document", tree.rowCountForTest == 3,
+                  "rows: \(tree.rowCountForTest)")
+
+            let controller = DocumentViewController()
+            _ = controller.view
+            check("file tree: the sidebar is hidden until a folder is opened",
+                  !controller.isShowingFileTree, "")
+            controller.showFolder(root)
+            check("file tree: opening a folder puts the sidebar up",
+                  controller.isShowingFileTree, "")
+
+            // A render is a read. Rendering with a theme used to leave the user's
+            // own copy of Kvill set to it.
+            let palette = UserDefaults.standard.string(forKey: "kvill.palette")
+            let colors = ThemeManager.shared.theme.colors.id
+            let saved = ThemeManager.shared.settingsSnapshot
+            ThemeManager.shared.selectPalette(id: Palettes.nord.id)
+            // Without this the restore check would pass on a setter that never
+            // wrote anything, which is the whole reason the snapshot exists.
+            let changed = UserDefaults.standard.string(forKey: "kvill.palette")
+            check("display settings: choosing a palette is written to disk",
+                  changed == Palettes.nord.id, changed ?? "unset")
+            ThemeManager.shared.restore(saved)
+            check("display settings: a snapshot puts the saved setting back",
+                  UserDefaults.standard.string(forKey: "kvill.palette") == palette,
+                  "was \(palette ?? "unset"), now "
+                    + (UserDefaults.standard.string(forKey: "kvill.palette") ?? "unset"))
+            check("display settings: a snapshot puts the live theme back too",
+                  ThemeManager.shared.theme.colors.id == colors,
+                  "was \(colors), now \(ThemeManager.shared.theme.colors.id)")
+
+            FolderAccess.forget(root)
+            try? FileManager.default.removeItem(at: root)
+        }
+
         // --- Slash menu -------------------------------------------------------
         do {
             check("slash menu: lists every block",

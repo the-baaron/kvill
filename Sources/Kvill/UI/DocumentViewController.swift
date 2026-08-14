@@ -21,6 +21,11 @@ final class DocumentViewController: NSViewController {
     /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
     /// work, and none of it is needed until there is a selection to act on.
     private var selectionToolbar: SelectionToolbarView?
+    /// The folder sidebar. Built only when a folder is opened, which most
+    /// documents never do.
+    private var fileTree: FileTreeView?
+    private var treeWidth: NSLayoutConstraint!
+    private var editorLeading: NSLayoutConstraint!
 
     private var toolbarLeading: NSLayoutConstraint!
     private var toolbarTop: NSLayoutConstraint!
@@ -63,6 +68,8 @@ final class DocumentViewController: NSViewController {
         container.addSubview(optionsBar)
 
 
+        editorLeading = editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
+
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -74,7 +81,7 @@ final class DocumentViewController: NSViewController {
             tint.topAnchor.constraint(equalTo: container.topAnchor),
             tint.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
-            editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            editorLeading,
             editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             editorView.topAnchor.constraint(equalTo: container.topAnchor),
             editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
@@ -318,6 +325,41 @@ final class DocumentViewController: NSViewController {
         selectionToolbar = created
         return created
     }
+
+    /// Shows the folder's Markdown files down the side, and grants Kvill the
+    /// read access that makes images inside that folder load.
+    func showFolder(_ folder: URL) {
+        let tree = fileTree ?? {
+            let made = FileTreeView()
+            made.onOpen = { url in
+                // The new document gets the tree too, otherwise clicking a file
+                // in the sidebar is a way of losing the sidebar.
+                NSDocumentController.shared.openDocument(
+                    withContentsOf: url, display: true) { document, _, _ in
+                    (document?.windowControllers.first?.contentViewController
+                        as? DocumentViewController)?.showFolder(folder)
+                }
+            }
+            view.addSubview(made, positioned: .below, relativeTo: dragArea)
+            treeWidth = made.widthAnchor.constraint(equalToConstant: 220)
+            NSLayoutConstraint.activate([
+                made.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                made.topAnchor.constraint(equalTo: view.topAnchor),
+                made.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                treeWidth,
+            ])
+            fileTree = made
+            return made
+        }()
+
+        editorLeading.constant = treeWidth.constant
+        tree.show(folder)
+        tree.select(documentURL)
+        view.needsLayout = true
+    }
+
+    /// Whether the sidebar is showing, for the self test.
+    var isShowingFileTree: Bool { fileTree != nil && editorLeading.constant > 0 }
 
     /// Where the file lives, for resolving and filing images.
     var documentURL: URL? {

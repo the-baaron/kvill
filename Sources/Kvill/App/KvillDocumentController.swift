@@ -37,6 +37,15 @@ final class KvillDocumentController: NSDocumentController {
         display displayDocument: Bool,
         completionHandler: @escaping (NSDocument?, Bool, Error?) -> Void
     ) {
+        // A folder is not a document. It is a place to find one, and choosing it
+        // is also what grants Kvill read access to everything inside, which is
+        // what makes images beside a document load.
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            openFolder(url)
+            completionHandler(nil, false, CocoaError(.userCancelled))
+            return
+        }
+
         guard KvillDocumentController.isReadableAsText(url) else {
             // `userCancelled` is the one error AppKit shows nothing for, which is
             // exactly right: the user asked for something Kvill does not do, and
@@ -46,6 +55,29 @@ final class KvillDocumentController: NSDocumentController {
         }
         super.openDocument(
             withContentsOf: url, display: displayDocument, completionHandler: completionHandler)
+    }
+
+    /// Opens a folder: remember it, then show its tree beside whichever document
+    /// is already open, or beside the first one in the folder.
+    func openFolder(_ folder: URL) {
+        FolderAccess.remember(folder)
+
+        if let controller = NSApp.keyWindow?.contentViewController as? DocumentViewController {
+            controller.showFolder(folder)
+            return
+        }
+        // Nothing open to attach it to, so the first document in the folder
+        // becomes the window the tree lives in.
+        let first = (try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]))?
+            .first { FileTreeView.isMarkdown($0) }
+
+        guard let first else { return }
+        openDocument(withContentsOf: first, display: true) { document, _, _ in
+            guard let controller = document?.windowControllers.first?
+                .contentViewController as? DocumentViewController else { return }
+            controller.showFolder(folder)
+        }
     }
 
     /// True when the start of the file reads as text.

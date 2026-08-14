@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: false)
         BackgroundService.apply()
+        // Folders granted in earlier sessions, so a document opened from one has
+        // its images straight away rather than after the sidebar is opened.
+        FolderAccess.restore()
 
         // With the background setting on, closing the last window leaves the app
         // running. It steps out of the Dock rather than sitting there empty, and
@@ -42,6 +45,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
+
+    /// Opening a folder shows its Markdown files down the side of the window,
+    /// and grants Kvill read access to everything in it, which is what makes
+    /// images referenced beside a document load.
+    @objc func openFolder(_ sender: Any?) {
+        guard let folder = FolderAccess.request(startingAt: nil) else { return }
+        (NSDocumentController.shared as? KvillDocumentController)?.openFolder(folder)
+    }
 
     // MARK: - Theme commands
 

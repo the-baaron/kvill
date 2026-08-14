@@ -22,6 +22,7 @@ main claim, not just in a benchmark.
 | `--benchmark file.md` | Startup, per-keystroke and second-window timings |
 | `--render in.md out.png` | Draws a page headlessly. `--theme`, `--typography`, `--size`, `--geometry`, `--scale`, `--offset` |
 | `--specimens out.png` | Draws the typography picker's buttons |
+| `--tree folder out.png` | Draws the file-tree sidebar, `--theme` optional |
 | `--login-item [status\|on\|off]` | Reads what macOS thinks of the login item, not what the setting claims |
 | `./store/make-screenshots.sh` | Regenerates all five App Store screenshots |
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
@@ -100,6 +101,21 @@ Profile before optimising; the answer was not where it looked.
 **`NSString.character(at:)` in the parser.** An Objective-C message per
 character against a rope. Copying the document into a UTF-16 array once (`Scan`)
 made parsing 4.8× faster.
+
+**Off-screen windows never run a display pass.** The same trap twice. A blank
+sidebar and a broken sidebar look identical, so `--tree` was reporting success
+on an empty PNG. The row views do not exist until something asks for them
+(`prepareForRender`), the views have to be told to draw themselves one by one
+because the hierarchy is layer-backed, and the system-drawn parts, disclosure
+triangle and symbol icons, resolve their colour against the current *drawing*
+appearance, which off screen is the machine's rather than the window's. Without
+that last bit the sidebar came out white on a white page and looked like a bug
+in the app.
+
+**Renders used to change the app.** `--render --theme nord` wrote nord into the
+user's own preferences, so taking screenshots silently changed their editor.
+`ThemeManager.settingsSnapshot` and `restore` put every display setting back,
+in memory as well as on disk. A render is a read.
 
 **Glass renders as nothing off screen.** `NSGlassEffectView` draws blank in a
 headless render, so every screenshot of the options panel came out empty. Its
