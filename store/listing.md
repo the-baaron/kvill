@@ -18,12 +18,12 @@ pushed rather than invented at the keyboard.
 
 ## Promotional text
 
-Opens before you've finished letting go of the mouse. About nine hundredths of
-a second, which is faster than your usual editor gets its window on screen.
+Opens faster than you can say Markdown. About nine hundredths of a second from
+double-click to a page you can type on, which is not a figure of speech.
 
 ## Description
 
-Kvill is a Markdown editor for macOS that opens before you've finished letting go of the mouse.
+Kvill is a Markdown editor for macOS. It opens faster than you can say Markdown.
 
 That isn't a figure of speech. Double-click to a page you can type on takes
 about nine hundredths of a second, and a half-megabyte file costs another three
@@ -67,9 +67,12 @@ There's no preview pane, on the grounds that Markdown is already legible. No
 export, no publishing, no plugins, no sidebar, no file browser. One window per
 file, and opening a second file gives you a second window rather than a tab.
 
-It also can't reach the network. Not "doesn't" — can't. The app ships without a
-network entitlement, so macOS refuses the connection on its behalf. That rules
-out analytics and accounts and sync by construction rather than by promise.
+What it does instead is edit the file you opened. Markdown on your own disk,
+changed in place. Nothing to sign into, no library to import into, no copy kept
+anywhere else, and the file stays readable by every other editor you own.
+
+There's no analytics either, and that part isn't a promise: the app ships
+without a network entitlement, so macOS won't let it connect at all.
 
 If you want the things in that list, Byword and iA Writer are very good and
 they cost money. Kvill is free, has nothing to buy, and the source is on

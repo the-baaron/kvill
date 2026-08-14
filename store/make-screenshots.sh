@@ -29,17 +29,17 @@ rm -f store/screenshots/*.png store/page-*.png
 
 echo "==> Composing"
 shot 1 paper editorial centre light \
-  "Opens before you let go of the mouse" \
-  "Nine hundredths of a second, with nothing deferred to make that true."
+  "Opens faster than you can say Markdown" \
+  "Nine hundredths of a second, and nothing deferred to make that true."
 shot 2 ink editorial right dark \
   "It handles the awkward parts too" \
   "Tables that line up in a diff, not only on screen. Callouts. Footnotes."
 shot 3 sepia editorial left light \
-  "It cannot reach the network" \
-  "Not a promise. There is no network entitlement, so macOS refuses for it."
+  "Just edit local files" \
+  "Plain Markdown on your own disk. Nothing to sign into, nothing to import."
 shot 4 nord editorial centre dark \
-  "Eight schemes, five faces, set properly" \
-  "Each with the line height and measure that actually suit it."
+  "Eight colour schemes and five typefaces" \
+  "Focus mode dims everything except the paragraph you are working in."
 shot 5 contrast-light grotesk right light \
   "Build a table without typing a pipe" \
   "Press / and an insert menu opens under the cursor, filtering as you type."

@@ -1,4 +1,4 @@
-# Opens before you let go
+# Opens faster than you can say Markdown
 
 Double-click to a page you can type on takes about nine hundredths of a second. Nothing is being cleverly deferred either: there is no project to open, no workspace to restore and no index to build.
 

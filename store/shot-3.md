@@ -1,12 +1,12 @@
-# Yours, and only yours
+# Just edit local files
 
-Kvill makes no network connections at all. There is no analytics, no account, no sync, and no entitlement that would let any of that be added later by accident.
+Markdown on your own disk, changed in place. Nothing to sign into, no library to import into, and no copy kept anywhere else.
 
-## It is your file
+## It stays readable
 
-Markdown in, Markdown out. Nothing proprietary, no database, no wrapper around your writing. The document on disk is exactly what you typed, and every other editor can read it.
+The file is exactly what you typed. Every other editor you own can open it, and so can `cat`.
 
 > [!TIP]
-> Free, with no advertising and nothing to buy. The source is open.
+> There is no analytics either, and that part is not a promise: the app ships without a network entitlement, so macOS will not let it connect at all.
 
-Images drop straight in. Links hide their URLs until you need them. Setext headings become ordinary ones on open, because they are awkward to live with.
+Free, nothing to buy, source on GitHub.
