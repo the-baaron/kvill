@@ -1,14 +1,10 @@
-# Straight to the page
+# Opens before you let go
 
-No project to open, nothing to index, no workspace to choose. Double-click a Markdown file and the cursor is already waiting where you left it.
+Double-click to a page you can type on takes about nine hundredths of a second. Nothing is being cleverly deferred either: there is no project to open, no workspace to restore and no index to build.
 
-## Nothing shouts
+## The margin
 
-Every syntax marker hangs in the left margin, dimmed and right-aligned, so headings of every level finish on the same column and your text keeps one clean edge.
+A `#` sits out in the left margin, dimmed and right-aligned, so a top-level heading and a sixth-level one finish on the same column and your prose keeps one straight edge.
 
 > [!NOTE]
-> Markers appear only where the cursor is. Move away and a line reads as a heading. Move back and the source is there, exactly as you typed it.
-
-- [x] 0.09 seconds from double-click to a page you can type on
-- [x] 0.12 seconds for a half-megabyte document
-- [ ] Close the last window and it quits
+> Put the cursor on a line and its markers come back exactly as you typed them. Move away and they fade again. The file is never touched.

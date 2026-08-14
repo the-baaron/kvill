@@ -29,20 +29,20 @@ rm -f store/screenshots/*.png store/page-*.png
 
 echo "==> Composing"
 shot 1 paper editorial centre light \
-  "Straight to the page" \
-  "No project to open, nothing to index. The cursor is already waiting."
+  "Opens before you let go of the mouse" \
+  "Nine hundredths of a second, with nothing deferred to make that true."
 shot 2 ink editorial right dark \
-  "All of Markdown, none of the weight" \
-  "Tables, callouts, code, footnotes. No sidebar, no inspector, no workspace."
+  "It handles the awkward parts too" \
+  "Tables that line up in a diff, not only on screen. Callouts. Footnotes."
 shot 3 sepia editorial left light \
-  "Yours, and only yours" \
-  "No network, no account, no tracking. Free, and open source."
+  "It cannot reach the network" \
+  "Not a promise. There is no network entitlement, so macOS refuses for it."
 shot 4 nord editorial centre dark \
-  "Set properly, not just styled" \
-  "Eight palettes and five typefaces, each with the spacing that suits it."
+  "Eight schemes, five faces, set properly" \
+  "Each with the line height and measure that actually suit it."
 shot 5 contrast-light grotesk right light \
-  "Everything, without the mouse" \
-  "Press / and the whole of Markdown is three keystrokes away."
+  "Build a table without typing a pipe" \
+  "Press / and an insert menu opens under the cursor, filtering as you type."
 
 rm -f store/page-*.png
 echo
