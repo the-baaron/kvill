@@ -135,6 +135,20 @@ This draws the page only. The floating glass chrome is not included: those views
 force the hierarchy to be layer-backed, and an off-screen layer-backed window
 never runs a display pass, so there is nothing to capture.
 
+## Tables
+
+A table row is one paragraph, so the moment it wraps a kerned grid becomes
+meaningless. Quill measures every column, sets the table in the reading face
+rather than a monospace one, and kerns each cell onto the grid with two
+adjustments: one that puts the cell's first character exactly one padding past
+the column edge, and one that fills the rest of the column. The pipes are then
+invisible, because the columns say everything they said.
+
+If the table would be wider than the measure, it is shrunk until it fits, down
+to 58% of the body size. If it still will not fit, the grid is abandoned
+altogether and the row falls back to plain monospace source with its pipes
+showing, because half a grid looks worse than none.
+
 ## Roadmap
 
 - `⌘.` to hide and show every piece of chrome at once.
