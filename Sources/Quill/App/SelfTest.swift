@@ -108,6 +108,15 @@ enum SelfTest {
             let after = ScrollEdgeRenderer.sharpness(softened, rows: edgeBand)
             check("edge blurs: \(name)", before > 0 && after < before * 0.7,
                   "sharpness \(String(format: "%.4f", before)) to \(String(format: "%.4f", after))")
+
+            // And the far end must be left alone, or it is a blurred panel
+            // rather than a gradual one.
+            let farBand = edge == .top ? (rowsHigh * 2 / 3)..<rowsHigh : 0..<(rowsHigh / 3)
+            let farBefore = ScrollEdgeRenderer.sharpness(straight, rows: farBand)
+            let farAfter = ScrollEdgeRenderer.sharpness(softened, rows: farBand)
+            check("edge blur is gradual: \(name)",
+                  farBefore == 0 || farAfter > farBefore * 0.85,
+                  "far end \(String(format: "%.4f", farBefore)) to \(String(format: "%.4f", farAfter))")
         }
 
         // --- Chrome ----------------------------------------------------------

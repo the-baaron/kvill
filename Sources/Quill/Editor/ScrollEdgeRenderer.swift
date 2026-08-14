@@ -21,7 +21,7 @@ enum ScrollEdgeRenderer {
 
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
 
-    static let blurRadius: CGFloat = 14
+    static let blurRadius: CGFloat = 18
 
     /// Draws the effect into `target`, taking its content from `sourceStrip` of
     /// the document. Both rects are in flipped coordinates, so `minY` is the top.
@@ -61,8 +61,9 @@ enum ScrollEdgeRenderer {
             ? [opaque.cgColor, clear.cgColor]
             : [clear.cgColor, opaque.cgColor]
 
-        // Clear by 45% in, leaving the rest of the strip as visible blur.
-        let stops: [CGFloat] = strongAtTop ? [0, 0.45] : [0.55, 1]
+        // A light touch: the blur does the work, and this only stops the very
+        // last few points of text from running into the window edge.
+        let stops: [CGFloat] = strongAtTop ? [0, 0.3] : [0.7, 1]
         guard let gradient = CGGradient(
             colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
             colors: colors as CFArray,
@@ -82,13 +83,16 @@ enum ScrollEdgeRenderer {
 
     // MARK: - Blur
 
-    /// The strip, blurred, with an alpha ramp so it is strongest at the window
-    /// edge and gone by the far side.
+    /// The strip with a progressive blur: the radius itself ramps from nothing
+    /// at the inner edge to full strength at the window edge.
     ///
-    /// The ramp is baked into the image with Core Image rather than applied as a
-    /// `CGContext.clip(to:mask:)`. That call was drawing nothing at all here, and
-    /// its mask semantics are easy to get backwards; an image that already
-    /// carries its own alpha has nothing left to misinterpret.
+    /// The obvious approach, and the one this replaced, is to blur the whole
+    /// strip at a fixed radius and ramp that layer's opacity over the original.
+    /// It looks wrong, and it is worth knowing why: cross-fading sharp text with
+    /// blurred text shows both at once through the middle of the ramp, so the
+    /// text appears doubled rather than softened. `CIMaskedVariableBlur` varies
+    /// the radius per pixel instead, which is a real gradual blur and never
+    /// shows two copies of anything.
     private static func blur(
         strip: NSRect, scale: CGFloat, strongAtTop: Bool, render: (NSRect) -> Void
     ) -> NSImage? {
@@ -96,27 +100,31 @@ enum ScrollEdgeRenderer {
               let source = CIImage(bitmapImageRep: representation) else { return nil }
         let extent = source.extent
 
-        let blurred = source
-            .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blurRadius])
-            .cropped(to: extent)
-
-        // Core Image is bottom-up, so the top of the picture is at maxY.
+        // Core Image is bottom-up, so the top of the picture is at maxY. White
+        // in the mask means full radius, black means untouched.
         let strongEdge = strongAtTop ? extent.maxY : extent.minY
-        let weakEdge = strongAtTop ? extent.minY : extent.maxY
-        guard let ramp = CIFilter(name: "CILinearGradient", parameters: [
+        // The ramp spans the outer half of the strip. Running it further in left
+        // text softened well away from the edge, which reads as a smeared page
+        // rather than an edge treatment.
+        let weakEdge = strongAtTop
+            ? extent.minY + extent.height * 0.5
+            : extent.maxY - extent.height * 0.5
+        guard let ramp = CIFilter(name: "CISmoothLinearGradient", parameters: [
             "inputPoint0": CIVector(x: extent.midX, y: strongEdge),
             "inputColor0": CIColor(red: 1, green: 1, blue: 1, alpha: 1),
             "inputPoint1": CIVector(x: extent.midX, y: weakEdge),
-            "inputColor1": CIColor(red: 1, green: 1, blue: 1, alpha: 0),
+            "inputColor1": CIColor(red: 0, green: 0, blue: 0, alpha: 1),
         ])?.outputImage?.cropped(to: extent) else { return nil }
 
-        let masked = blurred.applyingFilter("CIBlendWithAlphaMask", parameters: [
-            kCIInputBackgroundImageKey: CIImage(color: .clear).cropped(to: extent),
-            kCIInputMaskImageKey: ramp,
-        ])
+        let blurred = source
+            .clampedToExtent()
+            .applyingFilter("CIMaskedVariableBlur", parameters: [
+                "inputMask": ramp,
+                kCIInputRadiusKey: blurRadius,
+            ])
+            .cropped(to: extent)
 
-        guard let output = context.createCGImage(masked, from: extent) else { return nil }
+        guard let output = context.createCGImage(blurred, from: extent) else { return nil }
         return NSImage(cgImage: output, size: strip.size)
     }
 

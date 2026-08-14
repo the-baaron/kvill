@@ -64,6 +64,17 @@ enum Benchmark {
         }
         let afterFullLayout = stamp()
 
+        // Scroll edges are redrawn on every scrolled frame, so their cost has to
+        // fit inside a frame budget.
+        let edge = ScrollEdgeView(edge: .top, theme: ThemeManager.shared.theme)
+        edge.source = textView
+        let edgeStart = stamp()
+        let rounds = 20
+        for _ in 0..<rounds {
+            _ = edge.renderForTest(size: NSSize(width: 900, height: 90))
+        }
+        let edgePer = (stamp() - edgeStart) / Double(rounds) * 1000
+
         print("""
             document      \(nsText.length) characters, \(parsed.lines.count) lines
             read          \(ms(processStart, afterRead))   (includes process start)
@@ -75,6 +86,7 @@ enum Benchmark {
             load + style  \(ms(afterParse, afterStyle))
             first screen  \(ms(afterStyle, afterFirstScreen))
             full layout   \(ms(afterFirstScreen, afterFullLayout))
+            edge redraw   \(String(format: "%7.1f ms", edgePer))   (per edge, per frame)
             ---
             to first screen \(ms(processStart, afterFirstScreen))
             total           \(ms(processStart, afterFullLayout))
