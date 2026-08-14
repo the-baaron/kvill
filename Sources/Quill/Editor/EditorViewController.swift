@@ -179,19 +179,26 @@ final class EditorViewController: NSViewController {
         let metrics = theme.metrics
         let available = scrollView.contentSize.width
         let horizontal = max(24, (available - metrics.contentWidth) / 2)
-        let vertical: CGFloat = 56
+        // Enough that the first line is not jammed under the title bar.
+        let vertical: CGFloat = 116
 
         if textView.textContainerInset.width != horizontal
             || textView.textContainerInset.height != vertical {
             textView.textContainerInset = NSSize(width: horizontal, height: vertical)
         }
 
-        // Room to scroll past the last line, so the end of a document can be
-        // worked on without it being pinned to the bottom edge of the window.
-        // Typewriter mode needs at least half a screen of this for the caret to
-        // reach the middle.
+        // Room to scroll past the last line. Exactly enough that the last line
+        // can come to rest at the top of the window and no further, which makes
+        // the limit a rule rather than a number someone picked: max scroll works
+        // out to the document's height less one line. It also clears the half a
+        // screen typewriter mode needs to bring the caret to the middle.
+        // Typewriter mode needs half a window of it whatever the setting says,
+        // or the caret cannot reach the middle.
         if let clip = scrollView.contentView as? TypewriterClipView {
-            clip.bottomSlack = max(0, scrollView.frame.height * 0.7)
+            let full = max(0, scrollView.frame.height - metrics.lineHeight)
+            clip.bottomSlack = ThemeManager.shared.scrollPastEnd
+                ? full
+                : (ThemeManager.shared.typewriterScrolling ? scrollView.frame.height / 2 : 0)
         }
 
         visibleLineRange()
@@ -579,10 +586,11 @@ final class EditorViewController: NSViewController {
         slashMenu = menu
         menu.onChoose = { [weak self] command in
             guard let self else { return }
+            // The query has to come out before the menu closes: closing forgets
+            // where the slash was, and then there is nothing to remove.
+            if command != nil { self.removeSlashQuery() }
             self.closeSlashMenu()
-            guard let command else { return }
-            self.removeSlashQuery()
-            command.run(self)
+            command?.run(self)
         }
         guard menu.update(query: "") else {
             closeSlashMenu()

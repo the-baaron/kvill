@@ -90,6 +90,7 @@ final class ThemeManager {
         static let darkPalette = "quill.darkPalette"
         static let focusMode = "quill.focusMode"
         static let typewriter = "quill.typewriterScrolling"
+        static let scrollPastEnd = "quill.scrollPastEnd"
         static let showMarkers = "quill.showMarkers"
     }
 
@@ -159,6 +160,14 @@ final class ThemeManager {
 
     /// Keeps syntax markers dimly visible everywhere. Off, the default, reveals
     /// them only in the element the caret is in.
+    /// Whether the document can be scrolled beyond its last line.
+    var scrollPastEnd: Bool {
+        didSet {
+            defaults.set(scrollPastEnd, forKey: Key.scrollPastEnd)
+            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+        }
+    }
+
     var alwaysShowMarkers: Bool {
         didSet {
             defaults.set(alwaysShowMarkers, forKey: Key.showMarkers)
@@ -200,6 +209,9 @@ final class ThemeManager {
         focusMode = defaults.bool(forKey: Key.focusMode)
         typewriterScrolling = defaults.bool(forKey: Key.typewriter)
         alwaysShowMarkers = defaults.bool(forKey: Key.showMarkers)
+        // On unless it has been turned off: a document you cannot scroll to the
+        // end of is the odd case, not the default.
+        scrollPastEnd = defaults.object(forKey: Key.scrollPastEnd) as? Bool ?? true
 
         theme = ThemeManager.build(
             paletteID: defaults.string(forKey: Key.palette) ?? Palettes.paper.id,

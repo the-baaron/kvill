@@ -178,8 +178,12 @@ enum SelfTest {
         check("clip view is the typewriter clip view",
               clip is TypewriterClipView, String(describing: type(of: clip)))
 
+        // Exactly enough that the last line can sit at the top of the window.
         let slack = (clip as? TypewriterClipView)?.bottomSlack ?? 0
-        check("scroll slack reserved", slack > 100, "slack \(Int(slack))pt")
+        let line = ThemeManager.shared.theme.metrics.lineHeight
+        check("scroll slack is a window less one line",
+              abs(slack - (clip.bounds.height - line)) < 1,
+              "slack \(Int(slack))pt, window \(Int(clip.bounds.height))pt, line \(Int(line))pt")
 
         let documentHeight = controller.editor.textView.frame.height
         let viewport = clip.bounds.height
@@ -189,6 +193,20 @@ enum SelfTest {
         let reached = clip.bounds.origin.y
         check("can scroll past the last line", reached > plainMax + 20,
               "reached \(Int(reached)) of plain max \(Int(plainMax))")
+        // The last line ends up at the top, and nothing beyond it is reachable.
+        // The height is read again here: laying the rest out can add the final
+        // empty line fragment, and the limit follows the real height.
+        // Measured from the same values the clip view used, read now rather
+        // than before the scroll: laying the rest of the file out can add the
+        // final empty line fragment and the limit follows the real height.
+        let settled = controller.editor.textView.frame.height
+        let expected = settled + slack - clip.bounds.height
+        // Within a line: the text view's own frame gains and loses the final
+        // empty line fragment between the scroll and the reading of it, so this
+        // is as exact as the frame itself is.
+        check("scrolling stops where the slack runs out",
+              abs(reached - expected) <= line + 1,
+              "stopped at \(Int(reached)), expected \(Int(expected)), line \(Int(line))pt")
 
         // --- Typing does not move the page ------------------------------------
         do {
@@ -204,8 +222,13 @@ enum SelfTest {
             // Somewhere in the middle, then type.
             let middle = (editor.text as NSString).length / 2
             editor.textView.setSelectedRange(NSRange(location: middle, length: 0))
+            controller.view.layoutSubtreeIfNeeded()
+            // Twice: the first pass can settle the scrollable height, which
+            // re-clamps the position, and the caret has to end up visible before
+            // there is any point measuring whether typing moves the page.
             editor.textView.scrollRangeToVisible(NSRange(location: middle, length: 0))
             controller.view.layoutSubtreeIfNeeded()
+            editor.textView.scrollRangeToVisible(NSRange(location: middle, length: 0))
             let before = editor.scrollView.contentView.bounds.origin.y
 
             for _ in 0..<40 {
@@ -226,6 +249,35 @@ enum SelfTest {
             check("the page is still drawn after typing", styled, "")
 
             ThemeManager.shared.typewriterScrolling = wasTypewriter
+        }
+
+        // --- Scroll past end is a setting -------------------------------------
+        do {
+            let manager = ThemeManager.shared
+            let was = manager.scrollPastEnd
+            let wasTypewriter = manager.typewriterScrolling
+            manager.typewriterScrolling = false
+            manager.scrollPastEnd = false
+            controller.view.layoutSubtreeIfNeeded()
+            check("scroll past end: off means no slack",
+                  (clip as? TypewriterClipView)?.bottomSlack == 0,
+                  "slack \(Int((clip as? TypewriterClipView)?.bottomSlack ?? -1))pt")
+
+            manager.scrollPastEnd = true
+            controller.view.layoutSubtreeIfNeeded()
+            check("scroll past end: on gives a window less a line",
+                  ((clip as? TypewriterClipView)?.bottomSlack ?? 0) > 100, "")
+
+            // Typewriter mode needs the room whatever the setting says.
+            manager.scrollPastEnd = false
+            manager.typewriterScrolling = true
+            controller.view.layoutSubtreeIfNeeded()
+            check("scroll past end: typewriter keeps half a window anyway",
+                  ((clip as? TypewriterClipView)?.bottomSlack ?? 0) > 100,
+                  "slack \(Int((clip as? TypewriterClipView)?.bottomSlack ?? -1))pt")
+
+            manager.scrollPastEnd = was
+            manager.typewriterScrolling = wasTypewriter
         }
 
         // --- Translucent palettes ---------------------------------------------

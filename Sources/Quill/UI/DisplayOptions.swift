@@ -253,7 +253,7 @@ final class OptionsPalette: NSViewController {
             switch self {
             case .theme: return "paintpalette"
             case .typography: return "textformat.size"
-            case .reading: return "eyeglasses"
+            case .reading: return "gearshape"
             }
         }
     }
@@ -266,6 +266,7 @@ final class OptionsPalette: NSViewController {
     private let measure = NSPopUpButton()
     private let focusToggle = NSButton(checkboxWithTitle: "Focus mode", target: nil, action: nil)
     private let typewriterToggle = NSButton(checkboxWithTitle: "Typewriter scrolling", target: nil, action: nil)
+    private let pastEndToggle = NSButton(checkboxWithTitle: "Scroll past end", target: nil, action: nil)
     private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
 
     init(section: Section) {
@@ -332,14 +333,16 @@ final class OptionsPalette: NSViewController {
             return [label("Typeface"), typeface, label("Size"), textSize, label("Width"), measure]
 
         case .reading:
-            for toggle in [focusToggle, typewriterToggle, markersToggle] {
+            for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle] {
                 toggle.target = self
                 toggle.font = .systemFont(ofSize: 11)
             }
             focusToggle.action = #selector(toggleFocus)
             typewriterToggle.action = #selector(toggleTypewriter)
+            pastEndToggle.target = self
+            pastEndToggle.action = #selector(togglePastEnd)
             markersToggle.action = #selector(toggleMarkers)
-            return [focusToggle, typewriterToggle, markersToggle]
+            return [focusToggle, typewriterToggle, pastEndToggle, markersToggle]
         }
     }
 
@@ -370,6 +373,7 @@ final class OptionsPalette: NSViewController {
         measure.selectItem(at: LineWidth.allCases.firstIndex(of: manager.lineWidth) ?? 0)
         focusToggle.state = manager.focusMode ? .on : .off
         typewriterToggle.state = manager.typewriterScrolling ? .on : .off
+        pastEndToggle.state = manager.scrollPastEnd ? .on : .off
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
     }
 
@@ -402,6 +406,10 @@ final class OptionsPalette: NSViewController {
     }
 
     @objc private func toggleFocus() { ThemeManager.shared.focusMode = focusToggle.state == .on }
+    @objc private func togglePastEnd() {
+        ThemeManager.shared.scrollPastEnd = pastEndToggle.state == .on
+    }
+
     @objc private func toggleTypewriter() {
         ThemeManager.shared.typewriterScrolling = typewriterToggle.state == .on
     }
