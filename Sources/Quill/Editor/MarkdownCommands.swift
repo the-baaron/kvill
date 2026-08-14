@@ -124,7 +124,12 @@ extension EditorViewController {
             NSRange(location: caret.location + prefix.count + 4, length: 0))
     }
 
+    /// One command for tables: inside one it opens the editor, outside one it
+    /// makes a table and opens the editor on that. Either way the panel is where
+    /// the work happens, so there is never a reason to type a pipe.
     @objc func insertTable(_ sender: Any?) {
+        if editTableAtCaret() { return }
+
         let caret = textView.selectedRange()
         let prefix = needsLeadingNewline(at: caret.location) ? "\n" : ""
         // Inserted already padded, so it matches what TableFormatter would make
@@ -136,7 +141,10 @@ extension EditorViewController {
 
         """
         replace(caret, with: table)
-        textView.setSelectedRange(NSRange(location: caret.location + prefix.count + 2, length: 6))
+        textView.setSelectedRange(
+            NSRange(location: caret.location + prefix.count + 2, length: 0))
+        refresh(fullRestyle: true)
+        editTableAtCaret()
     }
 
     @objc func insertCalloutNote(_ sender: Any?) { insertCallout(.note) }

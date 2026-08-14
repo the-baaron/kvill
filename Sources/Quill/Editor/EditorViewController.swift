@@ -21,6 +21,8 @@ final class EditorViewController: NSViewController {
     private var isFormatting = false
     /// Line of the table the caret was in last, so leaving one can be noticed.
     private var caretTableLineNumber: Int?
+    /// Held so the popover is not deallocated the moment it is shown.
+    private var tablePopover: NSPopover?
     private var isAutoScrolling = false
     private var lastContentWidth: CGFloat = -1
 
@@ -480,6 +482,46 @@ final class EditorViewController: NSViewController {
         selection.location = max(0, min(storage.length, selection.location + shift))
         selection.length = min(selection.length, storage.length - selection.location)
         textView.setSelectedRange(selection)
+    }
+
+    /// Opens the table editor on the table the caret is in.
+    ///
+    /// Returns false when there is no table there, so the Table command can fall
+    /// back to inserting one.
+    @discardableResult
+    func editTableAtCaret() -> Bool {
+        guard let storage = textView.textStorage,
+              let line = caretTableLine(),
+              let table = TableFormatter.table(
+                atLine: line, in: parsed, text: storage.string as NSString) else { return false }
+
+        // The popover points at the table, so it never covers what is being
+        // edited unless there is nowhere else for it to go.
+        let anchor = textView.rect(for: table.range) ?? textView.visibleRect
+
+        var range = table.range
+        let editor = TableEditorViewController(table: table) { [weak self] markdown in
+            guard let self, let storage = self.textView.textStorage else { return }
+            guard NSMaxRange(range) <= storage.length else { return }
+            guard self.textView.shouldChangeText(in: range, replacementString: markdown) else {
+                return
+            }
+            self.isFormatting = true
+            storage.replaceCharacters(in: range, with: markdown)
+            self.isFormatting = false
+            self.textView.didChangeText()
+            // The replacement is the table's new extent, and the next edit from
+            // the panel has to overwrite that rather than the old one.
+            range = NSRange(location: range.location, length: (markdown as NSString).length)
+        }
+        editor.preferredContentSize = editor.preferredSize
+
+        let popover = NSPopover()
+        popover.contentViewController = editor
+        popover.behavior = .transient
+        popover.show(relativeTo: anchor, of: textView, preferredEdge: .maxY)
+        tablePopover = popover
+        return true
     }
 
     // MARK: - Scroll edges

@@ -214,7 +214,7 @@ enum MainMenu {
             add(menu, "Blockquote", #selector(EditorViewController.toggleBlockquote(_:)), "'")
             add(menu, "Code Block", #selector(EditorViewController.insertCodeBlock(_:)), "c",
                 modifiers: [.command, .shift])
-            add(menu, "Table", #selector(EditorViewController.insertTable(_:)), "t",
+            add(menu, "Table…", #selector(EditorViewController.insertTable(_:)), "t",
                 modifiers: [.command, .control])
             add(menu, "Horizontal Rule", #selector(EditorViewController.insertHorizontalRule(_:)), "-",
                 modifiers: [.command, .shift])

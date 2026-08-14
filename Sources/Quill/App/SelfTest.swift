@@ -278,5 +278,83 @@ enum SelfTest {
         let rule = MarkdownParser.parse("Some text\n---\n" as NSString)
         check("table: a bare rule is not a table",
               !rule.lines.contains { $0.kind.isTable }, "")
+
+        checkTableEditor(check)
+    }
+
+    /// The editing panel round-trips through the same Markdown the document
+    /// holds, so what it writes is the thing worth testing.
+    private static func checkTableEditor(_ check: (String, Bool, String) -> Void) {
+        let source = """
+        | Feature | Notes |
+        | --- | ---: |
+        | Bold | Wraps |
+        """
+        let text = source as NSString
+        let document = MarkdownParser.parse(text)
+        guard let table = TableFormatter.table(atLine: 0, in: document, text: text) else {
+            check("table editor: table read out of the document", false, "")
+            return
+        }
+        check("table editor: table read out of the document",
+              table.rows.count == 2 && table.columnCount == 2,
+              "\(table.rows.count) rows, \(table.columnCount) columns")
+        check("table editor: the delimiter row is not data",
+              table.rows.allSatisfy { !$0.contains("---") }, "")
+        check("table editor: alignment read", table.alignments.last == .right, "")
+        check("table editor: covers the whole table",
+              table.range.length == text.length, "\(table.range.length) of \(text.length)")
+
+        var written: String?
+        let editor = TableEditorViewController(table: table) { written = $0 }
+        editor.loadView()
+        check("table editor: builds", editor.view.subviews.count >= 2,
+              "\(editor.view.subviews.count) subviews")
+
+        // Render, read the result back, and it should be the same data. The text
+        // itself is padded on the way out, so it is the cells that must match.
+        let rendered = TableFormatter.render(rows: table.rows, alignments: table.alignments)
+        let reparsed = rendered as NSString
+        let again = TableFormatter.table(
+            atLine: 0, in: MarkdownParser.parse(reparsed), text: reparsed)
+        check("table editor: round-trips through Markdown",
+              again?.rows == table.rows && again?.alignments == table.alignments,
+              again.map { "\($0.rows)" } ?? "not re-read")
+
+        // Adding a column has to reach every row, delimiter included.
+        var rows = table.rows
+        for index in rows.indices { rows[index].append("New") }
+        let grown = TableFormatter.render(rows: rows, alignments: table.alignments + [.none])
+        let grownRows = grown.components(separatedBy: "\n")
+        check("table editor: a new column reaches every row",
+              grownRows.count == 3 && Set(grownRows.map(\.count)).count == 1,
+              grownRows.map(\.count).description)
+        check("table editor: rendered tables are already padded",
+              TableFormatter.normalized(grown) == nil, "")
+
+        // The panel's own buttons, which are where an index goes out of bounds
+        // if one is going to.
+        editor.addRow(nil)
+        check("table editor: add row writes a row",
+              (written?.components(separatedBy: "\n").count ?? 0) == 4,
+              written?.components(separatedBy: "\n").count.description ?? "nothing written")
+
+        editor.addColumn(nil)
+        check("table editor: add column writes a column",
+              TableFormatter.cells(written?.components(separatedBy: "\n").first ?? "").count == 3,
+              written?.components(separatedBy: "\n").first ?? "")
+
+        editor.removeColumn(nil)
+        // Removing a row needs one chosen; with nothing selected it should
+        // refuse rather than guess, so the test picks one first.
+        editor.selectRowForTesting(1)
+        editor.removeRow(nil)
+        let after = written ?? ""
+        check("table editor: remove puts it back",
+              TableFormatter.cells(after.components(separatedBy: "\n").first ?? "").count == 2
+                && after.components(separatedBy: "\n").count == 3, after)
+        check("table editor: what it writes parses as a table",
+              MarkdownParser.parse(after as NSString).lines.filter { $0.kind.isTable }.count == 3,
+              "")
     }
 }

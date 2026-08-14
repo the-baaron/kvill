@@ -17,6 +17,9 @@ enum ScreenshotRenderer {
         var size: String?
         var width: String?
         var showPanel = false
+        /// Render the table editing panel for the document's first table,
+        /// instead of the page.
+        var showTableEditor = false
         var canvas = NSSize(width: 900, height: 760)
         var scale: CGFloat = 2
         /// How far down the document to start drawing, in points.
@@ -41,6 +44,7 @@ enum ScreenshotRenderer {
         request.size = value(after: "--size")
         request.width = value(after: "--width")
         request.showPanel = arguments.contains("--panel")
+        request.showTableEditor = arguments.contains("--table")
 
         if let geometry = value(after: "--geometry") {
             let parts = geometry.lowercased().split(separator: "x").compactMap { Double($0) }
@@ -91,6 +95,10 @@ enum ScreenshotRenderer {
             FileHandle.standardError.write(
                 Data("Could not read \(request.input): \(error.localizedDescription)\n".utf8))
             return 1
+        }
+
+        if request.showTableEditor {
+            return renderTableEditor(request, text: text)
         }
 
         let controller = DocumentViewController()
@@ -211,5 +219,54 @@ enum ScreenshotRenderer {
         cgContext.translateBy(x: 0, y: -offset)
         textView.renderPage(NSRect(x: 0, y: offset, width: size.width, height: size.height), opaqueBackground: true)
         return representation
+    }
+
+    /// Draws the table editing panel on its own, so it can be looked at without
+    /// a popover and a live window.
+    private static func renderTableEditor(_ request: Request, text: String) -> Int32 {
+        let string = text as NSString
+        let document = MarkdownParser.parse(string)
+        guard let line = document.lines.firstIndex(where: { $0.kind.isTable }),
+              let table = TableFormatter.table(atLine: line, in: document, text: string) else {
+            FileHandle.standardError.write(Data("No table in \(request.input)\n".utf8))
+            return 1
+        }
+
+        let editor = TableEditorViewController(table: table) { _ in }
+        let host = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        host.appearance = NSAppearance(named: .aqua)
+        host.contentViewController = editor
+        // The size depends on the columns, which do not exist until the view is
+        // loaded, so it is asked for only once the controller has a view.
+        host.setContentSize(editor.preferredSize)
+        host.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        host.orderFront(nil)
+        host.layoutIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        host.layoutIfNeeded()
+
+        guard let content = host.contentView else { return 1 }
+        let bounds = content.bounds
+        guard let representation = content.bitmapImageRepForCachingDisplay(in: bounds) else {
+            FileHandle.standardError.write(Data("Could not build a bitmap\n".utf8))
+            return 1
+        }
+        content.cacheDisplay(in: bounds, to: representation)
+
+        guard let data = representation.representation(using: .png, properties: [:]) else {
+            FileHandle.standardError.write(Data("Could not encode the PNG\n".utf8))
+            return 1
+        }
+        do {
+            try data.write(to: URL(fileURLWithPath: request.output))
+        } catch {
+            FileHandle.standardError.write(
+                Data("Could not write \(request.output): \(error.localizedDescription)\n".utf8))
+            return 1
+        }
+        print("Rendered \(request.output)")
+        return 0
     }
 }
