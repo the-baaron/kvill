@@ -69,13 +69,11 @@ final class ScrollEdgeView: NSView {
 
         let scale = window?.backingScaleFactor ?? 2
         let strip = convert(bounds, to: source)
-        let page = theme.colors.page
 
         ScrollEdgeRenderer.draw(
             into: bounds,
             sourceStrip: strip,
             strongAtTop: edge == .top,
-            pageColor: page,
             scale: scale,
             render: { rect in source.renderPage(rect) })
     }
@@ -85,7 +83,7 @@ final class ScrollEdgeView: NSView {
     /// Renders the document strip and then the effect over it, exactly as the
     /// screen shows it. Rendering the effect alone would leave the unmasked part
     /// of the bitmap transparent, which a measurement reads as solid black.
-    func renderForTest(size: NSSize, scale: CGFloat = 2, fade: Bool = true) -> NSBitmapImageRep? {
+    func renderForTest(size: NSSize, scale: CGFloat = 2) -> NSBitmapImageRep? {
         guard let source else { return nil }
         // Target and source are the same rect here, so the bitmap's coordinate
         // space matches the document's. On screen they differ, because the view
@@ -100,9 +98,7 @@ final class ScrollEdgeView: NSView {
                 into: strip,
                 sourceStrip: strip,
                 strongAtTop: self.edge == .top,
-                pageColor: self.theme.colors.page,
                 scale: scale,
-                fade: fade,
                 render: { rect in source.renderPage(rect) })
         }
     }

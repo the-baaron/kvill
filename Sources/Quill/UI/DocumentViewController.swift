@@ -11,6 +11,7 @@ final class DocumentViewController: NSViewController {
     private let stats = StatsPillView()
     private let optionsBar = DisplayOptionsBar()
     private let dragArea = WindowDragArea()
+    private let titleLabel = NSTextField(labelWithString: "")
     private var topEdge: ScrollEdgeView!
     private var bottomEdge: ScrollEdgeView!
     private var toast: ToastView?
@@ -49,6 +50,12 @@ final class DocumentViewController: NSViewController {
         let editorView = editor.view
         editorView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(editorView)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingMiddle
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(titleLabel)
+
         container.addSubview(topEdge)
         container.addSubview(bottomEdge)
         container.addSubview(dragArea)
@@ -67,15 +74,19 @@ final class DocumentViewController: NSViewController {
             editorView.topAnchor.constraint(equalTo: container.topAnchor),
             editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
+            titleLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 13),
+            titleLabel.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, constant: -260),
+
             topEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             topEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             topEdge.topAnchor.constraint(equalTo: container.topAnchor),
-            topEdge.heightAnchor.constraint(equalToConstant: 90),
+            topEdge.heightAnchor.constraint(equalToConstant: 190),
 
             bottomEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             bottomEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bottomEdge.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            bottomEdge.heightAnchor.constraint(equalToConstant: 74),
+            bottomEdge.heightAnchor.constraint(equalToConstant: 160),
 
             dragArea.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             dragArea.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -120,6 +131,7 @@ final class DocumentViewController: NSViewController {
             object: editor.scrollView)
 
         applyBackdrop()
+        titleLabel.textColor = theme.colors.textSecondary
         updateStats()
         topEdge.viewportMoved()
         bottomEdge.viewportMoved()
@@ -154,13 +166,13 @@ final class DocumentViewController: NSViewController {
         let hidden = ThemeManager.shared.chromeHidden
         optionsBar.isHidden = hidden
         stats.isHidden = hidden
+        updateTitleVisibility()
         if hidden {
             optionsBar.close()
             hideSelectionToolbar()
         }
 
         guard let window = view.window else { return }
-        window.titleVisibility = hidden ? .hidden : .visible
         for button: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
             window.standardWindowButton(button)?.isHidden = hidden
         }
@@ -169,7 +181,29 @@ final class DocumentViewController: NSViewController {
     @objc private func viewportMoved() {
         topEdge.viewportMoved()
         bottomEdge.viewportMoved()
+        updateTitleVisibility()
         updateSelectionToolbar()
+    }
+
+    /// The file name belongs to the top of the document. Once you have scrolled
+    /// into the text it is just something in the way, so it goes.
+    private func updateTitleVisibility() {
+        let scrolled = editor.scrollView.contentView.bounds.origin.y
+        let wanted: CGFloat = (scrolled < 12 && !ThemeManager.shared.chromeHidden) ? 1 : 0
+        guard abs(titleLabel.alphaValue - wanted) > 0.01 else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            titleLabel.animator().alphaValue = wanted
+        }
+    }
+
+    /// Name shown at the top of the page, in place of the window title.
+    var documentTitle: String = "" {
+        didSet {
+            titleLabel.stringValue = documentTitle
+            updateTitleVisibility()
+        }
     }
 
     @objc private func preferencesChanged() {
@@ -179,8 +213,17 @@ final class DocumentViewController: NSViewController {
     @objc private func themeChanged() {
         topEdge.theme = theme
         bottomEdge.theme = theme
+        titleLabel.textColor = theme.colors.textSecondary
         applyBackdrop()
     }
+
+    /// Test hooks: the title fades on scroll, which is behaviour rather than
+    /// structure, so it is measured rather than assumed.
+    var titleAlphaForTest: CGFloat { titleLabel.alphaValue }
+    func viewportMovedForTest() { viewportMoved() }
+
+    /// Whether the window-level blur behind a translucent page is on screen.
+    var hasVisibleBackdrop: Bool { !backdrop.isHidden }
 
     private func applyBackdrop() {
         backdrop.isHidden = !theme.colors.isTranslucent

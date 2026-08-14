@@ -85,20 +85,15 @@ enum SelfTest {
 
             check("edge renders: \(name)", visualTop + visualBottom > 0.0005,
                   "top \(String(format: "%.4f", visualTop)) bottom \(String(format: "%.4f", visualBottom))")
-            // The covered end is the window edge: page colour hides the ink there.
-            let correct = edge == .top ? visualTop < visualBottom : visualBottom < visualTop
-            check("edge fades the right way: \(name)", correct,
-                  "top \(String(format: "%.4f", visualTop)) vs bottom \(String(format: "%.4f", visualBottom))")
 
             // Is the content actually blurred? Compare how sharp it is against
             // the same strip drawn straight, in the band nearest the edge where
-            // the blur is strongest. Fading is switched off so the measurement
-            // is of blur and not of paint over the top of it.
+            // the blur is strongest.
             let strip = NSRect(x: 0, y: 200, width: size.width, height: size.height)
             guard let straight = ScrollEdgeRenderer.renderStrip(strip: strip, scale: 2, render: {
                       textView.renderPage($0)
                   }),
-                  let softened = probe.renderForTest(size: size, fade: false) else {
+                  let softened = probe.renderForTest(size: size) else {
                 check("edge blurs: \(name)", false, "no bitmap")
                 continue
             }
@@ -118,6 +113,52 @@ enum SelfTest {
                   farBefore == 0 || farAfter > farBefore * 0.85,
                   "far end \(String(format: "%.4f", farBefore)) to \(String(format: "%.4f", farAfter))")
         }
+
+        // --- Translucent palettes ---------------------------------------------
+        // Every piece of the chain has to be right for a glass theme to read as
+        // glass: a see-through window, a backdrop behind the page, a scroll view
+        // that paints nothing, and a page colour that is not fully opaque.
+        let previousPalette = ThemeManager.shared.activePaletteID
+        ThemeManager.shared.selectPalette(id: "frost")
+        let glassWindow = DocumentWindowController.create()
+        glassWindow.window?.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        glassWindow.showWindow(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        if let glassController = glassWindow.contentViewController as? DocumentViewController {
+            check("glass: window is see-through", glassWindow.window?.isOpaque == false)
+            check("glass: window background is clear",
+                  glassWindow.window?.backgroundColor.alphaComponent == 0)
+            check("glass: backdrop is showing", glassController.hasVisibleBackdrop)
+            check("glass: scroll view paints nothing",
+                  glassController.editor.scrollView.drawsBackground == false)
+            let alpha = ThemeManager.shared.theme.colors.page.alphaComponent
+            check("glass: page is translucent", alpha < 0.95,
+                  "page alpha \(String(format: "%.2f", alpha))")
+        } else {
+            check("glass: window builds", false)
+        }
+        glassWindow.close()
+        ThemeManager.shared.selectPalette(id: previousPalette)
+
+        // --- Centred title ----------------------------------------------------
+        controller.documentTitle = "Notes.md"
+        clip.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(clip)
+        controller.viewportMovedForTest()
+        let atTop = controller.titleAlphaForTest
+
+        clip.scroll(to: NSPoint(x: 0, y: 400))
+        scrollView.reflectScrolledClipView(clip)
+        controller.viewportMovedForTest()
+        let scrolledAway = controller.titleAlphaForTest
+
+        check("title shows at the top of the document", atTop > 0.9,
+              "alpha \(String(format: "%.2f", atTop))")
+        check("title goes once scrolled", scrolledAway < 0.1,
+              "alpha \(String(format: "%.2f", scrolledAway))")
+        check("window title bar is empty",
+              glassWindow.window?.titleVisibility == .hidden)
 
         // --- Chrome ----------------------------------------------------------
         let dragAreas = controller.view.subviews.compactMap { $0 as? WindowDragArea }

@@ -20,7 +20,9 @@ final class DocumentWindowController: NSWindowController {
         window.setContentSize(NSSize(width: 900, height: 720))
         window.center()
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .visible
+        // The name is drawn in the page instead, centred and only at the top of
+        // the document, so the title bar itself stays empty.
+        window.titleVisibility = .hidden
         window.tabbingMode = .disallowed
         window.minSize = NSSize(width: 520, height: 420)
         window.isReleasedWhenClosed = false

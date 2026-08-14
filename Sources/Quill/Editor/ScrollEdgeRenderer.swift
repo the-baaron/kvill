@@ -21,7 +21,7 @@ enum ScrollEdgeRenderer {
 
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
 
-    static let blurRadius: CGFloat = 18
+    static let blurRadius: CGFloat = 28
 
     /// Draws the effect into `target`, taking its content from `sourceStrip` of
     /// the document. Both rects are in flipped coordinates, so `minY` is the top.
@@ -29,56 +29,20 @@ enum ScrollEdgeRenderer {
         into target: NSRect,
         sourceStrip: NSRect,
         strongAtTop: Bool,
-        pageColor: NSColor,
         scale: CGFloat,
-        fade: Bool = true,
         render: (NSRect) -> Void
     ) {
-        guard target.width > 2, target.height > 2,
-              let context = NSGraphicsContext.current?.cgContext else { return }
+        guard target.width > 2, target.height > 2 else { return }
 
         if let blurred = blur(strip: sourceStrip, scale: scale, strongAtTop: strongAtTop,
                               render: render) {
+            // `.copy` so the blurred strip stands in for the sharp text beneath
+            // it rather than being laid over the top, which would stack another
+            // page's worth of alpha on a translucent palette.
             blurred.draw(
-                in: target, from: .zero, operation: .sourceOver, fraction: 1,
+                in: target, from: .zero, operation: .copy, fraction: 1,
                 respectFlipped: true, hints: nil)
         }
-
-        // The fade covers only the outer part of the strip. Running it the whole
-        // way, as an earlier version did, painted page colour over precisely the
-        // band where the blur is strongest, so all anyone saw was a fade.
-        if fade {
-            drawFade(in: target, color: pageColor, strongAtTop: strongAtTop, context: context)
-        }
-    }
-
-    private static func drawFade(
-        in rect: NSRect, color: NSColor, strongAtTop: Bool, context: CGContext
-    ) {
-        guard let opaque = color.usingColorSpace(.sRGB) else { return }
-        let clear = opaque.withAlphaComponent(0)
-        let colors = strongAtTop
-            ? [opaque.cgColor, clear.cgColor]
-            : [clear.cgColor, opaque.cgColor]
-
-        // A light touch: the blur does the work, and this only stops the very
-        // last few points of text from running into the window edge.
-        let stops: [CGFloat] = strongAtTop ? [0, 0.3] : [0.7, 1]
-        guard let gradient = CGGradient(
-            colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-            colors: colors as CFArray,
-            locations: stops
-        ) else { return }
-
-        context.saveGState()
-        context.clip(to: rect)
-        // minY is the top of the view: these coordinates are flipped.
-        context.drawLinearGradient(
-            gradient,
-            start: CGPoint(x: rect.midX, y: rect.minY),
-            end: CGPoint(x: rect.midX, y: rect.maxY),
-            options: [])
-        context.restoreGState()
     }
 
     // MARK: - Blur
@@ -103,12 +67,11 @@ enum ScrollEdgeRenderer {
         // Core Image is bottom-up, so the top of the picture is at maxY. White
         // in the mask means full radius, black means untouched.
         let strongEdge = strongAtTop ? extent.maxY : extent.minY
-        // The ramp spans the outer half of the strip. Running it further in left
-        // text softened well away from the edge, which reads as a smeared page
-        // rather than an edge treatment.
+        // The ramp runs almost the whole strip, so the blur has room to come on
+        // gradually rather than appearing over a short distance.
         let weakEdge = strongAtTop
-            ? extent.minY + extent.height * 0.5
-            : extent.maxY - extent.height * 0.5
+            ? extent.minY + extent.height * 0.06
+            : extent.maxY - extent.height * 0.06
         guard let ramp = CIFilter(name: "CISmoothLinearGradient", parameters: [
             "inputPoint0": CIVector(x: extent.midX, y: strongEdge),
             "inputColor0": CIColor(red: 1, green: 1, blue: 1, alpha: 1),
@@ -116,10 +79,16 @@ enum ScrollEdgeRenderer {
             "inputColor1": CIColor(red: 0, green: 0, blue: 0, alpha: 1),
         ])?.outputImage?.cropped(to: extent) else { return nil }
 
+        // A straight ramp of radius reads as the blur switching on: most of the
+        // visible change happens in the first part of it. Easing the mask keeps
+        // the radius near nothing for longer, so the onset is imperceptible and
+        // the strength arrives close to the edge.
+        let eased = ramp.applyingFilter("CIGammaAdjust", parameters: ["inputPower": 3.2])
+
         let blurred = source
             .clampedToExtent()
             .applyingFilter("CIMaskedVariableBlur", parameters: [
-                "inputMask": ramp,
+                "inputMask": eased,
                 kCIInputRadiusKey: blurRadius,
             ])
             .cropped(to: extent)

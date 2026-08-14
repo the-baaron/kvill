@@ -361,7 +361,7 @@ enum Palettes {
         genericCallout: CalloutColors(
             accent: NSColor(hex: "#6E6E73"), background: NSColor(hex: "#6E6E73", alpha: 0.08)),
         isTranslucent: true,
-        pageAlpha: 0.82,
+        pageAlpha: 0.70,
         material: .underWindowBackground
     )
 
@@ -398,7 +398,7 @@ enum Palettes {
         genericCallout: CalloutColors(
             accent: NSColor(hex: "#98989F"), background: NSColor(hex: "#98989F", alpha: 0.10)),
         isTranslucent: true,
-        pageAlpha: 0.76,
+        pageAlpha: 0.62,
         material: .underWindowBackground
     )
 

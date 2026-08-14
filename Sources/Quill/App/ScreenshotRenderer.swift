@@ -208,7 +208,7 @@ enum ScreenshotRenderer {
         NSRect(origin: .zero, size: size).fill()
 
         cgContext.translateBy(x: 0, y: -offset)
-        textView.renderPage(NSRect(x: 0, y: offset, width: size.width, height: size.height))
+        textView.renderPage(NSRect(x: 0, y: offset, width: size.width, height: size.height), opaqueBackground: true)
         return representation
     }
 }

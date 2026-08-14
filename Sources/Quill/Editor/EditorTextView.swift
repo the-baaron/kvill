@@ -185,8 +185,7 @@ final class EditorTextView: NSTextView {
     // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
-        theme.colors.page.setFill()
-        dirtyRect.fill()
+        fillPage(dirtyRect)
         drawDecorations(in: dirtyRect)
         super.draw(dirtyRect)
         drawOverlays(in: dirtyRect)
@@ -200,9 +199,13 @@ final class EditorTextView: NSTextView {
     /// window that was never put on screen, so the headless PNG renderer would
     /// get a blank or partial page depending on the canvas size. Going straight
     /// to the layout manager is deterministic.
-    func renderPage(_ rect: NSRect) {
-        theme.colors.background.setFill()   // opaque for exported images
-        rect.fill()
+    func renderPage(_ rect: NSRect, opaqueBackground: Bool = false) {
+        if opaqueBackground {
+            theme.colors.background.setFill()
+            rect.fill()
+        } else {
+            fillPage(rect)
+        }
         drawDecorations(in: rect)
 
         if let layoutManager, let textContainer {
@@ -216,6 +219,26 @@ final class EditorTextView: NSTextView {
         }
 
         drawOverlays(in: rect)
+    }
+
+    /// Paints the page colour.
+    ///
+    /// A translucent palette is written with `.copy`, so the exact alpha lands in
+    /// the backing store. Blending it instead lets each redraw stack another
+    /// layer of the same colour on the last, and within a few passes the page is
+    /// opaque and the glass has quietly gone.
+    private func fillPage(_ rect: NSRect) {
+        let page = theme.colors.page
+        guard theme.colors.isTranslucent else {
+            page.setFill()
+            rect.fill()
+            return
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.compositingOperation = .copy
+        page.setFill()
+        rect.fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawOverlays(in dirtyRect: NSRect) {

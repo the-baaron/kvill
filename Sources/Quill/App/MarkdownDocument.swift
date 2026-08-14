@@ -30,6 +30,7 @@ final class MarkdownDocument: NSDocument {
         controller = viewController
         normalizeSetextHeadings()
         viewController.documentURL = fileURL
+        viewController.documentTitle = displayName
         viewController.loadText(content)
         viewController.onTextChange = { [weak self, weak viewController] in
             guard let self, let viewController else { return }
@@ -77,6 +78,7 @@ final class MarkdownDocument: NSDocument {
             // Saving an untitled document gives images somewhere to live, and
             // makes any relative paths already written resolve.
             controller?.documentURL = fileURL
+            controller?.documentTitle = displayName
         }
     }
 
