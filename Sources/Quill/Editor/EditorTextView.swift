@@ -390,6 +390,13 @@ final class EditorTextView: NSTextView {
                 fill(box, radius: 8, color: theme.colors.codeBackground,
                      stroke: theme.colors.codeBorder)
 
+            case .table:
+                let box = NSRect(
+                    x: columnLeft - 14, y: bounds.minY - 6,
+                    width: columnRight - columnLeft + 28, height: bounds.height + 12)
+                fill(box, radius: 8, color: theme.colors.codeBackground,
+                     stroke: theme.colors.tableBorder.withAlpha(0.5))
+
             case .frontMatter:
                 let box = NSRect(
                     x: columnLeft - 14, y: bounds.minY - 5,

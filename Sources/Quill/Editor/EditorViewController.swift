@@ -17,6 +17,10 @@ final class EditorViewController: NSViewController {
     /// not rewrite the whole document.
     private var styledLines: Range<Int> = 0..<0
     private var isStyling = false
+    /// Set while a table is being padded, so the edit does not trigger another.
+    private var isFormatting = false
+    /// Line of the table the caret was in last, so leaving one can be noticed.
+    private var caretTableLineNumber: Int?
     private var isAutoScrolling = false
     private var lastContentWidth: CGFloat = -1
 
@@ -424,6 +428,60 @@ final class EditorViewController: NSViewController {
         rebuildOverlays(context: context)
     }
 
+    // MARK: - Tables
+
+    /// Line of the table the caret is in, or nil when it is somewhere else.
+    private func caretTableLine() -> Int? {
+        let caret = textView.selectedRange().location
+        guard let index = parsed.lineIndex(at: caret),
+              parsed.lines[index].kind.isTable else { return nil }
+        return index
+    }
+
+    /// Whether two line numbers fall in the same table, which is what makes
+    /// moving between rows different from leaving.
+    private func sameTable(_ left: Int, _ right: Int?) -> Bool {
+        guard let right, left < parsed.lines.count, right < parsed.lines.count else { return false }
+        return parsed.lines[left].blockID == parsed.lines[right].blockID
+    }
+
+    /// Pads the cells of the table the caret has just left.
+    ///
+    /// Running it on the way out rather than on every keystroke is the whole
+    /// trick: the columns are never rewritten under the cursor while a cell is
+    /// half-typed, and by the time the table is read it is already square.
+    private func formatTable(atLine line: Int) {
+        guard !isFormatting, let storage = textView.textStorage else { return }
+        let edits = TableFormatter.edits(forLine: line, in: parsed, text: storage.string as NSString)
+        guard !edits.isEmpty else { return }
+
+        let ranges = edits.map { NSValue(range: $0.range) }
+        let strings = edits.map(\.text)
+        guard textView.shouldChangeText(inRanges: ranges, replacementStrings: strings) else { return }
+
+        isFormatting = true
+        defer { isFormatting = false }
+
+        // The caret has already moved out of the table, so it has to be carried
+        // over whatever the padding added or removed above it.
+        var selection = textView.selectedRange()
+        var shift = 0
+        for edit in edits where NSMaxRange(edit.range) <= selection.location {
+            shift += (edit.text as NSString).length - edit.range.length
+        }
+
+        storage.beginEditing()
+        for edit in edits.reversed() {
+            storage.replaceCharacters(in: edit.range, with: edit.text)
+        }
+        storage.endEditing()
+        textView.didChangeText()
+
+        selection.location = max(0, min(storage.length, selection.location + shift))
+        selection.length = min(selection.length, storage.length - selection.location)
+        textView.setSelectedRange(selection)
+    }
+
     // MARK: - Scroll edges
 
     private func reportScrollEdges() {
@@ -552,6 +610,12 @@ extension EditorViewController: NSTextStorageDelegate {
 extension EditorViewController: NSTextViewDelegate {
 
     func textViewDidChangeSelection(_ notification: Notification) {
+        let table = caretTableLine()
+        if let left = caretTableLineNumber, table == nil || !sameTable(left, table) {
+            formatTable(atLine: left)
+        }
+        caretTableLineNumber = caretTableLine()
+
         updateActiveBlocks()
         centerCaret()
         onSelectionChange?()

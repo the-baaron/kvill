@@ -24,6 +24,10 @@ enum BlockKind: Equatable {
     case linkDefinition
     case definition
     case htmlLine
+    /// A `| cell | cell |` row. The header is the row above the delimiter.
+    case tableRow(header: Bool)
+    /// The `| --- | :-: |` row that separates the header and sets alignment.
+    case tableDelimiter
 
     var isHeading: Bool {
         if case .heading = self { return true }
@@ -37,6 +41,15 @@ enum BlockKind: Equatable {
         }
     }
 
+    /// True for any line of a table. Table lines are shown as aligned source, so
+    /// they opt out of inline styling, which would change glyph widths and pull
+    /// the columns apart.
+    var isTable: Bool {
+        switch self {
+        case .tableRow, .tableDelimiter: return true
+        default: return false
+        }
+    }
 }
 
 enum TaskState: Equatable {
@@ -51,6 +64,7 @@ enum DecorationKind: Equatable {
     case callout(kind: CalloutKind?)
     case frontMatter
     case thematicBreak
+    case table
 }
 
 /// One parsed line. Ranges are UTF-16 offsets into the whole document, which is
@@ -87,6 +101,10 @@ struct MDLine {
     /// Set when the line is nothing but an image, which is drawn in place of
     /// the Markdown that describes it.
     var blockImage: BlockImage?
+    /// Characters in the longest row of the table this line belongs to. The
+    /// table is monospace, so this is its width in one number, and the styler
+    /// can size it to the measure without laying anything out.
+    var tableWidth = 0
 
     var hasMarker: Bool { markerRange.length > 0 }
 }

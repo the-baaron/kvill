@@ -86,6 +86,7 @@ enum ScreenshotRenderer {
             text = try String(contentsOfFile: request.input, encoding: .utf8)
             // Match what the app shows when it opens the same file.
             if let normalized = SetextNormalizer.normalized(text) { text = normalized }
+            if let padded = TableFormatter.normalized(text) { text = padded }
         } catch {
             FileHandle.standardError.write(
                 Data("Could not read \(request.input): \(error.localizedDescription)\n".utf8))

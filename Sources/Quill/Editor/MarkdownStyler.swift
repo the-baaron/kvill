@@ -150,6 +150,11 @@ final class MarkdownStyler {
             }
         }
 
+        // --- Table pipes fade back so the cells read as columns ---------------
+        if line.kind.isTable {
+            dimPipes(in: line, text: text, storage: storage)
+        }
+
         // --- Fenced code gets a light generic highlight ----------------------
         if case .codeLine = line.kind, line.contentRange.length > 0 {
             applyCodeTokens(storage, text: text, range: line.contentRange, language: line.language)
@@ -171,6 +176,56 @@ final class MarkdownStyler {
         }
 
 
+    }
+
+    /// The size a table is set at so it fits the measure.
+    ///
+    /// A monospace table's width is its longest row times one advance, so the
+    /// fit is a division rather than a layout pass: no cell is measured, nothing
+    /// is kerned, and nothing iterates. Below the floor a table is genuinely too
+    /// wide for the column and is left to wrap.
+    private func tableFont(for line: MDLine, bold: Bool) -> NSFont {
+        let full = bold ? theme.monoSmallBold : theme.monoSmall
+        guard line.tableWidth > 0 else { return full }
+
+        let advance = monoAdvance(full)
+        let required = CGFloat(line.tableWidth) * advance
+        // The panel behind the table is inset by 14pt on each side.
+        let available = theme.metrics.measure - 4
+        guard required > available else { return full }
+
+        let scale = max(0.7, available / required)
+        let key = "table|\(bold)|\(round(full.pointSize * scale * 10))"
+        if let cached = traitFonts[key] { return cached }
+        let sized = FontBuilder.font(.mono, size: full.pointSize * scale,
+                                     weight: bold ? .semibold : .regular)
+        traitFonts[key] = sized
+        return sized
+    }
+
+    /// Width of one character in a monospace face. Uniform by definition, so it
+    /// is measured once per font and kept.
+    private func monoAdvance(_ font: NSFont) -> CGFloat {
+        width(of: "0", font: font)
+    }
+
+    /// Tints the `|` separators, leaving the cells at full strength. A single
+    /// character walk, no measuring: the column positions come from the padding
+    /// `TableFormatter` writes into the file, not from anything worked out here.
+    private func dimPipes(in line: MDLine, text: NSString, storage: NSTextStorage) {
+        let start = line.range.location
+        let end = NSMaxRange(line.range)
+        guard end <= storage.length else { return }
+
+        let ink = theme.colors.marker.withAlpha(0.7)
+        var index = start
+        while index < end {
+            if text.character(at: index) == 124 {
+                storage.addAttribute(.foregroundColor, value: ink,
+                                     range: NSRange(location: index, length: 1))
+            }
+            index += 1
+        }
     }
 
     // MARK: - Base attributes
@@ -207,6 +262,12 @@ final class MarkdownStyler {
         case .linkDefinition:
             font = theme.monoSmall
             color = colors.textSecondary
+        case .tableRow(let header):
+            font = tableFont(for: line, bold: header)
+            color = colors.text
+        case .tableDelimiter:
+            font = tableFont(for: line, bold: false)
+            color = colors.textSecondary.withAlpha(0.55)
         case .blockquote, .calloutTitle:
             color = colors.quoteText
         case .thematicBreak:
@@ -241,7 +302,9 @@ final class MarkdownStyler {
             attributes[.baselineOffset] = surplus / 2
         }
 
-        if theme.preset.bodyTracking != 0, !line.kind.isCode {
+        // Letter spacing would widen every cell by a different amount and pull
+        // the columns apart, so a table is set at the font's own spacing.
+        if theme.preset.bodyTracking != 0, !line.kind.isCode, !line.kind.isTable {
             attributes[.kern] = theme.preset.bodyTracking * theme.metrics.base
         }
         return attributes
@@ -543,6 +606,8 @@ final class MarkdownStyler {
                 after: base * 0.22)
         case .codeLine, .indentedCode:
             return LineLayout(height: base * 1.48, before: 0, after: 0)
+        case .tableRow, .tableDelimiter:
+            return LineLayout(height: base * 1.55, before: 0, after: 0)
         case .fenceDelimiter, .frontMatterDelimiter:
             // The delimiter is usually invisible, so it reads as the block's top
             // and bottom padding. Kept at a fixed height so revealing it on the

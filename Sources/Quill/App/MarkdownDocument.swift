@@ -28,7 +28,7 @@ final class MarkdownDocument: NSDocument {
             return
         }
         controller = viewController
-        normalizeSetextHeadings()
+        normalizeSource()
         viewController.documentURL = fileURL
         viewController.documentTitle = displayName
         viewController.loadText(content)
@@ -61,16 +61,16 @@ final class MarkdownDocument: NSDocument {
             content = converted as String
             encoding = String.Encoding(rawValue: detected)
         }
-        normalizeSetextHeadings()
+        normalizeSource()
         controller?.loadText(content)
     }
 
-    /// Rewrites setext headings as `#` ones. The change is left unsaved: opening
-    /// a file should not rewrite it on disk. It goes along with the next save,
-    /// and Undo puts it back.
-    private func normalizeSetextHeadings() {
-        guard let converted = SetextNormalizer.normalized(content) else { return }
-        content = converted
+    /// Rewrites setext headings as `#` ones and pads table cells so their columns
+    /// line up. The change is left unsaved: opening a file should not rewrite it
+    /// on disk. It goes along with the next save, and Undo puts it back.
+    private func normalizeSource() {
+        if let converted = SetextNormalizer.normalized(content) { content = converted }
+        if let padded = TableFormatter.normalized(content) { content = padded }
     }
 
     override var fileURL: URL? {

@@ -22,6 +22,11 @@ enum Benchmark {
         }
         let afterRead = stamp()
 
+        // Opening a file pads any table in it, so the cost belongs on the clock.
+        let normalizeStart = stamp()
+        _ = TableFormatter.normalized(text)
+        let afterNormalize = stamp()
+
         let beforeTheme = stamp()
         _ = ThemeManager.shared.theme.body
         let afterTheme = stamp()
@@ -67,6 +72,7 @@ enum Benchmark {
         print("""
             document      \(nsText.length) characters, \(parsed.lines.count) lines
             read          \(ms(processStart, afterRead))   (includes process start)
+            pad tables    \(ms(normalizeStart, afterNormalize))
             theme + fonts \(ms(beforeTheme, afterTheme))
             window alloc  \(ms(afterTheme, beforeContent))
             content vc    \(ms(beforeContent, afterContent))

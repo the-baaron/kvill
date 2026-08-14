@@ -13,6 +13,9 @@ enum MarkdownParser {
         guard !lines.isEmpty else { return ParsedDocument(lines: []) }
 
         classify(&lines, text: text)
+        // Before the setext pass, so a header row is no longer a paragraph by the
+        // time an underline below it is looked at.
+        detectTables(&lines, text: text)
         detectSetextHeadings(&lines, text: text)
         assignBlocks(&lines)
         scanInlines(&lines, text: text)
@@ -304,6 +307,107 @@ enum MarkdownParser {
         }
     }
 
+    // MARK: - Tables
+
+    /// Marks the lines of a GitHub-style table.
+    ///
+    /// A table is a row of pipe-separated cells, a delimiter row of dashes
+    /// directly under it, and however many rows follow before a blank line or a
+    /// line that is not a row. Nothing is measured here: the table is shown as
+    /// aligned monospace source, and `TableFormatter` is what keeps the columns
+    /// lined up in the file.
+    private static func detectTables(_ lines: inout [MDLine], text: NSString) {
+        var index = 0
+        while index + 1 < lines.count {
+            guard isRowCandidate(lines[index], text: text),
+                  isDelimiterRow(lines[index + 1], text: text) else {
+                index += 1
+                continue
+            }
+
+            mark(&lines[index], as: .tableRow(header: true))
+            mark(&lines[index + 1], as: .tableDelimiter)
+
+            var row = index + 2
+            while row < lines.count, isRowCandidate(lines[row], text: text) {
+                mark(&lines[row], as: .tableRow(header: false))
+                row += 1
+            }
+
+            // The longest row is the table's width, in characters. Every line
+            // carries it so the styler can size the block from any one of them.
+            var widest = 0
+            for line in index..<row { widest = max(widest, lines[line].range.length) }
+            for line in index..<row { lines[line].tableWidth = widest }
+
+            index = row
+        }
+    }
+
+    private static func mark(_ line: inout MDLine, as kind: BlockKind) {
+        line.kind = kind
+        // A table is flush with the text column: no gutter marker, no indent
+        // carried over from however the line was written.
+        line.markerRange = NSRange(location: line.range.location, length: 0)
+        line.gapRange = NSRange(location: line.range.location, length: 0)
+        line.listDepth = 0
+    }
+
+    /// A plain paragraph line, outside any quote, holding at least one unescaped
+    /// pipe.
+    private static func isRowCandidate(_ line: MDLine, text: NSString) -> Bool {
+        guard line.kind == .paragraph, line.quoteDepth == 0 else { return false }
+        let start = line.range.location
+        let end = NSMaxRange(line.range)
+        var index = start
+        while index < end {
+            if text.character(at: index) == 124, !isEscaped(text, index, from: start) { return true }
+            index += 1
+        }
+        return false
+    }
+
+    /// `| --- | :-: |`: pipes, dashes, colons and spaces, with at least one pipe,
+    /// and every cell a run of dashes with optional colons around it.
+    private static func isDelimiterRow(_ line: MDLine, text: NSString) -> Bool {
+        let start = line.range.location
+        let end = NSMaxRange(line.range)
+        guard end > start else { return false }
+
+        var sawPipe = false
+        var sawDash = false
+        var cellDashes = 0
+        var cellValid = true
+        var sawCell = false
+
+        var index = start
+        while index < end {
+            let character = text.character(at: index)
+            switch character {
+            case 124:                       // |
+                if sawCell, cellDashes == 0 { cellValid = false }
+                if sawCell, !cellValid { return false }
+                sawPipe = true
+                cellDashes = 0
+                cellValid = true
+                sawCell = false
+            case 45:                        // -
+                cellDashes += 1
+                sawDash = true
+                sawCell = true
+            case 58:                        // :
+                sawCell = true
+            case 32, 9:
+                break
+            default:
+                return false
+            }
+            index += 1
+        }
+        if sawCell, cellDashes == 0 { return false }
+        return sawPipe && sawDash
+    }
+
     // MARK: - Setext headings
 
     /// Turns the paragraph lines directly above a `===` / `---` underline into a heading.
@@ -371,6 +475,7 @@ enum MarkdownParser {
         case .codeLine, .indentedCode, .fenceDelimiter: return "code"
         case .frontMatterLine, .frontMatterDelimiter: return "front"
         case .blockquote, .calloutTitle: return "quote"
+        case .tableRow, .tableDelimiter: return "table"
         default:
             return line.quoteDepth > 0 ? "quote" : nil
         }
@@ -381,6 +486,7 @@ enum MarkdownParser {
         case .codeLine, .indentedCode, .fenceDelimiter: return .codeBlock
         case .frontMatterLine, .frontMatterDelimiter: return .frontMatter
         case .thematicBreak: return .thematicBreak
+        case .tableRow, .tableDelimiter: return .table
         case .calloutTitle(let kind): return .callout(kind: kind)
         case .blockquote: return .blockquote(depth: line.quoteDepth)
         default:
@@ -424,7 +530,10 @@ enum MarkdownParser {
             let line = lines[index]
             switch line.kind {
             case .codeLine, .indentedCode, .frontMatterLine, .frontMatterDelimiter,
-                 .thematicBreak, .setextUnderline, .linkDefinition:
+                 .thematicBreak, .setextUnderline, .linkDefinition,
+                 // Emphasis and links change glyph widths, which would pull a
+                 // monospace table's columns apart. Cells stay as written.
+                 .tableRow, .tableDelimiter:
                 continue
             default:
                 break

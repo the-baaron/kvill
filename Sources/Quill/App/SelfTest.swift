@@ -23,6 +23,9 @@ enum SelfTest {
             say("\(mark) \(name)\(detail.isEmpty ? "" : "  — \(detail)")")
         }
 
+        // --- Tables ---------------------------------------------------------
+        checkTables(check)
+
         // --- Palettes -------------------------------------------------------
         let ids = Palettes.all.map(\.id)
         check("palettes registered", ids.count == 8, ids.joined(separator: ", "))
@@ -48,6 +51,38 @@ enum SelfTest {
         controller.loadText(text)
         controller.view.layoutSubtreeIfNeeded()
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        controller.view.layoutSubtreeIfNeeded()
+
+        // --- Padding a table on the way out ----------------------------------
+        do {
+            let editor = controller.editor
+            controller.loadText("""
+            Before.
+
+            | A | Long heading |
+            | --- | --- |
+            | 1 | 2 |
+
+            After.
+            """)
+            controller.view.layoutSubtreeIfNeeded()
+
+            // Caret into the table, then out of it again.
+            let inTable = (editor.text as NSString).range(of: "| 1 | 2 |").location + 2
+            editor.textView.setSelectedRange(NSRange(location: inTable, length: 0))
+            let end = (editor.text as NSString).range(of: "After.").location
+            editor.textView.setSelectedRange(NSRange(location: end, length: 0))
+
+            let rows = editor.text.components(separatedBy: "\n")
+                .filter { $0.hasPrefix("|") }
+            check("table: padded when the caret leaves",
+                  rows.count == 3 && Set(rows.map(\.count)).count == 1,
+                  rows.map(\.count).description)
+            check("table: text around it is untouched",
+                  editor.text.hasPrefix("Before.") && editor.text.hasSuffix("After."), "")
+        }
+
+        controller.loadText(text)
         controller.view.layoutSubtreeIfNeeded()
 
         let scrollView = controller.editor.scrollView
@@ -198,5 +233,50 @@ enum SelfTest {
 
         say(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
         return failures == 0 ? 0 : 1
+    }
+
+    // MARK: - Tables
+
+    /// Tables are aligned by padding the source, so the padding is the thing
+    /// worth testing: if it is right, the columns are right.
+    private static func checkTables(_ check: (String, Bool, String) -> Void) {
+        let ragged = """
+        | Feature | Shortcut | Notes |
+        | --- | ---: | :-: |
+        | Bold | Cmd B | Wraps a word |
+        | A much longer feature | X | y |
+        """
+        let padded = TableFormatter.normalized(ragged) ?? ragged
+        let rows = padded.components(separatedBy: "\n")
+
+        check("table: every row is the same width",
+              Set(rows.map(\.count)).count == 1, "widths \(rows.map(\.count))")
+        check("table: padding is idempotent",
+              TableFormatter.normalized(padded) == nil, "")
+        check("table: right alignment is kept",
+              rows.count > 1 && rows[1].contains("-:"), rows.count > 1 ? rows[1] : "")
+        check("table: centre alignment is kept",
+              rows.count > 1 && rows[1].contains(":-"), rows.count > 1 ? rows[1] : "")
+
+        let parsed = MarkdownParser.parse(padded as NSString)
+        let kinds = parsed.lines.prefix(4).map(\.kind)
+        check("table: header row found", kinds.first == .tableRow(header: true), "")
+        check("table: delimiter row found", kinds.count > 1 && kinds[1] == .tableDelimiter, "")
+        check("table: body rows found",
+              kinds.count > 3 && kinds[2] == .tableRow(header: false)
+                && kinds[3] == .tableRow(header: false), "")
+
+        // An empty header is legal and must not collapse the column count.
+        let empty = TableFormatter.cells("| | |")
+        check("table: empty cells keep their columns", empty.count == 2, "\(empty.count) cells")
+
+        // A pipe written as text belongs to the cell, not to the grid.
+        let escaped = TableFormatter.cells(#"| a \| b | c |"#)
+        check("table: escaped pipes stay in the cell", escaped.count == 2, "\(escaped.count) cells")
+
+        // A run of dashes on its own is still a rule, not a table.
+        let rule = MarkdownParser.parse("Some text\n---\n" as NSString)
+        check("table: a bare rule is not a table",
+              !rule.lines.contains { $0.kind.isTable }, "")
     }
 }

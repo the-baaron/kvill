@@ -127,10 +127,12 @@ extension EditorViewController {
     @objc func insertTable(_ sender: Any?) {
         let caret = textView.selectedRange()
         let prefix = needsLeadingNewline(at: caret.location) ? "\n" : ""
+        // Inserted already padded, so it matches what TableFormatter would make
+        // of it and the columns are square from the first keystroke.
         let table = """
         \(prefix)| Column | Column |
-        | --- | --- |
-        |  |  |
+        | ------ | ------ |
+        |        |        |
 
         """
         replace(caret, with: table)

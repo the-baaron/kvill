@@ -16,6 +16,9 @@ final class Theme {
     let bodyBoldItalic: NSFont
     let mono: NSFont
     let monoSmall: NSFont
+    /// Table header rows. Semibold keeps the same advance width in a monospace
+    /// face, so the columns stay aligned.
+    let monoSmallBold: NSFont
     let marker: NSFont
     let markerBold: NSFont
     /// Used for the drawn callout title ("Note", "Warning", …).
@@ -37,6 +40,7 @@ final class Theme {
         self.bodyBoldItalic = FontBuilder.font(preset.bodyFamily, size: base, weight: .bold, italic: true)
         self.mono = FontBuilder.font(.mono, size: base * 0.92)
         self.monoSmall = FontBuilder.font(.mono, size: base * 0.86)
+        self.monoSmallBold = FontBuilder.font(.mono, size: base * 0.86, weight: .semibold)
         self.marker = FontBuilder.font(.mono, size: metrics.markerSize)
         self.markerBold = FontBuilder.font(.mono, size: metrics.markerSize, weight: .semibold)
         self.calloutTitle = FontBuilder.font(preset.bodyFamily, size: base * 0.92, weight: .bold)
