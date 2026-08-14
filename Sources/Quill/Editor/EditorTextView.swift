@@ -247,6 +247,20 @@ final class EditorTextView: NSTextView {
         }
     }
 
+    /// Where a mark drawn next to text should be centred.
+    ///
+    /// Not the middle of the line box: that sits low, because a line reserves
+    /// room under the baseline for descenders and most words have none. The
+    /// middle of a capital letter is what the eye reads as the centre, so marks
+    /// are hung off the baseline instead.
+    private func opticalCentre(of slot: NSRect, at location: Int) -> CGFloat {
+        guard let layoutManager, layoutManager.numberOfGlyphs > 0 else { return slot.midY }
+        let glyph = layoutManager.glyphIndexForCharacter(at: location)
+        guard glyph < layoutManager.numberOfGlyphs else { return slot.midY }
+        let baseline = layoutManager.location(forGlyphAt: glyph).y
+        return slot.minY + baseline - theme.body.capHeight / 2
+    }
+
     /// Paints a checkbox into the blank square the styler reserved for it.
     ///
     /// This view is flipped, so y grows downward: the middle of the tick is the
@@ -256,8 +270,9 @@ final class EditorTextView: NSTextView {
         let side = theme.metrics.checkboxSize
         let colors = theme.colors
 
+        let centre = opticalCentre(of: slot, at: range.location)
         let box = NSRect(
-            x: slot.minX, y: slot.midY - side / 2, width: side, height: side
+            x: slot.minX, y: centre - side / 2, width: side, height: side
         ).insetBy(dx: 0.75, dy: 0.75)
         guard box.intersects(dirtyRect) else { return }
 
@@ -289,7 +304,7 @@ final class EditorTextView: NSTextView {
         let diameter = theme.metrics.base * 0.30
         let dot = NSRect(
             x: slot.maxX - diameter,
-            y: slot.midY - diameter / 2,
+            y: opticalCentre(of: slot, at: range.location) - diameter / 2,
             width: diameter, height: diameter)
         theme.colors.marker.withAlpha(0.95).setFill()
         NSBezierPath(ovalIn: dot).fill()

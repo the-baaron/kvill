@@ -120,6 +120,32 @@ enum SelfTest {
                   "\(sizes.map { Int($0 * 10) }) vs \(Int(normal * 10)) (tenths)")
         }
 
+        // --- Checkbox and bullet sit on the same line -------------------------
+        do {
+            let editor = controller.editor
+            controller.loadText("- [ ] An open task\n- [x] A finished one\n")
+            controller.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+
+            var bullet: NSRect?
+            var checkbox: NSRect?
+            for overlay in editor.textView.overlays {
+                switch overlay {
+                case .bullet(let range):
+                    if bullet == nil { bullet = editor.textView.rect(for: range) }
+                case .checkbox(let range, _):
+                    if checkbox == nil { checkbox = editor.textView.rect(for: range) }
+                default:
+                    break
+                }
+            }
+            say("    bullet \(bullet.map { "\(Int($0.minY))..\(Int($0.maxY)) mid \($0.midY)" } ?? "none")")
+            say("    checkbox \(checkbox.map { "\(Int($0.minY))..\(Int($0.maxY)) mid \($0.midY)" } ?? "none")")
+            check("checkbox and bullet share a centre line",
+                  abs((bullet?.midY ?? 0) - (checkbox?.midY ?? 99)) < 0.51,
+                  "difference \(((checkbox?.midY ?? 0) - (bullet?.midY ?? 0)))pt")
+        }
+
         // --- Slash menu -------------------------------------------------------
         do {
             check("slash menu: lists every block",
