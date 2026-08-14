@@ -67,6 +67,7 @@ final class MarkdownStyler {
         let clamped = lineRange.clamped(to: 0..<document.lines.count)
         guard !clamped.isEmpty else { return }
 
+        showingSource = context.alwaysShowMarkers
         storage.beginEditing()
         for index in clamped {
             styleLine(document.lines[index], index: index, text: text, storage: storage, context: context)
@@ -584,6 +585,13 @@ final class MarkdownStyler {
     /// the document reads as finished prose, which is the whole point of the
     /// hanging gutter: structure without clutter.
     private func markerColor(for line: MDLine, context: Context) -> NSColor? {
+        // A table keeps its grid whatever the caret is doing. Revealing a whole
+        // table's pipes because the caret landed in one cell fills the block
+        // with punctuation and, worse, re-measures every column, so the grid
+        // jumps sideways as you click around it. `alwaysShowMarkers` still shows
+        // the source for anyone who wants to edit the structure.
+        if line.kind.isTable { return context.alwaysShowMarkers ? theme.colors.marker : nil }
+
         if context.activeBlockIDs.contains(line.blockID) { return theme.colors.markerActive }
         if context.alwaysShowMarkers { return theme.colors.marker }
 
@@ -769,8 +777,8 @@ final class MarkdownStyler {
 
         case .tablePipe:
             // Pipes are scaffolding. Once the cells are on a grid they say
-            // nothing the columns do not, so they only show while editing, or
-            // when the table was too wide to fit and there is no grid.
+            // nothing the columns do not. They come back only when the source is
+            // being shown, or when the table was too wide to fit a grid at all.
             let visible = revealed ?? (tableFits(blockID: line.blockID) ? nil : colors.marker)
             storage.addAttribute(.foregroundColor, value: visible ?? NSColor.clear, range: range)
 
@@ -855,15 +863,20 @@ final class MarkdownStyler {
         let after: CGFloat
     }
 
+    /// Set for the duration of a styling pass, so line heights can account for
+    /// rows whose text is only shown when the source is.
+    private var showingSource = false
+
     private func lineLayout(for line: MDLine) -> LineLayout {
         let base = theme.metrics.base
 
         // A delimiter row, and a header row with nothing in it, are structure
-        // rather than content. Both are given a fixed compact height so that
-        // revealing their text when the caret arrives does not shift the page.
+        // rather than content: a thin gap where the rule is drawn, unless the
+        // source is being shown, when they need room for their text.
         if line.kind == .tableDelimiter
             || (line.kind == .tableHeader && emptyHeaderBlocks.contains(line.blockID)) {
-            return LineLayout(height: base * 1.15, before: 0, after: 0)
+            return LineLayout(
+                height: showingSource ? base * 1.15 : base * 0.4, before: 0, after: 0)
         }
 
         switch line.kind {

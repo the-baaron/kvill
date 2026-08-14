@@ -137,6 +137,59 @@ enum MarkdownReference {
     Inline math like $E = mc^2$ is tinted, and raw <em>HTML</em> is dimmed to the
     secondary colour so it reads as markup rather than prose.
 
+    ## A long table
+
+    Enough rows to scroll through, for checking that the grid holds its columns and
+    that the edges behave while moving.
+
+    | Command | Shortcut | Notes | Group |
+    | --- | --- | --- | --- |
+    | Bold | Cmd B | Wraps the word under the caret | Format |
+    | Italic | Cmd I | Same, with underscores | Format |
+    | Strikethrough | Ctrl Cmd S | Wraps in double tildes | Format |
+    | Highlight | Ctrl Cmd H | Wraps in double equals | Format |
+    | Inline code | Ctrl Cmd C | Wraps in backticks | Format |
+    | Inline math | Ctrl Cmd M | Wraps in dollars | Format |
+    | Link | Cmd K | Selects the placeholder URL | Insert |
+    | Image | Shift Cmd K | Or drag a file in | Insert |
+    | Footnote | None | Inserts a numbered reference | Insert |
+    | Heading 1 | Cmd 1 | Replaces any existing marker | Structure |
+    | Heading 2 | Cmd 2 | Replaces any existing marker | Structure |
+    | Heading 3 | Cmd 3 | Replaces any existing marker | Structure |
+    | Heading 4 | Cmd 4 | Replaces any existing marker | Structure |
+    | Heading 5 | Cmd 5 | Replaces any existing marker | Structure |
+    | Heading 6 | Cmd 6 | Replaces any existing marker | Structure |
+    | Body text | Cmd 0 | Strips the heading marker | Structure |
+    | Bulleted list | Shift Cmd 8 | Toggles on the selected lines | Structure |
+    | Numbered list | Shift Cmd 7 | Renumbers as you press Return | Structure |
+    | Task list | Shift Cmd 9 | Checkboxes are clickable | Structure |
+    | Blockquote | Cmd apostrophe | Adds or removes one level | Structure |
+    | Code block | Shift Cmd C | Caret lands on the language | Structure |
+    | Table | Ctrl Cmd T | Inserts a starter grid | Structure |
+    | Horizontal rule | Shift Cmd minus | Three dashes on their own line | Structure |
+    | Note callout | None | GitHub alert, tinted blue | Callout |
+    | Tip callout | None | GitHub alert, tinted green | Callout |
+    | Important callout | None | GitHub alert, tinted purple | Callout |
+    | Warning callout | None | GitHub alert, tinted amber | Callout |
+    | Caution callout | None | GitHub alert, tinted red | Callout |
+    | Display options | Cmd T | The glass dot in the corner | View |
+    | Hide interface | Cmd period | Everything, title bar included | View |
+    | Next theme | Ctrl Cmd bracket right | Cycles the eight palettes | View |
+    | Next typeface | Ctrl Cmd bracket left | Cycles the five presets | View |
+    | Bigger text | Cmd plus | Four sizes | View |
+    | Smaller text | Cmd minus | Four sizes | View |
+    | Default size | Opt Cmd 0 | Back to medium | View |
+    | Focus mode | Shift Cmd F | Dims every other paragraph | View |
+    | Typewriter | Shift Cmd Y | Keeps the caret centred | View |
+    | Show markers | Shift Cmd M | Reveals the Markdown source | View |
+    | Full screen | Ctrl Cmd F | Standard macOS full screen | View |
+    | Find | Cmd F | Uses the system find bar | Edit |
+    | Find next | Cmd G | Wraps at the end | Edit |
+    | Replace | Opt Cmd F | Find and replace bar | Edit |
+    | Save | Cmd S | Confirms with a toast | File |
+    | Open | Cmd O | One file, one window | File |
+    | New | Cmd N | Untitled document | File |
+
     ## Getting around
 
     | | |
