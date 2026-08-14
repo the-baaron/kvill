@@ -64,56 +64,6 @@ enum SelfTest {
         check("can scroll past the last line", reached > plainMax + 20,
               "reached \(Int(reached)) of plain max \(Int(plainMax))")
 
-        // --- Scroll edge blur -------------------------------------------------
-        // Proved by pixels: render a strip of the document, blur it, and confirm
-        // the result actually differs from the unblurred original.
-        let textView = controller.editor.textView
-        let size = NSSize(width: 700, height: 90)
-
-        for (name, edge) in [("top", ScrollEdgeView.Edge.top), ("bottom", .bottom)] {
-            let probe = ScrollEdgeView(edge: edge, theme: ThemeManager.shared.theme)
-            probe.source = textView
-            guard let rendered = probe.renderForTest(size: size) else {
-                check("edge renders: \(name)", false, "no bitmap")
-                continue
-            }
-            // NSBitmapImageRep indexes from the top-left, so row 0 is the top.
-            let rows = rendered.pixelsHigh
-            let band = rows / 4
-            let visualTop = ScrollEdgeRenderer.darkness(rendered, rows: 0..<band)
-            let visualBottom = ScrollEdgeRenderer.darkness(rendered, rows: (rows - band)..<rows)
-
-            check("edge renders: \(name)", visualTop + visualBottom > 0.0005,
-                  "top \(String(format: "%.4f", visualTop)) bottom \(String(format: "%.4f", visualBottom))")
-
-            // Is the content actually blurred? Compare how sharp it is against
-            // the same strip drawn straight, in the band nearest the edge where
-            // the blur is strongest.
-            let strip = NSRect(x: 0, y: 200, width: size.width, height: size.height)
-            guard let straight = ScrollEdgeRenderer.renderStrip(strip: strip, scale: 2, render: {
-                      textView.renderPage($0)
-                  }),
-                  let softened = probe.renderForTest(size: size) else {
-                check("edge blurs: \(name)", false, "no bitmap")
-                continue
-            }
-            let rowsHigh = straight.pixelsHigh
-            let edgeBand = edge == .top ? 0..<(rowsHigh / 3) : (rowsHigh * 2 / 3)..<rowsHigh
-            let before = ScrollEdgeRenderer.sharpness(straight, rows: edgeBand)
-            let after = ScrollEdgeRenderer.sharpness(softened, rows: edgeBand)
-            check("edge blurs: \(name)", before > 0 && after < before * 0.7,
-                  "sharpness \(String(format: "%.4f", before)) to \(String(format: "%.4f", after))")
-
-            // And the far end must be left alone, or it is a blurred panel
-            // rather than a gradual one.
-            let farBand = edge == .top ? (rowsHigh * 2 / 3)..<rowsHigh : 0..<(rowsHigh / 3)
-            let farBefore = ScrollEdgeRenderer.sharpness(straight, rows: farBand)
-            let farAfter = ScrollEdgeRenderer.sharpness(softened, rows: farBand)
-            check("edge blur is gradual: \(name)",
-                  farBefore == 0 || farAfter > farBefore * 0.85,
-                  "far end \(String(format: "%.4f", farBefore)) to \(String(format: "%.4f", farAfter))")
-        }
-
         // --- Translucent palettes ---------------------------------------------
         // Every piece of the chain has to be right for a glass theme to read as
         // glass: a see-through window, a backdrop behind the page, a scroll view
@@ -130,11 +80,13 @@ enum SelfTest {
             check("glass: window background is clear",
                   glassWindow.window?.backgroundColor.alphaComponent == 0)
             check("glass: backdrop is showing", glassController.hasVisibleBackdrop)
+            check("glass: palette tint is over it", glassController.hasVisibleTint)
             check("glass: scroll view paints nothing",
                   glassController.editor.scrollView.drawsBackground == false)
             let alpha = ThemeManager.shared.theme.colors.page.alphaComponent
             check("glass: page is translucent", alpha < 0.95,
                   "page alpha \(String(format: "%.2f", alpha))")
+            check("system scroll edge effect requested", glassWindow.hasSoftScrollEdge)
         } else {
             check("glass: window builds", false)
         }

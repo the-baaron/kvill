@@ -221,24 +221,17 @@ final class EditorTextView: NSTextView {
         drawOverlays(in: rect)
     }
 
-    /// Paints the page colour.
+    /// Paints the page colour, or nothing at all for a translucent palette.
     ///
-    /// A translucent palette is written with `.copy`, so the exact alpha lands in
-    /// the backing store. Blending it instead lets each redraw stack another
-    /// layer of the same colour on the last, and within a few passes the page is
-    /// opaque and the glass has quietly gone.
+    /// A glass page is built the way every other translucent macOS window builds
+    /// one: a material behind the window, a tint over it, and a text view that
+    /// paints no background whatsoever. Filling here with a half-transparent
+    /// colour instead means glyphs are antialiased against partial alpha, which
+    /// is what made the page look wrong.
     private func fillPage(_ rect: NSRect) {
-        let page = theme.colors.page
-        guard theme.colors.isTranslucent else {
-            page.setFill()
-            rect.fill()
-            return
-        }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current?.compositingOperation = .copy
-        page.setFill()
+        guard !theme.colors.isTranslucent else { return }
+        theme.colors.background.setFill()
         rect.fill()
-        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawOverlays(in dirtyRect: NSRect) {

@@ -12,11 +12,12 @@ final class DocumentViewController: NSViewController {
     private let optionsBar = DisplayOptionsBar()
     private let dragArea = WindowDragArea()
     private let titleLabel = NSTextField(labelWithString: "")
-    private var topEdge: ScrollEdgeView!
-    private var bottomEdge: ScrollEdgeView!
     private var toast: ToastView?
     /// Window-level blur behind a translucent palette. Hidden for opaque ones.
     private let backdrop = NSVisualEffectView()
+    /// The palette's own colour, laid over the material so a glass page still
+    /// reads as Frost or Onyx rather than as bare system blur.
+    private let tint = NSView()
     /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
     /// work, and none of it is needed until there is a selection to act on.
     private var selectionToolbar: SelectionToolbarView?
@@ -43,8 +44,9 @@ final class DocumentViewController: NSViewController {
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(backdrop)
 
-        topEdge = ScrollEdgeView(edge: .top, theme: theme)
-        bottomEdge = ScrollEdgeView(edge: .bottom, theme: theme)
+        tint.wantsLayer = true
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(tint)
 
         addChild(editor)
         let editorView = editor.view
@@ -56,8 +58,6 @@ final class DocumentViewController: NSViewController {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(titleLabel)
 
-        container.addSubview(topEdge)
-        container.addSubview(bottomEdge)
         container.addSubview(dragArea)
         container.addSubview(stats)
         container.addSubview(optionsBar)
@@ -69,6 +69,11 @@ final class DocumentViewController: NSViewController {
             backdrop.topAnchor.constraint(equalTo: container.topAnchor),
             backdrop.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
+            tint.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            tint.topAnchor.constraint(equalTo: container.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
             editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             editorView.topAnchor.constraint(equalTo: container.topAnchor),
@@ -77,16 +82,6 @@ final class DocumentViewController: NSViewController {
             titleLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 13),
             titleLabel.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, constant: -260),
-
-            topEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            topEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            topEdge.topAnchor.constraint(equalTo: container.topAnchor),
-            topEdge.heightAnchor.constraint(equalToConstant: 190),
-
-            bottomEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            bottomEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            bottomEdge.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            bottomEdge.heightAnchor.constraint(equalToConstant: 160),
 
             dragArea.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             dragArea.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -104,9 +99,6 @@ final class DocumentViewController: NSViewController {
             self?.updateStats()
             self?.onTextChange?()
         }
-        topEdge.source = editor.textView
-        bottomEdge.source = editor.textView
-
         editor.onSelectionChange = { [weak self] in self?.updateSelectionToolbar() }
         editor.onScroll = { [weak self] _, _ in
         }
@@ -133,8 +125,6 @@ final class DocumentViewController: NSViewController {
         applyBackdrop()
         titleLabel.textColor = theme.colors.textSecondary
         updateStats()
-        topEdge.viewportMoved()
-        bottomEdge.viewportMoved()
     }
 
     override func viewDidAppear() {
@@ -179,8 +169,6 @@ final class DocumentViewController: NSViewController {
     }
 
     @objc private func viewportMoved() {
-        topEdge.viewportMoved()
-        bottomEdge.viewportMoved()
         updateTitleVisibility()
         updateSelectionToolbar()
     }
@@ -211,8 +199,6 @@ final class DocumentViewController: NSViewController {
     }
 
     @objc private func themeChanged() {
-        topEdge.theme = theme
-        bottomEdge.theme = theme
         titleLabel.textColor = theme.colors.textSecondary
         applyBackdrop()
     }
@@ -224,11 +210,19 @@ final class DocumentViewController: NSViewController {
 
     /// Whether the window-level blur behind a translucent page is on screen.
     var hasVisibleBackdrop: Bool { !backdrop.isHidden }
+    /// Whether the palette's colour is laid over that material.
+    var hasVisibleTint: Bool { !tint.isHidden && tint.layer?.backgroundColor != nil }
 
     private func applyBackdrop() {
-        backdrop.isHidden = !theme.colors.isTranslucent
+        let glass = theme.colors.isTranslucent
+        backdrop.isHidden = !glass
         backdrop.material = theme.colors.material
         backdrop.appearance = theme.colors.appearance
+
+        tint.isHidden = !glass
+        tint.layer?.backgroundColor = glass
+            ? theme.colors.background.withAlphaComponent(theme.colors.pageAlpha).cgColor
+            : nil
     }
 
     // MARK: - Pointer proximity

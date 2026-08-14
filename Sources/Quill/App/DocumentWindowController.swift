@@ -42,6 +42,7 @@ final class DocumentWindowController: NSWindowController {
     /// keeps its launch appearance and the traffic lights stay wrong after a
     /// switch to a dark theme.
     private func start() {
+        addSoftScrollEdge()
         applyTheme()
         NotificationCenter.default.addObserver(
             self, selector: #selector(applyTheme), name: .quillThemeChanged, object: nil)
@@ -49,6 +50,37 @@ final class DocumentWindowController: NSWindowController {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Asks the system for the soft scroll edge under the title bar.
+    ///
+    /// AppKit reaches `NSScrollEdgeEffectStyle` only through a titlebar
+    /// accessory: there is no property on the scroll view. The accessory needs a
+    /// real height, since the effect applies to content scrolling behind it, and
+    /// an empty one produced nothing.
+    ///
+    /// There is no equivalent for the bottom of a window, so there is no bottom
+    /// edge effect. Drawing one by hand cost several milliseconds a frame and
+    /// never matched the system's.
+    private func addSoftScrollEdge() {
+        guard #available(macOS 26.1, *), let window else { return }
+
+        let accessory = NSTitlebarAccessoryViewController()
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
+        host.wantsLayer = true
+        accessory.view = host
+        accessory.layoutAttribute = .bottom
+        accessory.automaticallyAdjustsSize = false
+        accessory.preferredScrollEdgeEffectStyle = .soft
+        window.addTitlebarAccessoryViewController(accessory)
+    }
+
+    /// Whether the system scroll edge effect was asked for.
+    var hasSoftScrollEdge: Bool {
+        guard #available(macOS 26.1, *), let window else { return false }
+        return window.titlebarAccessoryViewControllers.contains {
+            $0.preferredScrollEdgeEffectStyle == .soft
+        }
     }
 
 

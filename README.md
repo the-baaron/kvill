@@ -47,9 +47,14 @@ remembered between launches, never per document.
 
 **Chrome that stays out of the way.** A single glass dot in the top-right corner
 springs open into three buttons as the pointer nears it, each holding a small
-palette. A glass formatting bar appears over a selection. Content blurs and fades
-under the top and bottom window edges. A word count sits quietly in the corner.
-`⌘.` hides all of it, title bar included.
+palette. A glass formatting bar appears over a selection. The file name sits
+centred at the top of the page and fades away as soon as you scroll. A word count
+sits quietly in the corner. `⌘.` hides all of it, title bar included.
+
+The soft edge where content scrolls under the title bar is the system's own,
+through `NSScrollEdgeEffectStyle` on a titlebar accessory. There is no AppKit
+equivalent for the bottom of a window, so there is no bottom edge: a hand-drawn
+one cost several milliseconds every frame and never matched it.
 
 **Focus mode** dims every paragraph but the one you are in. **Typewriter
 scrolling** keeps the caret centred, and the view scrolls past the end of the
