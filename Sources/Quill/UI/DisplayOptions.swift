@@ -1,58 +1,116 @@
 import AppKit
 
-/// The only permanent piece of chrome: a small glass button in the top-right
-/// corner that opens the display options.
+/// The only permanent chrome: a glass pill in the top-right corner.
+///
+/// It sits as a single small circle until the pointer comes near, then springs
+/// open into three buttons. Each opens a compact palette rather than adding more
+/// controls to the bar itself, which keeps the resting state to one dot.
 ///
 /// Everything it controls lives in `ThemeManager`, so the choices are app-wide
 /// and persist across launches rather than belonging to one document.
-final class DisplayOptionsButton: NSView {
+final class DisplayOptionsBar: NSView {
 
-    private static let side: CGFloat = 34
+    /// Pointer distance, in points, at which the bar opens. It closes a little
+    /// further out so it does not flicker on the boundary.
+    static let openDistance: CGFloat = 100
+    static let closeDistance: CGFloat = 150
 
-    private let button = NSButton()
+    private let collapsedWidth: CGFloat = 34
+    private let barHeight: CGFloat = 34
+
+    private var widthConstraint: NSLayoutConstraint!
+    private let clip = NSView()
+    private let icon = NSImageView()
+    private let buttons = NSStackView()
     private let popover = NSPopover()
 
-    var isOpen: Bool { popover.isShown }
+    private(set) var isExpanded = false
 
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        // "Aa" is the established macOS glyph for type and appearance options,
-        // the same one Books and Safari Reader use.
-        button.image = NSImage(systemSymbolName: "textformat", accessibilityDescription: "Display options")
-        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        button.contentTintColor = .labelColor
-        button.isBordered = false
-        button.title = ""
-        button.toolTip = "Display options"
-        button.target = self
-        button.action = #selector(toggle)
-        button.translatesAutoresizingMaskIntoConstraints = false
+        clip.wantsLayer = true
+        clip.layer?.masksToBounds = true
+        clip.layer?.cornerRadius = barHeight / 2
+        clip.layer?.cornerCurve = .continuous
+        clip.translatesAutoresizingMaskIntoConstraints = false
 
-        let backdrop = makeBackdrop(content: button)
-        addSubview(backdrop)
+        // "Aa" is the established macOS glyph for type and appearance options.
+        icon.image = NSImage(systemSymbolName: "textformat", accessibilityDescription: "Display options")
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        icon.contentTintColor = .labelColor
+        icon.translatesAutoresizingMaskIntoConstraints = false
+
+        buildButtons()
+        clip.addSubview(buttons)
+        clip.addSubview(icon)
 
         popover.behavior = .transient
-        popover.contentViewController = DisplayOptionsController()
+
+        let backdrop = makeBackdrop(content: clip)
+        addSubview(backdrop)
+
+        widthConstraint = widthAnchor.constraint(equalToConstant: collapsedWidth)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Self.side),
-            heightAnchor.constraint(equalToConstant: Self.side),
+            widthConstraint,
+            heightAnchor.constraint(equalToConstant: barHeight),
+
             backdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
             backdrop.topAnchor.constraint(equalTo: topAnchor),
             backdrop.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            icon.centerXAnchor.constraint(equalTo: clip.centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: clip.centerYAnchor),
+
+            // Pinned to the trailing edge so the pill grows leftwards out from
+            // under the resting dot.
+            buttons.trailingAnchor.constraint(equalTo: clip.trailingAnchor, constant: -7),
+            buttons.centerYAnchor.constraint(equalTo: clip.centerYAnchor),
         ])
+
+        buttons.alphaValue = 0
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    private func buildButtons() {
+        buttons.orientation = .horizontal
+        buttons.alignment = .centerY
+        buttons.spacing = 2
+        buttons.translatesAutoresizingMaskIntoConstraints = false
+
+        for section in OptionsPalette.Section.allCases {
+            buttons.addArrangedSubview(button(for: section))
+        }
+    }
+
+    private func button(for section: OptionsPalette.Section) -> NSButton {
+        let button = NSButton()
+        button.bezelStyle = .accessoryBarAction
+        button.isBordered = false
+        button.title = ""
+        button.toolTip = section.title
+        button.tag = section.rawValue
+        button.target = self
+        button.action = #selector(openPalette(_:))
+        button.image = NSImage(systemSymbolName: section.symbol, accessibilityDescription: section.title)
+        button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 26),
+            button.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        return button
+    }
 
     private func makeBackdrop(content: NSView) -> NSView {
         let backdrop: NSView
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
-            glass.cornerRadius = Self.side / 2
+            glass.cornerRadius = barHeight / 2
             glass.style = .regular
             glass.contentView = content
             backdrop = glass
@@ -62,7 +120,7 @@ final class DisplayOptionsButton: NSView {
             effect.blendingMode = .withinWindow
             effect.state = .active
             effect.wantsLayer = true
-            effect.layer?.cornerRadius = Self.side / 2
+            effect.layer?.cornerRadius = barHeight / 2
             effect.layer?.cornerCurve = .continuous
             effect.layer?.masksToBounds = true
             effect.addSubview(content)
@@ -78,101 +136,132 @@ final class DisplayOptionsButton: NSView {
         return backdrop
     }
 
-    @objc func toggle() {
+    // MARK: - Expansion
+
+    /// Called with the pointer position in this view's superview coordinates.
+    func updateProximity(to point: NSPoint) {
+        guard !popover.isShown else { return }
+        let distance = distanceFromFrame(to: point)
+        if !isExpanded, distance <= Self.openDistance {
+            setExpanded(true)
+        } else if isExpanded, distance > Self.closeDistance {
+            setExpanded(false)
+        }
+    }
+
+    private func distanceFromFrame(to point: NSPoint) -> CGFloat {
+        let box = frame
+        let dx = max(box.minX - point.x, 0, point.x - box.maxX)
+        let dy = max(box.minY - point.y, 0, point.y - box.maxY)
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    func setExpanded(_ expanded: Bool) {
+        guard expanded != isExpanded else { return }
+        isExpanded = expanded
+
+        let target = expanded ? buttons.fittingSize.width + 14 : collapsedWidth
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = expanded ? 0.38 : 0.24
+            // A curve that overshoots past 1 gives the pill a little bounce as
+            // it opens, and a plain ease-in as it closes.
+            context.timingFunction = expanded
+                ? CAMediaTimingFunction(controlPoints: 0.3, 1.6, 0.55, 1)
+                : CAMediaTimingFunction(name: .easeIn)
+            context.allowsImplicitAnimation = true
+
+            widthConstraint.animator().constant = target
+            buttons.animator().alphaValue = expanded ? 1 : 0
+            icon.animator().alphaValue = expanded ? 0 : 1
+            superview?.layoutSubtreeIfNeeded()
+        }
+    }
+
+    // MARK: - Palettes
+
+    var isOpen: Bool { popover.isShown }
+
+    @objc private func openPalette(_ sender: NSButton) {
+        guard let section = OptionsPalette.Section(rawValue: sender.tag) else { return }
         if popover.isShown {
             popover.performClose(nil)
-        } else {
-            (popover.contentViewController as? DisplayOptionsController)?.sync()
-            popover.show(relativeTo: bounds, of: self, preferredEdge: .maxY)
+            return
         }
+        popover.contentViewController = OptionsPalette(section: section)
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+    }
+
+    /// Opens the bar and its first palette, for the keyboard shortcut.
+    func present() {
+        setExpanded(true)
+        guard let first = buttons.arrangedSubviews.first as? NSButton else { return }
+        openPalette(first)
     }
 
     func close() {
         popover.performClose(nil)
+        setExpanded(false)
     }
 }
 
-/// Contents of the display options popover: a row of theme swatches and three
-/// dropdowns, rather than a wall of buttons.
-final class DisplayOptionsController: NSViewController {
+/// One compact palette of settings, shown from the bar.
+final class OptionsPalette: NSViewController {
 
+    enum Section: Int, CaseIterable {
+        case theme
+        case typography
+        case reading
+
+        var title: String {
+            switch self {
+            case .theme: return "Theme"
+            case .typography: return "Typography"
+            case .reading: return "Reading"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .theme: return "paintpalette"
+            case .typography: return "textformat.size"
+            case .reading: return "eyeglasses"
+            }
+        }
+    }
+
+    private let section: Section
     private var dots: [PaletteDotButton] = []
-    private let followSystem = NSButton(checkboxWithTitle: "Match system light and dark",
-                                        target: nil, action: nil)
+    private let followSystem = NSButton(checkboxWithTitle: "Match system", target: nil, action: nil)
     private let typeface = NSPopUpButton()
     private let textSize = NSPopUpButton()
     private let measure = NSPopUpButton()
     private let focusToggle = NSButton(checkboxWithTitle: "Focus mode", target: nil, action: nil)
-    private let typewriterToggle = NSButton(checkboxWithTitle: "Typewriter scrolling",
-                                            target: nil, action: nil)
-    private let markersToggle = NSButton(checkboxWithTitle: "Always show syntax markers",
-                                         target: nil, action: nil)
+    private let typewriterToggle = NSButton(checkboxWithTitle: "Typewriter scrolling", target: nil, action: nil)
+    private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
+
+    init(section: Section) {
+        self.section = section
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func loadView() {
         let container = NSView()
-
-        for palette in Palettes.all {
-            let dot = PaletteDotButton(palette: palette, target: self, action: #selector(selectPalette(_:)))
-            dots.append(dot)
-        }
-        let swatches = NSStackView(views: dots)
-        swatches.orientation = .horizontal
-        swatches.spacing = 7
-
-        followSystem.target = self
-        followSystem.action = #selector(toggleFollowSystem)
-        followSystem.font = .systemFont(ofSize: 11)
-
-        configure(typeface, titles: TypographyPreset.all.map(\.name), action: #selector(selectTypeface))
-        configure(textSize, titles: TextSize.allCases.map(\.name), action: #selector(selectSize))
-        configure(measure, titles: LineWidth.allCases.map(\.name), action: #selector(selectMeasure))
-
-        for toggle in [focusToggle, typewriterToggle, markersToggle] {
-            toggle.target = self
-            toggle.font = .systemFont(ofSize: 11)
-        }
-        focusToggle.action = #selector(toggleFocus)
-        typewriterToggle.action = #selector(toggleTypewriter)
-        markersToggle.action = #selector(toggleMarkers)
-
-        let stack = NSStackView(views: [
-            label("Theme"),
-            swatches,
-            followSystem,
-            label("Typeface"),
-            typeface,
-            label("Text size"),
-            textSize,
-            label("Line width"),
-            measure,
-            separator(),
-            focusToggle,
-            typewriterToggle,
-            markersToggle,
-        ])
+        let stack = NSStackView(views: content())
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
-        stack.setCustomSpacing(10, after: swatches)
-        stack.setCustomSpacing(14, after: followSystem)
-        stack.setCustomSpacing(12, after: typeface)
-        stack.setCustomSpacing(12, after: textSize)
-        stack.setCustomSpacing(14, after: measure)
-        stack.setCustomSpacing(12, after: separator())
+        stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         container.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14),
-            stack.widthAnchor.constraint(equalToConstant: 212),
-            typeface.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            textSize.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            measure.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
         ])
-
         view = container
         sync()
 
@@ -181,6 +270,48 @@ final class DisplayOptionsController: NSViewController {
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
+
+    private func content() -> [NSView] {
+        switch section {
+        case .theme:
+            // Swatches in a grid, four to a row, the way a colour palette reads.
+            var rows: [NSView] = []
+            for chunk in Palettes.all.chunked(into: 4) {
+                let row = NSStackView(views: chunk.map { palette in
+                    let dot = PaletteDotButton(
+                        palette: palette, target: self, action: #selector(selectPalette(_:)))
+                    dots.append(dot)
+                    return dot
+                })
+                row.orientation = .horizontal
+                row.spacing = 8
+                rows.append(row)
+            }
+            followSystem.target = self
+            followSystem.action = #selector(toggleFollowSystem)
+            followSystem.font = .systemFont(ofSize: 11)
+            return rows + [followSystem]
+
+        case .typography:
+            configure(typeface, titles: TypographyPreset.all.map(\.name), action: #selector(selectTypeface))
+            configure(textSize, titles: TextSize.allCases.map(\.name), action: #selector(selectSize))
+            configure(measure, titles: LineWidth.allCases.map(\.name), action: #selector(selectMeasure))
+            for popup in [typeface, textSize, measure] {
+                popup.widthAnchor.constraint(equalToConstant: 168).isActive = true
+            }
+            return [label("Typeface"), typeface, label("Size"), textSize, label("Width"), measure]
+
+        case .reading:
+            for toggle in [focusToggle, typewriterToggle, markersToggle] {
+                toggle.target = self
+                toggle.font = .systemFont(ofSize: 11)
+            }
+            focusToggle.action = #selector(toggleFocus)
+            typewriterToggle.action = #selector(toggleTypewriter)
+            markersToggle.action = #selector(toggleMarkers)
+            return [focusToggle, typewriterToggle, markersToggle]
+        }
+    }
 
     private func configure(_ popup: NSPopUpButton, titles: [String], action: Selector) {
         popup.removeAllItems()
@@ -199,32 +330,18 @@ final class DisplayOptionsController: NSViewController {
         return field
     }
 
-    private func separator() -> NSView {
-        let line = NSBox()
-        line.boxType = .separator
-        line.translatesAutoresizingMaskIntoConstraints = false
-        line.widthAnchor.constraint(equalToConstant: 212).isActive = true
-        return line
-    }
-
-    // MARK: - State
-
     @objc func sync() {
         let manager = ThemeManager.shared
         let active = manager.activePaletteID
         for dot in dots { dot.isSelectedDot = dot.palette.id == active }
-
         followSystem.state = manager.followsSystemAppearance ? .on : .off
         typeface.selectItem(at: TypographyPreset.all.firstIndex { $0.id == manager.presetID } ?? 0)
         textSize.selectItem(at: TextSize.allCases.firstIndex(of: manager.textSize) ?? 0)
         measure.selectItem(at: LineWidth.allCases.firstIndex(of: manager.lineWidth) ?? 0)
-
         focusToggle.state = manager.focusMode ? .on : .off
         typewriterToggle.state = manager.typewriterScrolling ? .on : .off
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
     }
-
-    // MARK: - Actions
 
     @objc private func selectPalette(_ sender: PaletteDotButton) {
         ThemeManager.shared.selectPalette(id: sender.palette.id)
@@ -264,7 +381,7 @@ final class DisplayOptionsController: NSViewController {
 }
 
 /// A palette shown as a filled circle: the theme's page colour with its accent
-/// as a small inner dot, so the six read apart at a glance.
+/// as a small inner dot, so they read apart at a glance.
 final class PaletteDotButton: NSButton {
 
     let palette: ColorTheme
@@ -282,8 +399,8 @@ final class PaletteDotButton: NSButton {
         toolTip = palette.name
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 24),
-            heightAnchor.constraint(equalToConstant: 24),
+            widthAnchor.constraint(equalToConstant: 26),
+            heightAnchor.constraint(equalToConstant: 26),
         ])
     }
 
@@ -307,6 +424,15 @@ final class PaletteDotButton: NSButton {
             palette.text.withAlpha(0.35).setStroke()
             path.lineWidth = 1
             path.stroke()
+        }
+    }
+}
+
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }

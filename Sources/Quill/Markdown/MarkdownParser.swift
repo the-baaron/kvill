@@ -17,8 +17,9 @@ enum MarkdownParser {
         detectTables(&lines, text: text)
         assignBlocks(&lines)
         scanInlines(&lines, text: text)
+        detectBlockImages(&lines, text: text)
 
-        return ParsedDocument(lines: lines)
+        return ParsedDocument(lines: lines, linkDefinitions: collectDefinitions(lines, text: text))
     }
 
     // MARK: - Line splitting
@@ -256,6 +257,18 @@ enum MarkdownParser {
                 continue
             }
 
+            // --- Link reference definition, `[label]: destination` ------------------------------------
+            if let definition = linkDefinition(text, innerStart, end) {
+                line.kind = .linkDefinition
+                line.markerRange = NSRange(location: firstNonSpace, length: definition.markerEnd - firstNonSpace)
+                let gapEnd = skipSpaces(text, definition.markerEnd, end)
+                line.gapRange = NSRange(location: definition.markerEnd, length: gapEnd - definition.markerEnd)
+                line.contentRange = NSRange(location: gapEnd, length: end - gapEnd)
+                lines[index] = line
+                previousWasBlank = false
+                continue
+            }
+
             // --- Definition list item ---------------------------------------------------------------
             if quoteDepth == 0, innerStart < end, text.character(at: innerStart) == 58,  // ':'
                 innerStart + 1 < end, isSpace(text.character(at: innerStart + 1)) {
@@ -350,6 +363,8 @@ enum MarkdownParser {
     private static func assignBlocks(_ lines: inout [MDLine]) {
         var blockID = 0
         var previousSignature: String?
+        var paragraphID = 0
+        var previousWasBlank = true
 
         for index in lines.indices {
             let signature = groupSignature(lines[index])
@@ -358,6 +373,14 @@ enum MarkdownParser {
             }
             previousSignature = signature
             lines[index].blockID = blockID
+
+            // A run of non-blank lines is one paragraph, however many block
+            // kinds it contains.
+            let isBlank = lines[index].kind == .blank
+            if !isBlank, previousWasBlank { paragraphID += 1 }
+            previousWasBlank = isBlank
+            lines[index].paragraphID = paragraphID
+
             lines[index].decoration = decoration(for: lines[index])
         }
 
@@ -401,6 +424,35 @@ enum MarkdownParser {
         }
     }
 
+    /// Marks lines that consist of nothing but an image, so they can be drawn
+    /// rather than written out.
+    private static func detectBlockImages(_ lines: inout [MDLine], text: NSString) {
+        for index in lines.indices {
+            switch lines[index].kind {
+            case .paragraph, .blockquote, .listItem:
+                lines[index].blockImage = blockImage(text, lines[index].contentRange)
+            default:
+                continue
+            }
+        }
+    }
+
+    /// Builds the reference link table, keyed by lowercased label.
+    private static func collectDefinitions(_ lines: [MDLine], text: NSString) -> [String: String] {
+        var result: [String: String] = [:]
+        for line in lines where line.kind == .linkDefinition {
+            guard line.markerRange.length > 2 else { continue }
+            let label = text.substring(
+                with: NSRange(location: line.markerRange.location + 1,
+                              length: line.markerRange.length - 3))
+            guard line.contentRange.length > 0 else { continue }
+            let destination = text.substring(with: line.contentRange)
+                .trimmingCharacters(in: .whitespaces)
+            result[label.lowercased()] = destination
+        }
+        return result
+    }
+
     // MARK: - Inline pass
 
     private static func scanInlines(_ lines: inout [MDLine], text: NSString) {
@@ -408,7 +460,7 @@ enum MarkdownParser {
             let line = lines[index]
             switch line.kind {
             case .codeLine, .indentedCode, .frontMatterLine, .frontMatterDelimiter,
-                 .thematicBreak, .setextUnderline:
+                 .thematicBreak, .setextUnderline, .linkDefinition:
                 continue
             default:
                 break
@@ -517,9 +569,12 @@ enum MarkdownParser {
         var count = 0
         while i < end, text.character(at: i) == c { count += 1; i += 1 }
         guard isBlank(text, i, end) else { return nil }
-        if c == 61 { return count >= 1 ? 1 : nil }
-        // `---` is ambiguous with a thematic break; detectSetextHeadings resolves it.
-        return count >= 2 ? 2 : nil
+        // Only `===` makes a heading. `---` under a paragraph is a setext H2 in
+        // CommonMark, but in a live editor that means typing a horizontal rule
+        // silently promotes the line above it, which is a trap. Documents that
+        // use it are converted to `##` on open by SetextNormalizer, so nothing
+        // is lost.
+        return c == 61 && count >= 1 ? 1 : nil
     }
 
     private static func isThematicBreak(_ text: NSString, _ start: Int, _ end: Int) -> Bool {
@@ -637,6 +692,69 @@ enum MarkdownParser {
         while i < end, text.character(at: i) != 93 { i += 1 }
         guard i + 1 < end, text.character(at: i + 1) == 58 else { return nil }  // ']:'
         return Footnote(markerEnd: i + 2)
+    }
+
+    private struct LinkDefinition {
+        let markerEnd: Int
+        let label: String
+    }
+
+    /// Matches `[label]:` at the start of a line. Footnote definitions start
+    /// `[^`, and are matched before this, so they are not swallowed here.
+    private static func linkDefinition(_ text: NSString, _ start: Int, _ end: Int) -> LinkDefinition? {
+        guard start + 2 < end, text.character(at: start) == 91 else { return nil }  // '['
+        guard text.character(at: start + 1) != 94 else { return nil }               // not '[^'
+        var i = start + 1
+        while i < end, text.character(at: i) != 93 {
+            if text.character(at: i) == 91 { return nil }
+            i += 1
+        }
+        guard i < end, i > start + 1, i + 1 < end, text.character(at: i + 1) == 58 else { return nil }
+        let label = text.substring(with: NSRange(location: start + 1, length: i - start - 1))
+        // A destination has to follow, otherwise this is ordinary prose.
+        guard skipSpaces(text, i + 2, end) < end else { return nil }
+        return LinkDefinition(markerEnd: i + 2, label: label)
+    }
+
+    /// Matches a line whose entire content is one image.
+    private static func blockImage(_ text: NSString, _ range: NSRange) -> BlockImage? {
+        var start = range.location
+        var end = NSMaxRange(range)
+        while start < end, isSpace(text.character(at: start)) { start += 1 }
+        while end > start, isSpace(text.character(at: end - 1)) { end -= 1 }
+        guard end - start > 4 else { return nil }
+        guard text.character(at: start) == 33, text.character(at: start + 1) == 91 else { return nil }  // '!['
+
+        var i = start + 2
+        var depth = 1
+        while i < end, depth > 0 {
+            let c = text.character(at: i)
+            if c == 91 { depth += 1 }
+            if c == 93 { depth -= 1; if depth == 0 { break } }
+            i += 1
+        }
+        guard i < end, depth == 0 else { return nil }
+        let altRange = NSRange(location: start + 2, length: i - start - 2)
+
+        guard i + 1 < end, text.character(at: i + 1) == 40 else { return nil }  // '('
+        var j = i + 2
+        var parens = 1
+        while j < end, parens > 0 {
+            let c = text.character(at: j)
+            if c == 40 { parens += 1 }
+            if c == 41 { parens -= 1; if parens == 0 { break } }
+            j += 1
+        }
+        guard j < end, parens == 0 else { return nil }
+        // The closing paren has to be the last thing on the line.
+        guard j == end - 1 else { return nil }
+
+        let destination = text.substring(
+            with: NSRange(location: i + 2, length: j - i - 2))
+        return BlockImage(
+            destination: destination,
+            altRange: altRange,
+            range: NSRange(location: start, length: end - start))
     }
 
     private static func isHTMLBlockStart(_ text: NSString, _ start: Int, _ end: Int) -> Bool {

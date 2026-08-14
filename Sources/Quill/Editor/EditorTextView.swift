@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// Something drawn into space the styler reserved by kerning the underlying
 /// characters down. The document text is never altered to make room.
@@ -9,6 +10,8 @@ enum TextOverlay {
     case bullet(NSRange)
     /// A callout's title, in place of the raw `[!NOTE]`.
     case calloutTitle(NSRange, CalloutKind?)
+    /// A picture, drawn under the Markdown line that references it.
+    case image(NSRange, URL, NSSize)
 }
 
 /// A run of lines sharing one background treatment.
@@ -44,6 +47,10 @@ final class EditorTextView: NSTextView {
 
     /// Called when the user clicks a task checkbox.
     var onToggleTask: ((NSRange) -> Void)?
+
+    /// Called when an image is dropped, with the character index to insert at.
+    /// Returning true means the drop was handled here.
+    var onImageDrop: ((NSDraggingInfo, Int) -> Bool)?
 
     /// Called when a click-drag selection finishes, so the formatting bar can
     /// appear once rather than following the pointer during the drag.
@@ -120,7 +127,31 @@ final class EditorTextView: NSTextView {
         isHorizontallyResizable = false
         textContainer?.widthTracksTextView = true
         textContainer?.lineFragmentPadding = 0
+
+        registerForDraggedTypes([
+            .fileURL, .png, .tiff,
+            NSPasteboard.PasteboardType(UTType.image.identifier),
+        ])
         applyTheme()
+    }
+
+    // MARK: - Dropping images
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        ImageDrop.canAccept(sender) ? .copy : super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        ImageDrop.canAccept(sender) ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if ImageDrop.canAccept(sender) {
+            let point = convert(sender.draggingLocation, from: nil)
+            let index = characterIndexForInsertion(at: point)
+            if onImageDrop?(sender, index) == true { return true }
+        }
+        return super.performDragOperation(sender)
     }
 
     private func applyTheme() {
@@ -130,9 +161,23 @@ final class EditorTextView: NSTextView {
         ]
         font = theme.body
         appearance = theme.colors.appearance
+
+        // The caret on an empty line is placed from the typing attributes, not
+        // from any styled character, so these need the same indent the styler
+        // gives every other line. Without it the caret jumps to the far left of
+        // the gutter the moment you open a blank line.
+        let style = NSMutableParagraphStyle()
+        style.firstLineHeadIndent = theme.metrics.gutter
+        style.headIndent = theme.metrics.gutter
+        style.minimumLineHeight = theme.metrics.lineHeight
+        style.maximumLineHeight = theme.metrics.lineHeight
+        style.lineBreakMode = .byWordWrapping
+        defaultParagraphStyle = style
+
         typingAttributes = [
             .font: theme.body,
             .foregroundColor: theme.colors.text,
+            .paragraphStyle: style,
         ]
         needsDisplay = true
     }
@@ -140,7 +185,7 @@ final class EditorTextView: NSTextView {
     // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
-        theme.colors.background.setFill()
+        theme.colors.page.setFill()
         dirtyRect.fill()
         drawDecorations(in: dirtyRect)
         super.draw(dirtyRect)
@@ -155,7 +200,7 @@ final class EditorTextView: NSTextView {
     /// get a blank or partial page depending on the canvas size. Going straight
     /// to the layout manager is deterministic.
     func renderPage(_ rect: NSRect) {
-        theme.colors.background.setFill()
+        theme.colors.background.setFill()   // opaque for exported images
         rect.fill()
         drawDecorations(in: rect)
 
@@ -182,6 +227,8 @@ final class EditorTextView: NSTextView {
                 drawBullet(range: range, dirtyRect: dirtyRect)
             case .calloutTitle(let range, let kind):
                 drawCalloutTitle(range: range, kind: kind, dirtyRect: dirtyRect)
+            case .image(let range, let url, let size):
+                drawImage(range: range, url: url, size: size, dirtyRect: dirtyRect)
             }
         }
     }
@@ -246,6 +293,36 @@ final class EditorTextView: NSTextView {
         (title as NSString).draw(
             at: NSPoint(x: slot.minX, y: slot.midY - size.height / 2),
             withAttributes: attributes)
+    }
+
+    /// Draws an embedded image below its Markdown source line.
+    private func drawImage(range: NSRange, url: URL, size: NSSize, dirtyRect: NSRect) {
+        guard let slot = rect(for: range),
+              let image = ImageStore.shared.image(at: url) else { return }
+
+        let metrics = theme.metrics
+        let columnLeft = textContainerOrigin.x + metrics.gutter
+        let frame = NSRect(
+            x: columnLeft + max(0, (metrics.measure - size.width) / 2),
+            y: slot.minY + metrics.base * 0.25,
+            width: size.width,
+            height: size.height)
+        guard frame.intersects(dirtyRect) else { return }
+
+        let path = NSBezierPath(roundedRect: frame, xRadius: 7, yRadius: 7)
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        // A text view is flipped, and the plain `draw(in:)` does not account for
+        // that, which renders every image upside down. `respectFlipped` does.
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(
+            in: frame, from: .zero, operation: .sourceOver, fraction: 1,
+            respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
+        NSGraphicsContext.restoreGraphicsState()
+
+        theme.colors.rule.withAlpha(0.6).setStroke()
+        path.lineWidth = 1
+        path.stroke()
     }
 
     private func drawDecorations(in dirtyRect: NSRect) {
@@ -462,6 +539,19 @@ final class EditorTextView: NSTextView {
         onSelectionGestureEnded?()
     }
 
+    /// Turns a destination into a URL, looking it up in the document's reference
+    /// definitions when it is a label rather than an address.
+    private func resolve(_ destination: String?, fallbackLabel: String) -> URL? {
+        if let destination, destination.contains(":") || destination.hasPrefix("/") {
+            return URL(string: destination)
+        }
+        let label = (destination ?? fallbackLabel).lowercased()
+        if let target = document?.linkDefinitions[label] {
+            return URL(string: target)
+        }
+        return destination.flatMap { URL(string: $0) }
+    }
+
     private func url(at index: Int, line: MDLine) -> URL? {
         guard let storage = textStorage else { return nil }
         let text = storage.string as NSString
@@ -479,8 +569,10 @@ final class EditorTextView: NSTextView {
                 }) {
                     let raw = text.substring(with: destination.range)
                     let trimmed = raw.split(separator: " ").first.map(String.init) ?? raw
-                    return URL(string: trimmed)
+                    return resolve(trimmed, fallbackLabel: text.substring(with: token.range))
                 }
+                // A shortcut reference has no destination token: `[label]` alone.
+                return resolve(nil, fallbackLabel: text.substring(with: token.range))
             default:
                 break
             }

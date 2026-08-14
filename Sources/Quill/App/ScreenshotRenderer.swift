@@ -81,9 +81,11 @@ enum ScreenshotRenderer {
             manager.lineWidth = value
         }
 
-        let text: String
+        var text: String
         do {
             text = try String(contentsOfFile: request.input, encoding: .utf8)
+            // Match what the app shows when it opens the same file.
+            if let normalized = SetextNormalizer.normalized(text) { text = normalized }
         } catch {
             FileHandle.standardError.write(
                 Data("Could not read \(request.input): \(error.localizedDescription)\n".utf8))
@@ -109,6 +111,8 @@ enum ScreenshotRenderer {
         window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
         window.orderFront(nil)
 
+        // Relative image paths resolve against the document's folder.
+        controller.documentURL = URL(fileURLWithPath: request.input)
         controller.loadText(text)
         if request.showPanel {
             controller.toggleThemePanel(nil)
@@ -184,11 +188,14 @@ enum ScreenshotRenderer {
         guard let base = NSGraphicsContext(bitmapImageRep: representation) else { return nil }
         let cgContext = base.cgContext
 
+        // No scaling here. A context built from a bitmap rep already maps user
+        // space onto `representation.size`, so scaling again drew a magnified
+        // crop of the top-left corner and made every zoomed render a lie.
+        //
         // The text view is flipped, so the context has to be flipped both in its
         // transform and in what AppKit believes about it. Mirroring the transform
         // alone lays the lines out bottom-up; telling AppKit alone mirrors the
         // glyphs. Both together give a correct page.
-        cgContext.scaleBy(x: scale, y: scale)
         cgContext.translateBy(x: 0, y: size.height)
         cgContext.scaleBy(x: 1, y: -1)
 

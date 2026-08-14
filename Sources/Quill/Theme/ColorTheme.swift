@@ -96,6 +96,19 @@ struct ColorTheme {
     let callouts: [CalloutKind: CalloutColors]
     let genericCallout: CalloutColors
 
+    /// When true the page is painted semi-transparent over a window-level blur,
+    /// so the desktop shows faintly through, the way a native macOS window does.
+    var isTranslucent: Bool = false
+    /// Alpha the page colour is painted at. Only meaningful when translucent.
+    var pageAlpha: CGFloat = 1
+    /// Material for the window-level blur behind a translucent page.
+    var material: NSVisualEffectView.Material = .underWindowBackground
+
+    /// The page colour as it should actually be painted.
+    var page: NSColor {
+        isTranslucent ? background.withAlphaComponent(pageAlpha) : background
+    }
+
     var appearance: NSAppearance? {
         NSAppearance(named: isDark ? .darkAqua : .aqua)
     }
@@ -314,7 +327,84 @@ enum Palettes {
             accent: NSColor(hex: "#D2D2D2"), background: NSColor(hex: "#D2D2D2", alpha: 0.14))
     )
 
-    static let all: [ColorTheme] = [paper, ink, sepia, nord, contrastLight, contrastDark]
+    /// Light glass: a near-opaque page over a window blur. The closest of the
+    /// set to a stock macOS document window.
+    static let frost = ColorTheme(
+        id: "frost",
+        name: "Frost",
+        isDark: false,
+        background: NSColor(hex: "#F6F6F8"),
+        backgroundElevated: NSColor(hex: "#FFFFFF"),
+        text: NSColor(hex: "#1D1D1F"),
+        textSecondary: NSColor(hex: "#6E6E73"),
+        marker: NSColor(hex: "#C2C2C8"),
+        markerActive: NSColor(hex: "#86868B"),
+        accent: NSColor(hex: "#0A6CFF"),
+        heading: NSColor(hex: "#111113"),
+        link: NSColor(hex: "#0A6CFF"),
+        code: NSColor(hex: "#B02A5B"),
+        codeBackground: NSColor(hex: "#ECECF1"),
+        codeBorder: NSColor(hex: "#DEDEE5"),
+        quoteBar: NSColor(hex: "#D2D2D9"),
+        quoteText: NSColor(hex: "#4A4A4F"),
+        rule: NSColor(hex: "#DEDEE5"),
+        selection: NSColor(hex: "#B7D3FF"),
+        cursor: NSColor(hex: "#0A6CFF"),
+        tableBorder: NSColor(hex: "#DEDEE5"),
+        tableHeaderBackground: NSColor(hex: "#EDEDF2"),
+        tableStripe: NSColor(hex: "#F2F2F6"),
+        highlightBackground: NSColor(hex: "#FFE79A"),
+        taskDone: NSColor(hex: "#86868B"),
+        callouts: callouts(
+            note: "#0A6CFF", tip: "#28874A", important: "#7A4FD0",
+            warning: "#A97400", caution: "#D0342C", tint: 0.09),
+        genericCallout: CalloutColors(
+            accent: NSColor(hex: "#6E6E73"), background: NSColor(hex: "#6E6E73", alpha: 0.08)),
+        isTranslucent: true,
+        pageAlpha: 0.82,
+        material: .underWindowBackground
+    )
+
+    /// Dark glass, the same idea after dark.
+    static let onyx = ColorTheme(
+        id: "onyx",
+        name: "Onyx",
+        isDark: true,
+        background: NSColor(hex: "#1C1C1E"),
+        backgroundElevated: NSColor(hex: "#242427"),
+        text: NSColor(hex: "#E6E6EB"),
+        textSecondary: NSColor(hex: "#98989F"),
+        marker: NSColor(hex: "#4B4B52"),
+        markerActive: NSColor(hex: "#8E8E96"),
+        accent: NSColor(hex: "#0A84FF"),
+        heading: NSColor(hex: "#F5F5F7"),
+        link: NSColor(hex: "#64D2FF"),
+        code: NSColor(hex: "#FF8AB3"),
+        codeBackground: NSColor(hex: "#252529"),
+        codeBorder: NSColor(hex: "#323238"),
+        quoteBar: NSColor(hex: "#3C3C43"),
+        quoteText: NSColor(hex: "#B0B0B8"),
+        rule: NSColor(hex: "#323238"),
+        selection: NSColor(hex: "#0A4A8F"),
+        cursor: NSColor(hex: "#0A84FF"),
+        tableBorder: NSColor(hex: "#323238"),
+        tableHeaderBackground: NSColor(hex: "#26262B"),
+        tableStripe: NSColor(hex: "#202024"),
+        highlightBackground: NSColor(hex: "#6B5717"),
+        taskDone: NSColor(hex: "#75757C"),
+        callouts: callouts(
+            note: "#64D2FF", tip: "#6FDD8B", important: "#C6A6FF",
+            warning: "#FFD426", caution: "#FF6961", tint: 0.14),
+        genericCallout: CalloutColors(
+            accent: NSColor(hex: "#98989F"), background: NSColor(hex: "#98989F", alpha: 0.10)),
+        isTranslucent: true,
+        pageAlpha: 0.76,
+        material: .underWindowBackground
+    )
+
+    static let all: [ColorTheme] = [
+        paper, ink, sepia, nord, frost, onyx, contrastLight, contrastDark,
+    ]
 
     static func theme(id: String) -> ColorTheme? { all.first { $0.id == id } }
 }

@@ -18,6 +18,16 @@ final class EditorViewController: NSViewController {
 
     private var theme: Theme { ThemeManager.shared.theme }
 
+    /// Where the document lives, so relative image paths can be resolved and
+    /// dropped images can be filed next to it.
+    var documentURL: URL? {
+        didSet {
+            styler.baseURL = documentURL?.deletingLastPathComponent()
+            ImageStore.shared.forgetFailures()
+            refresh(fullRestyle: true)
+        }
+    }
+
     /// Fired whenever the text changes, so the document can mark itself dirty.
     var onTextChange: (() -> Void)?
     /// Fired when the selection changes, with whether a formatting bar should show.
@@ -58,14 +68,17 @@ final class EditorViewController: NSViewController {
         textView.theme = theme
         textView.onToggleTask = { [weak self] range in self?.toggleTask(at: range) }
         textView.typewriterScroll = { [weak self] _ in self?.centerCaret() ?? false }
+        textView.onImageDrop = { [weak self] info, index in
+            self?.insertDroppedImages(info, at: index) ?? false
+        }
 
         scrollView.contentView = TypewriterClipView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = theme.colors.background
+        scrollView.drawsBackground = !theme.colors.isTranslucent
+        scrollView.backgroundColor = theme.colors.page
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.scrollerStyle = .overlay
 
@@ -122,12 +135,12 @@ final class EditorViewController: NSViewController {
             textView.textContainerInset = NSSize(width: horizontal, height: vertical)
         }
 
-        // Typewriter mode needs half a screen of slack under the last line so the
-        // caret can actually reach the middle of the window.
+        // Room to scroll past the last line, so the end of a document can be
+        // worked on without it being pinned to the bottom edge of the window.
+        // Typewriter mode needs at least half a screen of this for the caret to
+        // reach the middle.
         if let clip = scrollView.contentView as? TypewriterClipView {
-            clip.bottomSlack = ThemeManager.shared.typewriterScrolling
-                ? scrollView.frame.height / 2
-                : 0
+            clip.bottomSlack = max(0, scrollView.frame.height * 0.7)
         }
 
         if lastContentWidth != metrics.contentWidth {
@@ -159,7 +172,7 @@ final class EditorViewController: NSViewController {
         if ThemeManager.shared.focusMode {
             styler.applyFocusDimming(
                 storage, document: parsed, lines: 0..<parsed.lines.count,
-                activeBlockID: context.activeBlockID)
+                activeParagraphID: context.activeParagraphID)
         }
 
         rebuildDecorations()
@@ -169,16 +182,16 @@ final class EditorViewController: NSViewController {
     private func makeContext() -> MarkdownStyler.Context {
         MarkdownStyler.Context(
             activeBlockIDs: activeBlockIDs,
-            activeBlockID: caretBlockID(),
+            activeParagraphID: caretParagraphID(),
             focusMode: ThemeManager.shared.focusMode,
             alwaysShowMarkers: ThemeManager.shared.alwaysShowMarkers
         )
     }
 
-    private func caretBlockID() -> Int? {
+    private func caretParagraphID() -> Int? {
         let caret = textView.selectedRange().location
         guard let index = parsed.lineIndex(at: caret) else { return nil }
-        return parsed.lines[index].blockID
+        return parsed.lines[index].paragraphID
     }
 
     /// Records the line span of every block so one block can be restyled alone.
@@ -210,6 +223,9 @@ final class EditorViewController: NSViewController {
         for line in parsed.lines {
             if MarkdownStyler.drawsBulletDot(line, context: context), line.markerRange.length > 0 {
                 result.append(.bullet(line.markerRange))
+            }
+            if line.blockImage != nil, let display = styler.imageDisplay(for: line) {
+                result.append(.image(line.range, display.url, display.size))
             }
             for token in line.inlines {
                 switch token.kind {
@@ -291,7 +307,8 @@ final class EditorViewController: NSViewController {
 
     @objc private func themeChanged() {
         textView.theme = theme
-        scrollView.backgroundColor = theme.colors.background
+        scrollView.drawsBackground = !theme.colors.isTranslucent
+        scrollView.backgroundColor = theme.colors.page
         styler.update(theme: theme)
         updateInsets()
         refresh(fullRestyle: true)
@@ -323,7 +340,7 @@ final class EditorViewController: NSViewController {
             styler.style(storage, document: parsed, lines: 0..<parsed.lines.count, context: context)
             styler.applyFocusDimming(
                 storage, document: parsed, lines: 0..<parsed.lines.count,
-                activeBlockID: context.activeBlockID)
+                activeParagraphID: context.activeParagraphID)
         } else {
             for id in current.symmetricDifference(previous) {
                 guard let range = blockLineRanges[id] else { continue }
@@ -392,6 +409,34 @@ final class EditorViewController: NSViewController {
         isAutoScrolling = false
         return true
     }
+
+    // MARK: - Dropped images
+
+    /// Inserts Markdown for a dropped image on its own line at the drop point.
+    private func insertDroppedImages(_ info: NSDraggingInfo, at index: Int) -> Bool {
+        guard let markdown = ImageDrop.markdown(for: info, documentURL: documentURL),
+              let storage = textView.textStorage else { return false }
+
+        let text = textView.string as NSString
+        let location = min(max(index, 0), text.length)
+
+        // An image reads as a block, so give it its own line either side.
+        let needsLeading = location > 0 && text.character(at: location - 1) != 10
+        let needsTrailing = location < text.length && text.character(at: location) != 10
+        let insertion = (needsLeading ? "\n" : "") + markdown + (needsTrailing ? "\n" : "")
+
+        let range = NSRange(location: location, length: 0)
+        guard textView.shouldChangeText(in: range, replacementString: insertion) else { return false }
+        storage.replaceCharacters(in: range, with: insertion)
+        textView.didChangeText()
+        textView.setSelectedRange(
+            NSRange(location: location + (insertion as NSString).length, length: 0))
+
+        window?.makeFirstResponder(textView)
+        return true
+    }
+
+    private var window: NSWindow? { textView.window }
 
     // MARK: - Task toggling
 

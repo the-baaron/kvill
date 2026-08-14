@@ -64,7 +64,10 @@ final class ScrollEdgeEffectView: NSView {
         fadeLayer.startPoint = CGPoint(x: 0.5, y: 0)
         fadeLayer.endPoint = CGPoint(x: 0.5, y: 1)
 
-        alphaValue = 0
+        // Always on. Gating this on scroll position added a way for the whole
+        // effect to silently never appear, and it costs nothing to leave up:
+        // over the page's own colour the fade is invisible anyway.
+        alphaValue = 1
         applyTheme()
     }
 
@@ -87,10 +90,16 @@ final class ScrollEdgeEffectView: NSView {
 
         let strongAtTop = edge == .top
         let image = NSImage(size: NSSize(width: 8, height: size.height), flipped: false) { rect in
+            // The mask is read from the alpha channel, so it has to be built in a
+            // colour space that carries one. A grey space silently loses it and
+            // the whole effect renders at full strength or not at all.
             let gradient = NSGradient(
-                colors: [NSColor.black.withAlphaComponent(0), NSColor.black],
+                colors: [
+                    NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0),
+                    NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1),
+                ],
                 atLocations: [0, 1],
-                colorSpace: .deviceGray)
+                colorSpace: .sRGB)
             // Angle 90 fills upward, so the top edge is the opaque end.
             gradient?.draw(in: rect, angle: strongAtTop ? 90 : 270)
             return true
@@ -101,8 +110,8 @@ final class ScrollEdgeEffectView: NSView {
     }
 
     private func applyTheme() {
-        let background = theme.colors.background
-        let solid = background.withAlphaComponent(1).cgColor
+        let background = theme.colors.page
+        let solid = background.cgColor
         let clear = background.withAlphaComponent(0).cgColor
 
         CATransaction.begin()
@@ -112,10 +121,9 @@ final class ScrollEdgeEffectView: NSView {
         CATransaction.commit()
     }
 
-    /// Fades the whole effect in only when there is content sliding under it, so
-    /// a short document is not blurred against empty space.
+    /// Strengthens the effect once content is actually sliding under the edge.
     func setActive(_ active: Bool) {
-        let target: CGFloat = active ? 1 : 0
+        let target: CGFloat = active ? 1 : 0.55
         guard abs(alphaValue - target) > 0.01 else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2

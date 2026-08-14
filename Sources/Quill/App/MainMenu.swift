@@ -294,7 +294,8 @@ enum MainMenu {
             markers.tag = MenuTag.markers
 
             menu.addItem(.separator())
-            add(menu, "Settings Panel", #selector(DocumentViewController.toggleThemePanel(_:)), "t")
+            add(menu, "Hide Interface", #selector(DocumentViewController.toggleInterface(_:)), ".")
+            add(menu, "Display Options", #selector(DocumentViewController.toggleThemePanel(_:)), "t")
             add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f",
                 modifiers: [.command, .control])
         }

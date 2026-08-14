@@ -23,6 +23,8 @@ enum BlockKind: Equatable {
     case frontMatterDelimiter
     case frontMatterLine
     case footnoteDefinition
+    /// A `[label]: destination` line that gives a reference link its target.
+    case linkDefinition
     case definition
     case htmlLine
 
@@ -84,11 +86,17 @@ struct MDLine {
     var listDepth = 0
     /// Groups consecutive lines that share one background decoration.
     var blockID = 0
+    /// Groups consecutive non-blank lines. Focus mode works on these, so a
+    /// wrapped sentence and the lines around it stay lit as one paragraph.
+    var paragraphID = 0
     var decoration: DecorationKind?
     /// Inline runs found inside `contentRange`.
     var inlines: [InlineToken] = []
     /// Language tag on a fence, carried to every line of the block.
     var language: String?
+    /// Set when the line is nothing but an image, which is drawn in place of
+    /// the Markdown that describes it.
+    var blockImage: BlockImage?
 
     var hasMarker: Bool { markerRange.length > 0 }
 }
@@ -122,8 +130,20 @@ struct InlineToken: Equatable {
     var kind: InlineKind
 }
 
+/// An image that is the whole content of its line, so it can be rendered rather
+/// than written out.
+struct BlockImage: Equatable {
+    /// The raw destination, still to be resolved against the document's folder.
+    var destination: String
+    var altRange: NSRange
+    /// The whole `![alt](destination)` span.
+    var range: NSRange
+}
+
 struct ParsedDocument {
     var lines: [MDLine]
+    /// Reference link targets, keyed by lowercased label.
+    var linkDefinitions: [String: String] = [:]
 
     /// Index of the line containing `location`, using binary search.
     func lineIndex(at location: Int) -> Int? {

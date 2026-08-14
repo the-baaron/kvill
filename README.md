@@ -1,7 +1,7 @@
 # Quill
 
-A full-screen Markdown editor for macOS. One file, one window, no sidebar, no
-file tree. Syntax markers hang in the left margin, dimmed and right-aligned, so
+A full-screen Markdown editor for macOS. One file, one window, no sidebar.
+Syntax markers hang in the left margin, dimmed and right-aligned, so
 `#` and `######` finish on the same column and the text itself stays on one
 clean line of measure.
 
@@ -37,19 +37,23 @@ and the five GitHub alerts:
 > Rendered as a tinted panel with an icon and a proper title, not as raw
 > `[!NOTE]` text.
 
-**Six colour themes, five typefaces.** Paper, Ink, Sepia, Nord, and a high
-contrast pair for light and dark. Editorial (New York), Grotesk (SF Pro),
+**Eight colour themes, five typefaces.** Paper, Ink, Sepia, Nord, the glass pair
+Frost and Onyx that let the desktop show faintly through the way a native macOS
+window does, and a high contrast pair for light and dark. The typefaces are Editorial (New
+York), Grotesk (SF Pro),
 Contrast (serif headings over a sans body), Typewriter (SF Mono) and Soft
 (SF Rounded). Four text sizes, three measures. All of it app-wide and
 remembered between launches, never per document.
 
-**Chrome that stays out of the way.** One small glass button in the top-right
-corner opens the display options: theme swatches and three dropdowns. A glass
-formatting bar appears over a selection. Content blurs and fades under the top
-and bottom window edges. A word count sits quietly in the corner.
+**Chrome that stays out of the way.** A single glass dot in the top-right corner
+springs open into three buttons as the pointer nears it, each holding a small
+palette. A glass formatting bar appears over a selection. Content blurs and fades
+under the top and bottom window edges. A word count sits quietly in the corner.
+`⌘.` hides all of it, title bar included.
 
-**Focus mode** dims everything but the block you are in. **Typewriter scrolling**
-keeps the caret centred.
+**Focus mode** dims every paragraph but the one you are in. **Typewriter
+scrolling** keeps the caret centred, and the view scrolls past the end of the
+document so the last line is never pinned to the bottom edge.
 
 ## Build
 
@@ -85,6 +89,7 @@ Developer ID signature would be needed to distribute it.
 | `⇧⌘8` `⇧⌘7` `⇧⌘9` | Bulleted, numbered, task list |
 | `⌘'` `⇧⌘C` `⌃⌘T` `⇧⌘-` | Quote, code block, table, rule |
 | `⌘T` | Display options |
+| `⌘.` | Hide every piece of interface |
 | `⌃⌘]` `⌃⌘[` | Next theme, next typeface |
 | `⌘+` `⌘-` `⌥⌘0` | Text size |
 | `⇧⌘F` `⇧⌘Y` `⇧⌘M` | Focus mode, typewriter, always show markers |
@@ -135,6 +140,26 @@ This draws the page only. The floating glass chrome is not included: those views
 force the hierarchy to be layer-backed, and an off-screen layer-backed window
 never runs a display pass, so there is nothing to capture.
 
+## Images
+
+Drag an image in and Quill writes the Markdown for it. A file already inside the
+document's folder is referenced where it lies; anything from outside is copied
+into an `images/` folder beside the document, under a name that is not already
+taken. Image data dragged from a browser or Photos is written out the same way.
+
+A line that is nothing but an image is drawn as the picture, with whatever text
+the line carries falling underneath it as a centred caption. Put the caret in the
+line and the Markdown reappears, so the path and the caption stay editable.
+
+## Setext headings
+
+`Title` over `=====` is converted to `# Title` when the file is opened, and `---`
+under a paragraph is treated as a horizontal rule rather than promoting the line
+above it to a heading. Both make setext headings awkward to live with in an
+editor: the underline is a second line to keep in step, and typing a rule after a
+paragraph silently turns it into a title. The conversion is left unsaved, so
+opening a file never rewrites it on disk.
+
 ## Tables
 
 A table row is one paragraph, so the moment it wraps a kerned grid becomes
@@ -151,7 +176,6 @@ showing, because half a grid looks worse than none.
 
 ## Roadmap
 
-- `⌘.` to hide and show every piece of chrome at once.
 - Opening a folder shows a file tree, while opening a file stays one window,
   one file.
 
@@ -162,8 +186,6 @@ showing, because half a grid looks worse than none.
 - The emphasis matcher is a pragmatic approximation of the CommonMark flanking
   rules, not the full algorithm. It handles real prose, including `snake_case`,
   but a deliberately pathological nesting case may differ from a strict parser.
-- Reference link definitions are styled but not resolved, so a `[text][ref]`
-  link opens only if the destination is written inline.
 - Code highlighting is language-agnostic: comments, strings, numbers and a
   shared keyword set. It is not a per-language grammar.
 - `--render` starts at the top of the document for a full-length file, but for a

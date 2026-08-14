@@ -17,6 +17,9 @@ final class MarkdownStyler {
 
     private(set) var theme: Theme
 
+    /// Folder the document lives in, used to resolve relative image paths.
+    var baseURL: URL?
+
     private var markerWidths: [String: CGFloat] = [:]
     private var paragraphStyles: [String: NSParagraphStyle] = [:]
     private var traitFonts: [String: NSFont] = [:]
@@ -43,8 +46,8 @@ final class MarkdownStyler {
         /// Blocks the selection touches. Markers are revealed only inside these,
         /// so a heading reads as a heading until you put the caret in it.
         var activeBlockIDs: Set<Int> = []
-        /// Block the caret sits in, used by focus mode.
-        var activeBlockID: Int?
+        /// Paragraph the caret sits in. Focus mode lights this and dims the rest.
+        var activeParagraphID: Int?
         var focusMode: Bool = false
         /// Keeps markers dimly visible everywhere instead of only in the active
         /// element. Off by default.
@@ -326,13 +329,26 @@ final class MarkdownStyler {
         var markerX = contentX - effectiveGap - markerWidth
         if markerX < 0 { markerX = 0 }
 
-        let layout = lineLayout(for: line)
+        // A line that is only an image becomes the picture itself, with whatever
+        // text the line holds falling to the bottom of the block as its caption.
+        let image = imageDisplay(for: line)
+        let layout: LineLayout
+        if let image {
+            layout = LineLayout(
+                height: imageTopPadding() + image.size.height + imageCaptionZone(),
+                before: metrics.base * 0.6,
+                after: metrics.base * 0.6)
+        } else {
+            layout = lineLayout(for: line)
+        }
         let style = paragraphStyle(
             firstIndent: markerString.isEmpty ? contentX : markerX,
             headIndent: contentX,
             lineHeight: layout.height,
             spacingBefore: layout.before,
-            spacingAfter: layout.after
+            spacingAfter: layout.after,
+            // A caption belongs under the middle of its picture.
+            alignment: image != nil ? .center : .natural
         )
 
         let base = baseAttributes(for: line, style: style, lineHeight: layout.height)
@@ -380,6 +396,7 @@ final class MarkdownStyler {
                       storage: storage, context: context)
             }
         }
+
 
         // --- Table structure --------------------------------------------------
         // Runs last: the inline pass colours every pipe, so hiding a row has to
@@ -438,6 +455,9 @@ final class MarkdownStyler {
         case .footnoteDefinition:
             font = FontBuilder.font(theme.preset.bodyFamily, size: theme.metrics.base * 0.94)
             color = colors.textSecondary
+        case .linkDefinition:
+            font = theme.monoSmall
+            color = colors.textSecondary
         case .blockquote, .calloutTitle:
             color = colors.quoteText
         case .thematicBreak:
@@ -447,6 +467,13 @@ final class MarkdownStyler {
             color = colors.textSecondary
         default:
             break
+        }
+
+        if line.blockImage != nil, imageDisplay(for: line) != nil {
+            // Everything on this line is caption: the syntax around the alt text
+            // collapses away, leaving the description sitting under the picture.
+            font = FontBuilder.font(theme.preset.bodyFamily, size: theme.metrics.base * 0.86)
+            color = colors.textSecondary
         }
 
         var attributes: [NSAttributedString.Key: Any] = [
@@ -460,9 +487,16 @@ final class MarkdownStyler {
         // bottom of its line. Lifting the baseline by half the surplus centres it
         // again, which is what makes checkboxes, highlights and inline code
         // backgrounds line up with the words next to them.
-        let surplus = lineHeight - naturalLineHeight(of: font)
-        if surplus > 0.5 {
-            attributes[.baselineOffset] = surplus / 2
+        if line.blockImage != nil, imageDisplay(for: line) != nil {
+            // The surplus is the picture. Leaving the text at the bottom of the
+            // line is exactly where a caption goes; it only needs lifting clear
+            // of the very edge.
+            attributes[.baselineOffset] = theme.metrics.base * 0.45
+        } else {
+            let surplus = lineHeight - naturalLineHeight(of: font)
+            if surplus > 0.5 {
+                attributes[.baselineOffset] = surplus / 2
+            }
         }
 
         if theme.preset.bodyTracking != 0, !line.kind.isCode, !line.kind.isTable {
@@ -505,8 +539,32 @@ final class MarkdownStyler {
         if case .listItem(let ordered, _) = line.kind {
             return ordered ? theme.colors.marker : nil
         }
+        // A definition's label is its whole point; hiding it would leave a bare
+        // URL with nothing to say what it defines.
+        if line.kind == .linkDefinition || line.kind == .footnoteDefinition {
+            return theme.colors.marker
+        }
         return nil
     }
+
+    /// Resolved image for a line that is nothing but an image, with the size it
+    /// should be drawn at.
+    func imageDisplay(for line: MDLine) -> (url: URL, size: NSSize)? {
+        guard let block = line.blockImage,
+              let url = ImageStore.shared.resolve(block.destination, relativeTo: baseURL),
+              let image = ImageStore.shared.image(at: url) else { return nil }
+        let size = ImageStore.shared.displaySize(
+            for: image,
+            measure: theme.metrics.measure,
+            maximumHeight: theme.metrics.base * 26)
+        return (url, size)
+    }
+
+    /// Space above a rendered image.
+    func imageTopPadding() -> CGFloat { theme.metrics.base * 0.25 }
+
+    /// Space below a rendered image, holding its caption.
+    func imageCaptionZone() -> CGFloat { theme.metrics.base * 2.1 }
 
     /// True when this line's bullet should be drawn as a dot rather than shown
     /// as its literal `-`, `*` or `+`.
@@ -578,10 +636,17 @@ final class MarkdownStyler {
             ], range: range)
 
         case .linkURL:
-            storage.addAttributes([
-                .font: theme.monoSmall,
-                .foregroundColor: colors.textSecondary.withAlpha(0.75),
-            ], range: range)
+            // The destination is plumbing. It shows only while the caret is in
+            // the link, which is when you would want to edit it.
+            if let revealed {
+                storage.addAttributes([
+                    .font: theme.monoSmall,
+                    .foregroundColor: revealed,
+                ], range: range)
+            } else {
+                storage.addAttribute(.foregroundColor, value: NSColor.clear, range: range)
+                collapse(range, in: storage, text: text)
+            }
 
         case .imageAlt:
             storage.addAttributes([
@@ -664,8 +729,18 @@ final class MarkdownStyler {
         _ range: NSRange, in storage: NSTextStorage, text: NSString, to target: CGFloat = 0
     ) {
         guard range.length > 0 else { return }
-        let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+        var font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
             ?? theme.body
+
+        if target == 0 {
+            // Kerning alone cannot pull a run all the way to nothing: a negative
+            // kern is clamped at each glyph's own advance, so narrow characters
+            // absorb less than their share and a hidden URL still leaves a gap.
+            // Shrinking the glyphs first leaves only a rounding error to kern away.
+            font = NSFont(descriptor: font.fontDescriptor, size: 0.5) ?? font
+            storage.addAttribute(.font, value: font, range: range)
+        }
+
         let natural = width(of: text.substring(with: range), font: font)
         let adjustment = (target - natural) / CGFloat(range.length)
         storage.addAttribute(.kern, value: adjustment, range: range)
@@ -690,13 +765,13 @@ final class MarkdownStyler {
 
     // MARK: - Focus mode
 
-    /// Fades every line outside the caret's block. Run after `style`, over the
-    /// same line range, so it sees final colours.
+    /// Fades every line outside the caret's paragraph. Run after `style`, over
+    /// the same line range, so it sees final colours.
     func applyFocusDimming(
         _ storage: NSTextStorage,
         document: ParsedDocument,
         lines lineRange: Range<Int>,
-        activeBlockID: Int?
+        activeParagraphID: Int?
     ) {
         let clamped = lineRange.clamped(to: 0..<document.lines.count)
         guard !clamped.isEmpty else { return }
@@ -704,7 +779,7 @@ final class MarkdownStyler {
         storage.beginEditing()
         for index in clamped {
             let line = document.lines[index]
-            guard line.blockID != activeBlockID, line.fullRange.length > 0 else { continue }
+            guard line.paragraphID != activeParagraphID, line.fullRange.length > 0 else { continue }
             storage.enumerateAttribute(.foregroundColor, in: line.fullRange) { value, range, _ in
                 guard let color = value as? NSColor else { return }
                 storage.addAttribute(
@@ -770,9 +845,10 @@ final class MarkdownStyler {
 
     private func paragraphStyle(
         firstIndent: CGFloat, headIndent: CGFloat, lineHeight: CGFloat,
-        spacingBefore: CGFloat, spacingAfter: CGFloat
+        spacingBefore: CGFloat, spacingAfter: CGFloat,
+        alignment: NSTextAlignment = .natural
     ) -> NSParagraphStyle {
-        let key = "\(round(firstIndent))|\(round(headIndent))|\(round(lineHeight))|\(round(spacingBefore))|\(round(spacingAfter))"
+        let key = "\(round(firstIndent))|\(round(headIndent))|\(round(lineHeight))|\(round(spacingBefore))|\(round(spacingAfter))|\(alignment.rawValue)"
         if let cached = paragraphStyles[key] { return cached }
 
         let style = NSMutableParagraphStyle()
@@ -782,6 +858,7 @@ final class MarkdownStyler {
         style.maximumLineHeight = lineHeight
         style.paragraphSpacingBefore = spacingBefore
         style.paragraphSpacing = spacingAfter
+        style.alignment = alignment
         style.lineBreakMode = .byWordWrapping
         // Keeps CJK and long URLs from overflowing the measure.
         style.lineBreakStrategy = .standard

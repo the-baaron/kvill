@@ -31,12 +31,15 @@ final class DocumentWindowController: NSWindowController {
 
         let controller = DocumentWindowController(window: window)
         controller.shouldCascadeWindows = true
-        controller.applyTheme()
+        controller.start()
         return controller
     }
 
-    override func windowDidLoad() {
-        super.windowDidLoad()
+    /// `windowDidLoad` is only called for a window that came from a nib. This
+    /// one is built in code, so setup runs here instead: without it the window
+    /// keeps its launch appearance and the traffic lights stay wrong after a
+    /// switch to a dark theme.
+    private func start() {
         applyTheme()
         NotificationCenter.default.addObserver(
             self, selector: #selector(applyTheme), name: .quillThemeChanged, object: nil)
@@ -50,8 +53,15 @@ final class DocumentWindowController: NSWindowController {
     /// not sit as a grey strip above a sepia page.
     @objc private func applyTheme() {
         let theme = ThemeManager.shared.theme
-        window?.backgroundColor = theme.colors.background
+        // A translucent palette needs the window itself to be see-through,
+        // otherwise the blur behind the page has nothing to blur.
+        window?.isOpaque = !theme.colors.isTranslucent
+        window?.backgroundColor = theme.colors.isTranslucent ? .clear : theme.colors.background
+        // Drives the traffic lights and the title text. Without an explicit
+        // appearance they follow the system, so light buttons end up on a dark
+        // page, or dark ones on Sepia.
         window?.appearance = theme.colors.appearance
+        window?.invalidateShadow()
     }
 
     // MARK: - Full screen

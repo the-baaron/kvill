@@ -162,6 +162,15 @@ final class ThemeManager {
         }
     }
 
+    /// Hides every piece of floating chrome. Deliberately not persisted: a
+    /// launch should never start with the interface missing and no clue why.
+    var chromeHidden = false {
+        didSet {
+            guard chromeHidden != oldValue else { return }
+            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+        }
+    }
+
     private var appearanceObserver: NSKeyValueObservation?
 
     private init() {
