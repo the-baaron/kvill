@@ -42,9 +42,33 @@ else
   echo "    will refuse it until one is issued for the bundle identifier."
 fi
 
+# Two entitlements Xcode injects and a hand-rolled signature does not: the
+# application identifier and the team identifier. Without them Apple answers an
+# upload with ITMS-90886, because the embedded provisioning profile carries an
+# application identifier and the signature has to agree with it.
+#
+# Derived rather than written down, so they cannot drift from the Info.plist and
+# the certificate.
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Resources/Info.plist)"
+TEAM_ID="$(security find-certificate -c "$APP_IDENTITY" -p \
+  | openssl x509 -noout -subject \
+  | sed -n 's/.*OU=\([A-Z0-9]*\).*/\1/p')"
+if [ -z "$TEAM_ID" ]; then
+  echo "Could not read the team identifier from the signing certificate." >&2
+  exit 1
+fi
+echo "    $BUNDLE_ID, team $TEAM_ID"
+
+DIST_ENTITLEMENTS="build/distribution.entitlements"
+cp Resources/Kvill.entitlements "$DIST_ENTITLEMENTS"
+/usr/libexec/PlistBuddy \
+  -c "Add :com.apple.application-identifier string $TEAM_ID.$BUNDLE_ID" \
+  -c "Add :com.apple.developer.team-identifier string $TEAM_ID" \
+  "$DIST_ENTITLEMENTS" > /dev/null
+
 echo "==> Signing for distribution"
 codesign --force --options runtime --timestamp \
-  --entitlements Resources/Kvill.entitlements \
+  --entitlements "$DIST_ENTITLEMENTS" \
   --sign "$APP_IDENTITY" "$APP"
 
 echo "==> Verifying"

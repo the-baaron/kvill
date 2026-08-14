@@ -2,44 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>Kvill</string>
 	<key>CFBundleDisplayName</key>
 	<string>Kvill</string>
-	<key>CFBundleIdentifier</key>
-	<string>design.baars.Signet</string>
-	<key>CFBundleExecutable</key>
-	<string>Kvill</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>CFBundleIconFile</key>
-	<string>Kvill</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
-	<!-- Required for the App Store: which shelf the app sits on. -->
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.productivity</string>
-	<!-- Kvill contains no encryption beyond what macOS itself provides, and
-	     makes no network connections at all. Declaring it here answers the
-	     export compliance question once instead of at every upload. -->
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSSupportsAutomaticTermination</key>
-	<true/>
-	<!-- Opening a file opens that file only. Without this, quitting stores the
-	     open documents and macOS reopens them on the next launch. -->
-	<key>NSQuitAlwaysKeepsWindows</key>
-	<false/>
-	<key>NSSupportsSuddenTermination</key>
-	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>MIT licensed. Source at github.com/the-baaron/kvill</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -49,13 +13,13 @@
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
-			<key>NSDocumentClass</key>
-			<string>MarkdownDocument</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>net.daringfireball.markdown</string>
 				<string>public.markdown</string>
 			</array>
+			<key>NSDocumentClass</key>
+			<string>MarkdownDocument</string>
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
@@ -64,25 +28,55 @@
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>None</string>
-			<key>NSDocumentClass</key>
-			<string>MarkdownDocument</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.plain-text</string>
 			</array>
+			<key>NSDocumentClass</key>
+			<string>MarkdownDocument</string>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>Kvill</string>
+	<key>CFBundleIconFile</key>
+	<string>Kvill</string>
+	<key>CFBundleIdentifier</key>
+	<string>design.baars.Signet</string>
+	<key>CFBundleName</key>
+	<string>Kvill</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>2</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT licensed. Source at github.com/the-baaron/kvill</string>
+	<key>NSQuitAlwaysKeepsWindows</key>
+	<false/>
+	<key>NSSupportsAutomaticTermination</key>
+	<true/>
+	<key>NSSupportsSuddenTermination</key>
+	<true/>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>net.daringfireball.markdown</string>
-			<key>UTTypeDescription</key>
-			<string>Markdown Document</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.plain-text</string>
 			</array>
+			<key>UTTypeDescription</key>
+			<string>Markdown Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>net.daringfireball.markdown</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
