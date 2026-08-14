@@ -73,11 +73,17 @@ if let index = CommandLine.arguments.firstIndex(of: "--tree"),
    CommandLine.arguments.count > index + 2 {
     startHeadless()
     let themeIndex = CommandLine.arguments.firstIndex(of: "--theme")
+    var box = NSSize(width: 240, height: 300)
+    if let at = CommandLine.arguments.firstIndex(of: "--size"), CommandLine.arguments.count > at + 1 {
+        let parts = CommandLine.arguments[at + 1].split(separator: "x").compactMap { Double($0) }
+        if parts.count == 2 { box = NSSize(width: parts[0], height: parts[1]) }
+    }
     exit(TreeSheet.render(
         URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true),
         to: CommandLine.arguments[index + 2],
         theme: themeIndex.flatMap { CommandLine.arguments.count > $0 + 1
-            ? CommandLine.arguments[$0 + 1] : nil }))
+            ? CommandLine.arguments[$0 + 1] : nil },
+        size: box))
 }
 
 if let request = ScreenshotRenderer.parse(CommandLine.arguments) {

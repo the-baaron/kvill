@@ -132,17 +132,18 @@ opening a file never rewrites it on disk.
 
 ## Tables
 
-A table row is one paragraph, so the moment it wraps a kerned grid becomes
-meaningless. Kvill measures every column, sets the table in the reading face
-rather than a monospace one, and kerns each cell onto the grid with two
-adjustments: one that puts the cell's first character exactly one padding past
-the column edge, and one that fills the rest of the column. The pipes are then
-invisible, because the columns say everything they said.
+A table is set in a monospace face and its source is padded with spaces, so the
+columns line up by counting characters rather than by measuring cells. The
+pipes stay visible, which is the point: what you see is the file, and the file
+is what GitHub and a diff will show.
 
-If the table would be wider than the measure, it is shrunk until it fits, down
-to 58% of the body size. If it still will not fit, the grid is abandoned
-altogether and the row falls back to plain monospace source with its pipes
-showing, because half a grid looks worse than none.
+Padding is applied as you leave a table and again on save, so a table you typed
+roughly ends up square without you lining it up by hand.
+
+If the table would be wider than the measure it is set smaller, down to 62% of
+the size the rest of the code is set at. Rows never wrap: a wrapped row would
+put its cells under the wrong columns, so a row that still will not fit is
+truncated instead.
 
 ## Known limits
 

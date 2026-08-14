@@ -142,7 +142,7 @@ final class FileTreeView: NSView {
     /// display pass, which an off-screen window never runs, so without this there
     /// is nothing to draw.
     func prepareForRender() {
-        outline.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 400)
+        outline.frame = NSRect(x: 0, y: 0, width: bounds.width, height: max(bounds.height, 400))
         outline.tile()
         for row in 0..<outline.numberOfRows {
             _ = outline.rowView(atRow: row, makeIfNecessary: true)

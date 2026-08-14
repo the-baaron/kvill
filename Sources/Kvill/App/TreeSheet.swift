@@ -10,7 +10,8 @@ import AppKit
 /// context, which is what the specimen sheet does for the picker buttons.
 enum TreeSheet {
 
-    static func render(_ folder: URL, to path: String, theme: String?) -> Int32 {
+    static func render(_ folder: URL, to path: String, theme: String?,
+                       size: NSSize = NSSize(width: 240, height: 300)) -> Int32 {
         let manager = ThemeManager.shared
         let saved = manager.settingsSnapshot
         defer { manager.restore(saved) }
@@ -22,7 +23,6 @@ enum TreeSheet {
             manager.selectPalette(id: theme)
         }
 
-        let size = NSSize(width: 240, height: 300)
         let tree = FileTreeView(frame: NSRect(origin: .zero, size: size))
         tree.translatesAutoresizingMaskIntoConstraints = true
         tree.frame = NSRect(origin: .zero, size: size)
