@@ -1,0 +1,156 @@
+import Foundation
+
+/// What a single line is, structurally.
+enum BlockKind: Equatable {
+    case blank
+    case paragraph
+    case heading(level: Int)
+    /// A `===` or `---` underline that promotes the paragraph above it.
+    case setextUnderline(level: Int)
+    /// The opening or closing ``` line of a fenced block.
+    case fenceDelimiter(language: String?)
+    /// A line inside a fenced or indented code block.
+    case codeLine
+    case indentedCode
+    case listItem(ordered: Bool, task: TaskState?)
+    case blockquote
+    /// The `> [!NOTE]` line that opens a GitHub alert.
+    case calloutTitle(kind: CalloutKind?)
+    case thematicBreak
+    case tableRow
+    case tableHeader
+    case tableDelimiter
+    case frontMatterDelimiter
+    case frontMatterLine
+    case footnoteDefinition
+    case definition
+    case htmlLine
+
+    var isHeading: Bool {
+        if case .heading = self { return true }
+        return false
+    }
+
+    var isCode: Bool {
+        switch self {
+        case .codeLine, .indentedCode, .fenceDelimiter: return true
+        default: return false
+        }
+    }
+
+    var isTable: Bool {
+        switch self {
+        case .tableRow, .tableHeader, .tableDelimiter: return true
+        default: return false
+        }
+    }
+}
+
+enum TaskState: Equatable {
+    case open
+    case done
+}
+
+/// Background treatment drawn behind a run of lines.
+enum DecorationKind: Equatable {
+    case codeBlock
+    case blockquote(depth: Int)
+    case callout(kind: CalloutKind?)
+    case table
+    case frontMatter
+    case thematicBreak
+}
+
+/// One parsed line. Ranges are UTF-16 offsets into the whole document, which is
+/// what NSTextStorage wants, so no conversion happens during styling.
+struct MDLine {
+    var number: Int
+    /// The line's characters, not including its newline.
+    var range: NSRange
+    /// The line including its trailing newline, if any.
+    var fullRange: NSRange
+
+    var kind: BlockKind = .blank
+
+    /// Leading syntax pulled into the gutter, e.g. `##`, `>`, `- `, ` ``` `.
+    var markerRange = NSRange(location: 0, length: 0)
+    /// Whitespace between the marker and the content. Kerned so the content
+    /// lands on the column no matter how wide the marker is.
+    var gapRange = NSRange(location: 0, length: 0)
+    /// Everything after the marker and gap.
+    var contentRange = NSRange(location: 0, length: 0)
+
+    var quoteDepth = 0
+    var listDepth = 0
+    /// Groups consecutive lines that share one background decoration.
+    var blockID = 0
+    var decoration: DecorationKind?
+    /// Inline runs found inside `contentRange`.
+    var inlines: [InlineToken] = []
+    /// Language tag on a fence, carried to every line of the block.
+    var language: String?
+
+    var hasMarker: Bool { markerRange.length > 0 }
+}
+
+/// Inline constructs. `syntax` variants are the characters that get dimmed;
+/// the rest carry visual styling.
+enum InlineKind: Equatable {
+    case syntax
+    case strong
+    case emphasis
+    case strongEmphasis
+    case strikethrough
+    case highlight
+    case code
+    case linkText
+    case linkURL
+    case imageAlt
+    case autolink
+    case footnoteRef
+    case math
+    case html
+    case escape
+    case taskMarker(TaskState)
+    case calloutLabel(CalloutKind?)
+    case tablePipe
+    case hardBreak
+}
+
+struct InlineToken: Equatable {
+    var range: NSRange
+    var kind: InlineKind
+}
+
+struct ParsedDocument {
+    var lines: [MDLine]
+
+    /// Index of the line containing `location`, using binary search.
+    func lineIndex(at location: Int) -> Int? {
+        guard !lines.isEmpty else { return nil }
+        var low = 0
+        var high = lines.count - 1
+        while low <= high {
+            let mid = (low + high) / 2
+            let line = lines[mid]
+            if location < line.fullRange.location {
+                high = mid - 1
+            } else if location >= line.fullRange.location + line.fullRange.length {
+                low = mid + 1
+            } else {
+                return mid
+            }
+        }
+        // A caret sitting at the very end of the document belongs to the last line.
+        return lines.count - 1
+    }
+
+    /// All line indices intersecting `range`.
+    func lineIndices(in range: NSRange) -> Range<Int> {
+        guard !lines.isEmpty else { return 0..<0 }
+        let start = lineIndex(at: range.location) ?? 0
+        let endLocation = max(range.location, NSMaxRange(range) - 1)
+        let end = lineIndex(at: endLocation) ?? lines.count - 1
+        return start..<min(end + 1, lines.count)
+    }
+}

@@ -1,0 +1,417 @@
+import AppKit
+
+/// Something drawn into space the styler reserved by kerning the underlying
+/// characters down. The document text is never altered to make room.
+enum TextOverlay {
+    /// A task list checkbox, in place of `[ ]` or `[x]`.
+    case checkbox(NSRange, TaskState)
+    /// A bullet dot, in place of a `-`, `*` or `+` in the gutter.
+    case bullet(NSRange)
+    /// A callout's title, in place of the raw `[!NOTE]`.
+    case calloutTitle(NSRange, CalloutKind?)
+}
+
+/// A run of lines sharing one background treatment.
+struct BlockDecoration {
+    let kind: DecorationKind
+    /// Character range of each line in the block, in order.
+    let lineRanges: [NSRange]
+    /// Deepest `>` nesting in the block, for drawing quote bars.
+    let quoteDepth: Int
+    /// Index into `lineRanges` of the table header row, if this is a table.
+    let headerRow: Int?
+}
+
+/// The text view itself. It owns the drawing of everything that sits *behind*
+/// the text: code block panels, callout tints, quote bars, table rules.
+final class EditorTextView: NSTextView {
+
+    var theme: Theme = ThemeManager.shared.theme {
+        didSet { applyTheme() }
+    }
+
+    var decorations: [BlockDecoration] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    /// Checkboxes, bullets and callout titles painted over collapsed text.
+    var overlays: [TextOverlay] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    /// Latest parse, used for hit testing links and checkboxes.
+    var document: ParsedDocument?
+
+    /// Called when the user clicks a task checkbox.
+    var onToggleTask: ((NSRange) -> Void)?
+
+    /// Called when a click-drag selection finishes, so the formatting bar can
+    /// appear once rather than following the pointer during the drag.
+    var onSelectionGestureEnded: (() -> Void)?
+
+    /// True while a mouse-driven selection is in progress.
+    private(set) var isSelectingWithMouse = false
+
+    // MARK: - Setup
+
+    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
+        commonSetup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonSetup()
+    }
+
+    private func commonSetup() {
+        drawsBackground = false
+        isRichText = false
+        importsGraphics = false
+        allowsUndo = true
+        isAutomaticQuoteSubstitutionEnabled = false
+        isAutomaticDashSubstitutionEnabled = false
+        isAutomaticTextReplacementEnabled = false
+        isAutomaticSpellingCorrectionEnabled = false
+        isContinuousSpellCheckingEnabled = true
+        isGrammarCheckingEnabled = false
+        usesFindBar = true
+        isIncrementalSearchingEnabled = true
+        smartInsertDeleteEnabled = false
+        isVerticallyResizable = true
+        isHorizontallyResizable = false
+        textContainer?.widthTracksTextView = true
+        textContainer?.lineFragmentPadding = 0
+        applyTheme()
+    }
+
+    private func applyTheme() {
+        insertionPointColor = theme.colors.cursor
+        selectedTextAttributes = [
+            .backgroundColor: theme.colors.selection
+        ]
+        font = theme.body
+        appearance = theme.colors.appearance
+        typingAttributes = [
+            .font: theme.body,
+            .foregroundColor: theme.colors.text,
+        ]
+        needsDisplay = true
+    }
+
+    // MARK: - Drawing
+
+    override func draw(_ dirtyRect: NSRect) {
+        theme.colors.background.setFill()
+        dirtyRect.fill()
+        drawDecorations(in: dirtyRect)
+        super.draw(dirtyRect)
+        drawOverlays(in: dirtyRect)
+    }
+
+    private func drawOverlays(in dirtyRect: NSRect) {
+        guard !overlays.isEmpty else { return }
+        for overlay in overlays {
+            switch overlay {
+            case .checkbox(let range, let state):
+                drawCheckbox(range: range, state: state, dirtyRect: dirtyRect)
+            case .bullet(let range):
+                drawBullet(range: range, dirtyRect: dirtyRect)
+            case .calloutTitle(let range, let kind):
+                drawCalloutTitle(range: range, kind: kind, dirtyRect: dirtyRect)
+            }
+        }
+    }
+
+    /// Paints a checkbox into the blank square the styler reserved for it.
+    ///
+    /// This view is flipped, so y grows downward: the middle of the tick is the
+    /// point with the largest y, not the smallest.
+    private func drawCheckbox(range: NSRange, state: TaskState, dirtyRect: NSRect) {
+        guard let slot = rect(for: range) else { return }
+        let side = theme.metrics.checkboxSize
+        let colors = theme.colors
+
+        let box = NSRect(
+            x: slot.minX, y: slot.midY - side / 2, width: side, height: side
+        ).insetBy(dx: 0.75, dy: 0.75)
+        guard box.intersects(dirtyRect) else { return }
+
+        let path = NSBezierPath(roundedRect: box, xRadius: side * 0.3, yRadius: side * 0.3)
+
+        switch state {
+        case .open:
+            colors.marker.withAlpha(0.8).setStroke()
+            path.lineWidth = 1.5
+            path.stroke()
+        case .done:
+            colors.accent.setFill()
+            path.fill()
+
+            let tick = NSBezierPath()
+            tick.move(to: NSPoint(x: box.minX + side * 0.23, y: box.midY - side * 0.02))
+            tick.line(to: NSPoint(x: box.minX + side * 0.42, y: box.midY + side * 0.19))
+            tick.line(to: NSPoint(x: box.minX + side * 0.76, y: box.midY - side * 0.22))
+            tick.lineWidth = max(1.5, side * 0.14)
+            tick.lineCapStyle = .round
+            tick.lineJoinStyle = .round
+            colors.background.setStroke()
+            tick.stroke()
+        }
+    }
+
+    private func drawBullet(range: NSRange, dirtyRect: NSRect) {
+        guard let slot = rect(for: range), slot.intersects(dirtyRect) else { return }
+        let diameter = theme.metrics.base * 0.30
+        let dot = NSRect(
+            x: slot.maxX - diameter,
+            y: slot.midY - diameter / 2,
+            width: diameter, height: diameter)
+        theme.colors.marker.withAlpha(0.95).setFill()
+        NSBezierPath(ovalIn: dot).fill()
+    }
+
+    private func drawCalloutTitle(range: NSRange, kind: CalloutKind?, dirtyRect: NSRect) {
+        guard let slot = rect(for: range), slot.intersects(dirtyRect) else { return }
+        let palette = theme.callout(kind)
+        let title = kind?.title ?? "Note"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: theme.calloutTitle,
+            .foregroundColor: palette.accent,
+        ]
+        let size = (title as NSString).size(withAttributes: attributes)
+        (title as NSString).draw(
+            at: NSPoint(x: slot.minX, y: slot.midY - size.height / 2),
+            withAttributes: attributes)
+    }
+
+    private func drawDecorations(in dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let metrics = theme.metrics
+        let origin = textContainerOrigin
+        let columnLeft = origin.x + metrics.gutter
+        let columnRight = columnLeft + metrics.measure
+
+        context.saveGState()
+        defer { context.restoreGState() }
+
+        for decoration in decorations {
+            guard let bounds = blockRect(for: decoration.lineRanges) else { continue }
+            guard bounds.intersects(dirtyRect.insetBy(dx: 0, dy: -200)) else { continue }
+
+            switch decoration.kind {
+            case .codeBlock:
+                let box = NSRect(
+                    x: columnLeft - 14, y: bounds.minY - 6,
+                    width: columnRight - columnLeft + 28, height: bounds.height + 12)
+                fill(box, radius: 8, color: theme.colors.codeBackground,
+                     stroke: theme.colors.codeBorder)
+
+            case .frontMatter:
+                let box = NSRect(
+                    x: columnLeft - 14, y: bounds.minY - 5,
+                    width: columnRight - columnLeft + 28, height: bounds.height + 10)
+                fill(box, radius: 8, color: theme.colors.backgroundElevated,
+                     stroke: theme.colors.rule)
+
+            case .callout(let kind):
+                let palette = theme.callout(kind)
+                let box = NSRect(
+                    x: columnLeft - 18, y: bounds.minY - 7,
+                    width: columnRight - columnLeft + 32, height: bounds.height + 14)
+                fill(box, radius: 9, color: palette.background, stroke: palette.accent.withAlpha(0.28))
+
+                // Accent bar down the left edge, with the box's corner radius.
+                let bar = NSRect(x: box.minX, y: box.minY, width: 3.5, height: box.height)
+                let barPath = NSBezierPath(
+                    roundedRect: NSRect(x: box.minX, y: box.minY, width: 12, height: box.height),
+                    xRadius: 9, yRadius: 9)
+                context.saveGState()
+                NSBezierPath(rect: bar).addClip()
+                palette.accent.setFill()
+                barPath.fill()
+                context.restoreGState()
+
+                drawCalloutIcon(kind, palette: palette, box: box, firstLine: decoration.lineRanges.first)
+
+            case .blockquote(let depth):
+                theme.colors.quoteBar.setFill()
+                for level in 0..<max(depth, 1) {
+                    let x = columnLeft + CGFloat(level) * metrics.indentStep
+                    let bar = NSRect(x: x, y: bounds.minY, width: 3, height: bounds.height)
+                    NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
+                }
+
+            case .table:
+                drawTable(decoration, columnLeft: columnLeft, columnRight: columnRight)
+
+            case .thematicBreak:
+                theme.colors.rule.setStroke()
+                let y = (bounds.minY + bounds.maxY) / 2
+                let path = NSBezierPath()
+                path.move(to: NSPoint(x: columnLeft, y: y))
+                path.line(to: NSPoint(x: columnRight, y: y))
+                path.lineWidth = 1
+                path.stroke()
+            }
+        }
+    }
+
+    private func drawCalloutIcon(
+        _ kind: CalloutKind?, palette: CalloutColors, box: NSRect, firstLine: NSRange?
+    ) {
+        guard let kind, let firstLine, let lineRect = rect(for: firstLine) else { return }
+        let config = NSImage.SymbolConfiguration(
+            pointSize: theme.metrics.base * 0.78, weight: .semibold)
+        guard let image = NSImage(systemSymbolName: kind.symbolName, accessibilityDescription: kind.title)?
+            .withSymbolConfiguration(config) else { return }
+
+        let size = image.size
+        let point = NSPoint(
+            x: box.minX + 9,
+            y: lineRect.midY - size.height / 2)
+        let tinted = NSImage(size: size, flipped: false) { rect in
+            palette.accent.set()
+            image.draw(in: rect)
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        tinted.draw(in: NSRect(origin: point, size: size))
+    }
+
+    private func drawTable(_ decoration: BlockDecoration, columnLeft: CGFloat, columnRight: CGFloat) {
+        guard let bounds = blockRect(for: decoration.lineRanges) else { return }
+        let box = NSRect(
+            x: columnLeft - 10, y: bounds.minY - 4,
+            width: columnRight - columnLeft + 20, height: bounds.height + 8)
+
+        // Header fill, then zebra striping on the body rows.
+        for (index, range) in decoration.lineRanges.enumerated() {
+            guard let lineRect = rect(for: range) else { continue }
+            let rowRect = NSRect(
+                x: box.minX, y: lineRect.minY, width: box.width, height: lineRect.height)
+            if index == 0 {
+                theme.colors.tableHeaderBackground.setFill()
+                rowRect.fill()
+            } else if index > 1, index % 2 == 1 {
+                theme.colors.tableStripe.setFill()
+                rowRect.fill()
+            }
+        }
+
+        theme.colors.tableBorder.setStroke()
+        let path = NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6)
+        path.lineWidth = 1
+        path.stroke()
+
+        // Rule under the header.
+        if decoration.lineRanges.count > 1, let headerRect = rect(for: decoration.lineRanges[0]) {
+            let rule = NSBezierPath()
+            rule.move(to: NSPoint(x: box.minX, y: headerRect.minY))
+            rule.line(to: NSPoint(x: box.maxX, y: headerRect.minY))
+            rule.lineWidth = 1
+            rule.stroke()
+        }
+    }
+
+    private func fill(_ rect: NSRect, radius: CGFloat, color: NSColor, stroke: NSColor?) {
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        color.setFill()
+        path.fill()
+        if let stroke {
+            stroke.setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
+    }
+
+    // MARK: - Geometry
+
+    /// Bounding rect of a character range in view coordinates.
+    func rect(for range: NSRange) -> NSRect? {
+        guard let layoutManager, let textContainer, range.location <= (textStorage?.length ?? 0) else {
+            return nil
+        }
+        let safe = NSRange(
+            location: range.location,
+            length: min(range.length, (textStorage?.length ?? 0) - range.location))
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: safe, actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        let origin = textContainerOrigin
+        rect.origin.x += origin.x
+        rect.origin.y += origin.y
+        return rect
+    }
+
+    private func blockRect(for ranges: [NSRange]) -> NSRect? {
+        var result: NSRect?
+        for range in ranges {
+            guard let rect = rect(for: range) else { continue }
+            result = result.map { $0.union(rect) } ?? rect
+        }
+        return result
+    }
+
+    // MARK: - Interaction
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let index = characterIndexForInsertion(at: point)
+
+        if let document, let lineIndex = document.lineIndex(at: index) {
+            let line = document.lines[lineIndex]
+
+            // Clicking the checkbox of a task item toggles it.
+            if case .listItem(_, let task) = line.kind, task != nil {
+                for token in line.inlines {
+                    if case .taskMarker = token.kind, NSLocationInRange(index, token.range) {
+                        onToggleTask?(token.range)
+                        return
+                    }
+                }
+            }
+
+            // Command-click opens links, matching the rest of macOS.
+            if event.modifierFlags.contains(.command) {
+                if let url = url(at: index, line: line) {
+                    NSWorkspace.shared.open(url)
+                    return
+                }
+            }
+        }
+
+        // NSTextView tracks the drag inside its own event loop, so this returns
+        // only once the mouse is released.
+        isSelectingWithMouse = true
+        super.mouseDown(with: event)
+        isSelectingWithMouse = false
+        onSelectionGestureEnded?()
+    }
+
+    private func url(at index: Int, line: MDLine) -> URL? {
+        guard let storage = textStorage else { return nil }
+        let text = storage.string as NSString
+
+        for token in line.inlines {
+            guard NSLocationInRange(index, token.range) else { continue }
+            switch token.kind {
+            case .autolink:
+                return URL(string: text.substring(with: token.range))
+            case .linkText, .linkURL:
+                // Find the destination token that belongs to this link.
+                if let destination = line.inlines.first(where: {
+                    if case .linkURL = $0.kind { return $0.range.location >= token.range.location }
+                    return false
+                }) {
+                    let raw = text.substring(with: destination.range)
+                    let trimmed = raw.split(separator: " ").first.map(String.init) ?? raw
+                    return URL(string: trimmed)
+                }
+            default:
+                break
+            }
+        }
+        return nil
+    }
+
+}
