@@ -12,10 +12,15 @@ enum SelfTest {
     static func run(document: String?) -> Int32 {
         var failures = 0
 
+        // Straight to stderr: buffered stdout is lost if a check crashes, which
+        // hides the very line that would say where.
+        func say(_ line: String) {
+            FileHandle.standardError.write(Data((line + "\n").utf8))
+        }
         func check(_ name: String, _ passed: Bool, _ detail: String = "") {
             let mark = passed ? "ok  " : "FAIL"
             if !passed { failures += 1 }
-            print("\(mark) \(name)\(detail.isEmpty ? "" : "  — \(detail)")")
+            say("\(mark) \(name)\(detail.isEmpty ? "" : "  — \(detail)")")
         }
 
         // --- Palettes -------------------------------------------------------
@@ -130,6 +135,46 @@ enum SelfTest {
         check("window title bar is empty",
               glassWindow.window?.titleVisibility == .hidden)
 
+        // --- Stale decorations --------------------------------------------------
+        // Decorations are built from a parse and drawn later; a deletion in
+        // between leaves ranges pointing past the end of the text. Asking the
+        // layout manager about those raises, and AppKit turns a raise during
+        // drawing into a crash, so drawing with impossible ranges has to be
+        // survivable.
+        let stale = NSRange(location: 900_000, length: 500)
+        controller.editor.textView.decorations = [
+            BlockDecoration(kind: .codeBlock, lineRanges: [stale], quoteDepth: 0, headerRow: nil),
+            BlockDecoration(kind: .table, lineRanges: [stale, stale], quoteDepth: 0, headerRow: 0),
+        ]
+        controller.editor.textView.overlays = [
+            .checkbox(stale, .open),
+            .bullet(stale),
+            .calloutTitle(stale, .note),
+        ]
+        check("a rect for a range past the end is refused",
+              controller.editor.textView.rect(for: stale) == nil)
+        // Drawing needs a context of its own here: there is no window on screen
+        // to provide one, and `renderPage` paints straight into whatever is
+        // current.
+        func drawIntoBitmap(_ body: () -> Void) {
+            let size = NSSize(width: 600, height: 300)
+            guard let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 600, pixelsHigh: 300,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+                let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
+            rep.size = size
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(
+                cgContext: context.cgContext, flipped: true)
+            body()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        let page = NSRect(x: 0, y: 0, width: 600, height: 300)
+        drawIntoBitmap { controller.editor.textView.renderPage(page) }
+        check("drawing survives stale decorations", true)
+
         // --- Chrome ----------------------------------------------------------
         let dragAreas = controller.view.subviews.compactMap { $0 as? WindowDragArea }
         check("window drag strip present", dragAreas.count == 1)
@@ -151,7 +196,7 @@ enum SelfTest {
             check("palette builds: \(section.title)", built > 0, "\(built) rows")
         }
 
-        print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
+        say(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
         return failures == 0 ? 0 : 1
     }
 }

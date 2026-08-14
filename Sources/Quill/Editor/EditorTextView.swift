@@ -524,14 +524,30 @@ final class EditorTextView: NSTextView {
     // MARK: - Geometry
 
     /// Bounding rect of a character range in view coordinates.
+    /// Bounding rect of a character range, or nil if the range is not one this
+    /// document actually has.
+    ///
+    /// Decorations and overlays are built from a parse and drawn later. A
+    /// deletion between those two moments leaves ranges pointing past the end of
+    /// the text, and asking the layout manager for a rect outside the string
+    /// raises. AppKit turns an exception raised during drawing into a crash, so
+    /// this has to reject a stale range rather than clamp it into something that
+    /// merely looks plausible.
     func rect(for range: NSRange) -> NSRect? {
-        guard let layoutManager, let textContainer, range.location <= (textStorage?.length ?? 0) else {
+        guard let layoutManager, let textContainer, let storage = textStorage else { return nil }
+
+        let length = storage.length
+        guard length > 0, range.location >= 0, range.location < length else { return nil }
+
+        let end = min(NSMaxRange(range), length)
+        guard end > range.location else { return nil }
+
+        let safe = NSRange(location: range.location, length: end - range.location)
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: safe, actualCharacterRange: nil)
+        guard glyphRange.length > 0 || glyphRange.location < layoutManager.numberOfGlyphs else {
             return nil
         }
-        let safe = NSRange(
-            location: range.location,
-            length: min(range.length, (textStorage?.length ?? 0) - range.location))
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: safe, actualCharacterRange: nil)
+
         var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
         let origin = textContainerOrigin
         rect.origin.x += origin.x

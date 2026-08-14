@@ -270,6 +270,7 @@ final class MarkdownStyler {
             // width it was stretched to and cancel its own correction out. The
             // old kerning goes first.
             for row in index..<end where document.lines[row].range.length > 0 {
+                guard NSMaxRange(document.lines[row].range) <= storage.length else { continue }
                 storage.removeAttribute(.kern, range: document.lines[row].range)
             }
 
@@ -314,6 +315,7 @@ final class MarkdownStyler {
         _ line: MDLine, widths: [CGFloat], padding: CGFloat,
         text: NSString, storage: NSTextStorage
     ) {
+        guard NSMaxRange(line.contentRange) <= storage.length else { return }
         let pipes = pipePositions(text, in: line.contentRange)
         guard pipes.count >= 2, !widths.isEmpty else { return }
 
@@ -371,6 +373,11 @@ final class MarkdownStyler {
     private func styleLine(
         _ line: MDLine, index: Int, text: NSString, storage: NSTextStorage, context: Context
     ) {
+        // A parse can outlive the text it describes by a moment. Writing
+        // attributes outside the storage raises, and AppKit turns a raise during
+        // drawing into a crash.
+        guard NSMaxRange(line.fullRange) <= storage.length else { return }
+
         let colors = theme.colors
         let metrics = theme.metrics
 
