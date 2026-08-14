@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="build/Foldout.app/Contents/MacOS/Foldout"
+APP="build/Kvill.app/Contents/MacOS/Kvill"
 [ -x "$APP" ] || { echo "Build first: QUILL_SANDBOX=0 ./build.sh" >&2; exit 1; }
 
 # Must match the window sizes in scripts/make-shot.swift.

@@ -26,7 +26,7 @@ final class DocumentWindowController: NSWindowController {
         window.tabbingMode = .disallowed
         window.minSize = NSSize(width: 520, height: 420)
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName("FoldoutDocument")
+        window.setFrameAutosaveName("KvillDocument")
         // Opening a file should open that file and nothing else. Without this,
         // macOS restores the previous session's documents alongside it.
         window.isRestorable = false
@@ -45,7 +45,7 @@ final class DocumentWindowController: NSWindowController {
         addSoftScrollEdge()
         applyTheme()
         NotificationCenter.default.addObserver(
-            self, selector: #selector(applyTheme), name: .foldoutThemeChanged, object: nil)
+            self, selector: #selector(applyTheme), name: .kvillThemeChanged, object: nil)
     }
 
     deinit {

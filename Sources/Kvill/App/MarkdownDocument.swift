@@ -1,6 +1,6 @@
 import AppKit
 
-/// One Markdown file. Foldout is strictly one file per window: `NSDocument` gives
+/// One Markdown file. Kvill is strictly one file per window: `NSDocument` gives
 /// that for free, along with autosave, versions, and Finder double-click opening.
 /// The `@objc` name is what `NSDocumentClass` in Info.plist looks up, so it must
 /// stay stable and unmangled.
@@ -66,7 +66,7 @@ final class MarkdownDocument: NSDocument {
                 throw NSError(
                     domain: NSCocoaErrorDomain, code: NSFileReadInapplicableStringEncodingError,
                     userInfo: [
-                        NSLocalizedDescriptionKey: "Foldout could not work out this file's text encoding."
+                        NSLocalizedDescriptionKey: "Kvill could not work out this file's text encoding."
                     ])
             }
             content = converted as String
@@ -140,7 +140,7 @@ final class MarkdownDocument: NSDocument {
         guard let data = text.data(using: encoding) ?? text.data(using: .utf8) else {
             throw NSError(
                 domain: NSCocoaErrorDomain, code: NSFileWriteInapplicableStringEncodingError,
-                userInfo: [NSLocalizedDescriptionKey: "Foldout could not encode this document for saving."])
+                userInfo: [NSLocalizedDescriptionKey: "Kvill could not encode this document for saving."])
         }
         return data
     }

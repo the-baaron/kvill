@@ -2,13 +2,13 @@
 import AppKit
 import Foundation
 
-// Draws Foldout's app icon: the app's own signature, a dimmed syntax marker
+// Draws Kvill's app icon: the app's own signature, a dimmed syntax marker
 // hanging to the left of a clean column of text. Rendered natively at every
 // size rather than downscaled, so the small variants stay crisp.
 
 let outputDirectory = CommandLine.arguments.count > 1
     ? CommandLine.arguments[1]
-    : "./Foldout.iconset"
+    : "./Kvill.iconset"
 
 let sizes: [(name: String, pixels: Int)] = [
     ("icon_16x16", 16), ("icon_16x16@2x", 32),

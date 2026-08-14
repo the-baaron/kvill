@@ -2,7 +2,7 @@ import Foundation
 
 /// A deliberately generic tokeniser for fenced code blocks.
 ///
-/// Foldout is a Markdown editor, not an IDE, so this does not try to be correct per
+/// Kvill is a Markdown editor, not an IDE, so this does not try to be correct per
 /// language. It recognises the four things that carry most of the visual signal
 /// across nearly every language: comments, strings, numbers and keywords.
 enum CodeHighlighter {

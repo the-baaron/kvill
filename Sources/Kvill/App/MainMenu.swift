@@ -1,6 +1,6 @@
 import AppKit
 
-/// Builds the menu bar in code. Foldout has no nib, so this is the single place
+/// Builds the menu bar in code. Kvill has no nib, so this is the single place
 /// that defines every command and its key equivalent.
 enum MainMenu {
 
@@ -43,12 +43,12 @@ enum MainMenu {
     // MARK: - Application
 
     private static func appMenu() -> NSMenuItem {
-        submenu("Foldout") { menu in
-            add(menu, "About Foldout", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+        submenu("Kvill") { menu in
+            add(menu, "About Kvill", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
             menu.addItem(.separator())
             add(menu, "Settings…", #selector(DocumentViewController.toggleThemePanel(_:)), ",")
             menu.addItem(.separator())
-            add(menu, "Make Foldout the Default Markdown Editor…",
+            add(menu, "Make Kvill the Default Markdown Editor…",
                 #selector(AppDelegate.setAsDefaultMarkdownEditor(_:)))
             menu.addItem(.separator())
 
@@ -59,12 +59,12 @@ enum MainMenu {
             menu.addItem(services)
             menu.addItem(.separator())
 
-            add(menu, "Hide Foldout", #selector(NSApplication.hide(_:)), "h")
+            add(menu, "Hide Kvill", #selector(NSApplication.hide(_:)), "h")
             add(menu, "Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h",
                 modifiers: [.command, .option])
             add(menu, "Show All", #selector(NSApplication.unhideAllApplications(_:)))
             menu.addItem(.separator())
-            add(menu, "Quit Foldout", #selector(NSApplication.terminate(_:)), "q")
+            add(menu, "Quit Kvill", #selector(NSApplication.terminate(_:)), "q")
         }
     }
 
@@ -316,7 +316,7 @@ enum MainMenu {
 
     private static func helpMenu() -> NSMenuItem {
         let item = submenu("Help") { menu in
-            add(menu, "Foldout Markdown Reference",
+            add(menu, "Kvill Markdown Reference",
                 #selector(AppDelegate.openCheatSheet(_:)), "?", target: NSApp.delegate as AnyObject)
         }
         NSApp.helpMenu = item.submenu

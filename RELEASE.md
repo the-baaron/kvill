@@ -1,4 +1,4 @@
-# Releasing Foldout to the Mac App Store
+# Releasing Kvill to the Mac App Store
 
 Everything that can be automated is. What is left needs a person, and this says
 exactly which parts and why.
@@ -7,15 +7,15 @@ exactly which parts and why.
 
 | | how |
 |---|---|
-| Sandboxed build | `./build.sh` signs with `Resources/Foldout.entitlements` |
+| Sandboxed build | `./build.sh` signs with `Resources/Kvill.entitlements` |
 | Development build | `QUILL_SANDBOX=0 ./build.sh` (the sandbox blocks `--render`, `--benchmark` and `--selftest` reading a path from the command line) |
-| Distribution package | `./package.sh` produces a signed `build/Foldout.pkg` |
+| Distribution package | `./package.sh` produces a signed `build/Kvill.pkg` |
 | Upload | `./package.sh --upload` once the app record exists |
 | Screenshots | `./store/make-screenshots.sh`, five at 2880×1800 |
 | Listing copy | `store/listing.md` |
 | Privacy policy | `PRIVACY.md` |
 
-Registered with Apple already: bundle ID `design.baars.Foldout` (26FH4WRJ6D), a
+Registered with Apple already: bundle ID `design.baars.Kvill` (JZ3GU5Z8Q9), a
 Mac App Store provisioning profile, a Mac App Distribution certificate and a Mac
 Installer Distribution certificate, both in the login keychain and both chaining
 through Apple's WWDR G3 intermediate.
@@ -27,10 +27,10 @@ through Apple's WWDR G3 intermediate.
 | field | value |
 |---|---|
 | Platform | macOS |
-| Name | Foldout |
+| Name | Kvill |
 | Primary language | English (U.S.) |
-| Bundle ID | design.baars.Foldout |
-| SKU | Foldout_1 |
+| Bundle ID | design.baars.Kvill |
+| SKU | Kvill_1 |
 
 This cannot be scripted. The App Store Connect API answers a create with
 `403 FORBIDDEN_ERROR: "The resource 'apps' does not allow 'CREATE'. Allowed
@@ -68,6 +68,6 @@ uploaded through the web interface.
   to a document is denied. Opening a *folder* grants its whole tree, which is
   the fix, and is the folder-tree feature already on the roadmap.
 - **The bundle identifier is permanent after the first submission.**
-  `design.baars.Foldout` is reverse-DNS for baars.design. Yellendar uses
+  `design.baars.Kvill` is reverse-DNS for baars.design. Yellendar uses
   `com.baarsdesign.yellendar`, which implies a different domain; the two
   conventions do not have to match and cannot be reconciled after submission.

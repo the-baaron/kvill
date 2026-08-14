@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Foldout</string>
+	<string>Kvill</string>
 	<key>CFBundleDisplayName</key>
-	<string>Foldout</string>
+	<string>Kvill</string>
 	<key>CFBundleIdentifier</key>
-	<string>design.baars.Foldout</string>
+	<string>design.baars.Kvill</string>
 	<key>CFBundleExecutable</key>
-	<string>Foldout</string>
+	<string>Kvill</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -17,13 +17,13 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleIconFile</key>
-	<string>Foldout</string>
+	<string>Kvill</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<!-- Required for the App Store: which shelf the app sits on. -->
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
-	<!-- Foldout contains no encryption beyond what macOS itself provides, and
+	<!-- Kvill contains no encryption beyond what macOS itself provides, and
 	     makes no network connections at all. Declaring it here answers the
 	     export compliance question once instead of at every upload. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -39,7 +39,7 @@
 	<key>NSSupportsSuddenTermination</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>MIT licensed. Source at github.com/the-baaron/foldout</string>
+	<string>MIT licensed. Source at github.com/the-baaron/kvill</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

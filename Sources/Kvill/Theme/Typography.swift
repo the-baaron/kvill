@@ -1,7 +1,7 @@
 import AppKit
 
 /// Which of the system font families a role should resolve to. Using the system
-/// families means Foldout ships no font files and still gets New York, SF Pro,
+/// families means Kvill ships no font files and still gets New York, SF Pro,
 /// SF Rounded and SF Mono, all of which are optically sized and hinted for macOS.
 enum FontFamily {
     case serif

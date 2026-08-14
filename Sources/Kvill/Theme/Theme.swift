@@ -71,27 +71,27 @@ final class Theme {
 }
 
 extension Notification.Name {
-    static let foldoutThemeChanged = Notification.Name("FoldoutThemeChanged")
-    static let foldoutPreferencesChanged = Notification.Name("FoldoutPreferencesChanged")
+    static let kvillThemeChanged = Notification.Name("KvillThemeChanged")
+    static let kvillPreferencesChanged = Notification.Name("KvillPreferencesChanged")
 }
 
 /// Owns the current theme and the small set of reading preferences, and persists
-/// them. Every editor observes `foldoutThemeChanged` and restyles in place.
+/// them. Every editor observes `kvillThemeChanged` and restyles in place.
 final class ThemeManager {
     static let shared = ThemeManager()
 
     private enum Key {
-        static let palette = "foldout.palette"
-        static let preset = "foldout.typography"
-        static let size = "foldout.textSize"
-        static let width = "foldout.lineWidth"
-        static let followSystem = "foldout.followSystemAppearance"
-        static let lightPalette = "foldout.lightPalette"
-        static let darkPalette = "foldout.darkPalette"
-        static let focusMode = "foldout.focusMode"
-        static let typewriter = "foldout.typewriterScrolling"
-        static let scrollPastEnd = "foldout.scrollPastEnd"
-        static let showMarkers = "foldout.showMarkers"
+        static let palette = "kvill.palette"
+        static let preset = "kvill.typography"
+        static let size = "kvill.textSize"
+        static let width = "kvill.lineWidth"
+        static let followSystem = "kvill.followSystemAppearance"
+        static let lightPalette = "kvill.lightPalette"
+        static let darkPalette = "kvill.darkPalette"
+        static let focusMode = "kvill.focusMode"
+        static let typewriter = "kvill.typewriterScrolling"
+        static let scrollPastEnd = "kvill.scrollPastEnd"
+        static let showMarkers = "kvill.showMarkers"
     }
 
     private let defaults = UserDefaults.standard
@@ -146,7 +146,7 @@ final class ThemeManager {
     var focusMode: Bool {
         didSet {
             defaults.set(focusMode, forKey: Key.focusMode)
-            NotificationCenter.default.post(name: .foldoutPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
         }
     }
 
@@ -154,7 +154,7 @@ final class ThemeManager {
     var typewriterScrolling: Bool {
         didSet {
             defaults.set(typewriterScrolling, forKey: Key.typewriter)
-            NotificationCenter.default.post(name: .foldoutPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
         }
     }
 
@@ -164,14 +164,14 @@ final class ThemeManager {
     var scrollPastEnd: Bool {
         didSet {
             defaults.set(scrollPastEnd, forKey: Key.scrollPastEnd)
-            NotificationCenter.default.post(name: .foldoutPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
         }
     }
 
     var alwaysShowMarkers: Bool {
         didSet {
             defaults.set(alwaysShowMarkers, forKey: Key.showMarkers)
-            NotificationCenter.default.post(name: .foldoutPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
         }
     }
 
@@ -180,7 +180,7 @@ final class ThemeManager {
     var chromeHidden = false {
         didSet {
             guard chromeHidden != oldValue else { return }
-            NotificationCenter.default.post(name: .foldoutPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
         }
     }
 
@@ -277,7 +277,7 @@ final class ThemeManager {
         )
         guard next.identifier != theme.identifier else { return }
         theme = next
-        NotificationCenter.default.post(name: .foldoutThemeChanged, object: nil)
+        NotificationCenter.default.post(name: .kvillThemeChanged, object: nil)
     }
 
     // MARK: - Step helpers used by the View menu

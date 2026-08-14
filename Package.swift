@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Foldout",
+    name: "Kvill",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Foldout",
-            path: "Sources/Foldout"
+            name: "Kvill",
+            path: "Sources/Kvill"
         )
     ]
 )

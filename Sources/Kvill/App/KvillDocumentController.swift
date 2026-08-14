@@ -1,17 +1,17 @@
 import AppKit
 
-/// Decides what Foldout will actually open.
+/// Decides what Kvill will actually open.
 ///
 /// The stock behaviour is to check a file's type and, when it does not match one
-/// the app declares, refuse with a modal alert: "Foldout cannot open files in the
+/// the app declares, refuse with a modal alert: "Kvill cannot open files in the
 /// PNG image format." That is the wrong answer twice over. Dropping a folder of
 /// notes and screenshots on the icon should open the notes and leave the rest
-/// alone, and a type check is the wrong question anyway, because Foldout can show
+/// alone, and a type check is the wrong question anyway, because Kvill can show
 /// any text file whatever its extension says.
 ///
 /// So the question asked here is the one that matters: does this file decode as
 /// text? If it does, open it. If it does not, skip it quietly.
-final class FoldoutDocumentController: NSDocumentController {
+final class KvillDocumentController: NSDocumentController {
 
     /// How long a document sits on an edit before writing it.
     ///
@@ -37,9 +37,9 @@ final class FoldoutDocumentController: NSDocumentController {
         display displayDocument: Bool,
         completionHandler: @escaping (NSDocument?, Bool, Error?) -> Void
     ) {
-        guard FoldoutDocumentController.isReadableAsText(url) else {
+        guard KvillDocumentController.isReadableAsText(url) else {
             // `userCancelled` is the one error AppKit shows nothing for, which is
-            // exactly right: the user asked for something Foldout does not do, and
+            // exactly right: the user asked for something Kvill does not do, and
             // an alert would not tell them anything the missing window does not.
             completionHandler(nil, false, CocoaError(.userCancelled))
             return
@@ -51,7 +51,7 @@ final class FoldoutDocumentController: NSDocumentController {
     /// True when the start of the file reads as text.
     ///
     /// Only the first few kilobytes are looked at, so this stays instant on a
-    /// large file. A NUL byte settles it: no text encoding Foldout would open puts
+    /// large file. A NUL byte settles it: no text encoding Kvill would open puts
     /// one in the first page, and every binary format has one early.
     static func isReadableAsText(_ url: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
