@@ -28,9 +28,6 @@ final class EditorViewController: NSViewController {
     /// Range of the `/` that opened the menu, so the query after it can be read
     /// and taken back out again.
     private var slashRange: NSRange?
-    /// Width the widest table needs, so a document with one can be scrolled
-    /// sideways to reach it.
-    private var widestTable: CGFloat = 0
 
     private var theme: Theme { ThemeManager.shared.theme }
 
@@ -64,10 +61,7 @@ final class EditorViewController: NSViewController {
         storage.addLayoutManager(layoutManager)
 
         let container = NSTextContainer(size: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
-        // The container is set explicitly rather than tracking the view: it has
-        // to be as wide as the widest table so a table can be scrolled to, while
-        // prose is held to the measure by its own tail indent.
-        container.widthTracksTextView = false
+        container.widthTracksTextView = true
         container.lineFragmentPadding = 0
         layoutManager.addTextContainer(container)
 
@@ -83,9 +77,7 @@ final class EditorViewController: NSViewController {
     override func loadView() {
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.autoresizingMask = []
-        textView.isHorizontallyResizable = true
-        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
         textView.delegate = self
         textView.textStorage?.delegate = self
         textView.theme = theme
@@ -98,9 +90,7 @@ final class EditorViewController: NSViewController {
         scrollView.contentView = TypewriterClipView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
-        // Only ever in use when a table is wider than the column; it autohides
-        // the rest of the time, which is nearly always.
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = !theme.colors.isTranslucent
         scrollView.backgroundColor = theme.colors.page
@@ -196,55 +186,10 @@ final class EditorViewController: NSViewController {
             clip.bottomSlack = max(0, scrollView.frame.height * 0.7)
         }
 
-        // As wide as the document needs: the measure, or the widest table in it.
-        applyContainerWidth()
-        let wanted = max(metrics.contentWidth, widestTable) + horizontal * 2
-        if abs(textView.frame.width - wanted) > 0.5 {
-            textView.frame.size.width = wanted
-        }
-
-        containerOrigin = textView.textContainerOrigin
-
         if lastContentWidth != metrics.contentWidth {
             lastContentWidth = metrics.contentWidth
             textView.needsDisplay = true
         }
-    }
-
-    /// Width the widest table wants. Changing it re-lays out the container, so
-    /// it is only acted on when it actually moves.
-    private func measureTables() {
-        var widest = 0
-        for line in parsed.lines where line.kind.isTable {
-            widest = max(widest, line.tableWidth)
-        }
-        let width = styler.tableWidth(characters: widest)
-        guard abs(width - widestTable) > 0.5 else { return }
-        widestTable = width
-        // The container can be resized here: it invalidates layout without
-        // performing any. The text view's frame cannot, because resizing it
-        // forces layout, and this runs inside the storage's endEditing where
-        // that raises. The frame follows in the next layout pass.
-        applyContainerWidth()
-        view.needsLayout = true
-    }
-
-    /// Last known container origin, refreshed at layout time. Asking the text
-    /// view for it mid-edit would force layout.
-    private var containerOrigin: NSPoint = .zero
-
-    /// Widens the text container to whichever is greater, the measure or the
-    /// widest table in the document.
-    private func applyContainerWidth() {
-        guard let container = textView.textContainer else { return }
-        let wanted = max(theme.metrics.contentWidth, widestTable)
-        guard container.size.width != wanted else { return }
-        container.size = NSSize(width: wanted, height: CGFloat.greatestFiniteMagnitude)
-        // Changing the container throws away the layout that was there. Without
-        // asking for a redraw the window can sit blank until something else
-        // happens to invalidate it, which is why a document could open showing
-        // nothing until it was scrolled.
-        textView.needsDisplay = true
     }
 
     // MARK: - Parse and style
@@ -263,7 +208,6 @@ final class EditorViewController: NSViewController {
         let text = storage.string as NSString
         parsed = MarkdownParser.parse(text)
         textView.document = parsed
-        measureTables()
         indexBlocks()
         recomputeActiveBlocks()
 
@@ -318,10 +262,7 @@ final class EditorViewController: NSViewController {
               let container = textView.textContainer,
               !parsed.lines.isEmpty else { return 0..<0 }
 
-        // Not `textView.textContainerOrigin`: on a horizontally resizable text
-        // view that recomputes the frame, which forces layout, and this is
-        // reached from inside the storage's endEditing where layout raises.
-        let origin = containerOrigin
+        let origin = textView.textContainerOrigin
         let visible = textView.visibleRect
             .insetBy(dx: 0, dy: -textView.visibleRect.height)
             .offsetBy(dx: -origin.x, dy: -origin.y)

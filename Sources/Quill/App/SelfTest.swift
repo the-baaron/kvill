@@ -82,7 +82,7 @@ enum SelfTest {
                   editor.text.hasPrefix("Before.") && editor.text.hasSuffix("After."), "")
         }
 
-        // --- A wide table widens the container rather than wrapping -----------
+        // --- A wide table is fitted to the column -----------------------------
         do {
             let editor = controller.editor
             controller.loadText("""
@@ -94,45 +94,30 @@ enum SelfTest {
             """)
             controller.view.layoutSubtreeIfNeeded()
 
-            let measure = ThemeManager.shared.theme.metrics.contentWidth
-            let container = editor.textView.textContainer?.size.width ?? 0
-            check("wide table: container grows past the measure", container > measure + 100,
-                  "container \(Int(container)) vs measure \(Int(measure))")
-
             let widest = editor.parsed.lines.filter { $0.kind.isTable }.map(\.tableWidth).max() ?? 0
             check("wide table: its width was measured", widest > 100, "\(widest) characters")
-            let probe = MarkdownStyler(theme: ThemeManager.shared.theme)
-            check("wide table: width in points", probe.tableWidth(characters: widest) > 900,
-                  "\(Int(probe.tableWidth(characters: widest)))pt for \(widest) characters")
 
-            let rows = editor.parsed.lines.filter { $0.kind.isTable }.count
-            var fragments = 0
-            if let manager = editor.textView.layoutManager, let box = editor.textView.textContainer {
-                manager.ensureLayout(for: box)
-                manager.enumerateLineFragments(
-                    forGlyphRange: NSRange(location: 0, length: manager.numberOfGlyphs)
-                ) { _, _, _, _, _ in fragments += 1 }
+            // Nothing about the page changes because a table is wide: no second
+            // scroll direction, no container games.
+            check("wide table: the page never scrolls sideways",
+                  !editor.scrollView.hasHorizontalScroller, "")
+            let measure = ThemeManager.shared.theme.metrics.contentWidth
+            let container = editor.textView.textContainer?.size.width ?? 0
+            check("wide table: the container stays the width of the column",
+                  abs(container - measure) < 60,
+                  "container \(Int(container)) vs measure \(Int(measure))")
+
+            // It is set smaller so that it fits instead.
+            let rows = editor.parsed.lines.filter { $0.kind.isTable }
+            let sizes = rows.compactMap { row -> CGFloat? in
+                editor.textView.textStorage?
+                    .attribute(.font, at: row.range.location, effectiveRange: nil)
+                    .flatMap { ($0 as? NSFont)?.pointSize }
             }
-            check("wide table: no row wraps", fragments <= rows + 4,
-                  "\(fragments) fragments, \(rows) table rows plus prose")
-
-            check("wide table: it can be scrolled to",
-                  editor.scrollView.hasHorizontalScroller, "")
-
-            // Sideways scrolling is for tables and nothing else.
-            let tableRect = editor.textView.blockRect(
-                for: editor.parsed.lines.filter { $0.kind.isTable }.map(\.range))
-            check("wide table: sideways scrolling works on it",
-                  tableRect.map { editor.textView.isOverTable(NSPoint(x: 0, y: $0.midY)) } ?? false,
-                  "")
-            check("wide table: sideways scrolling is off over prose",
-                  !editor.textView.isOverTable(NSPoint(x: 0, y: 0)), "")
-
-            // The panel has to reach the end of the widest row, not stop at the
-            // measure, or a scrolled table runs off its own background.
-            check("wide table: the panel is as wide as the table",
-                  (tableRect?.width ?? 0) > measure - 200,
-                  "panel \(Int(tableRect?.width ?? 0)) vs measure \(Int(measure))")
+            let normal = ThemeManager.shared.theme.monoSmall.pointSize
+            check("wide table: it is set smaller to fit",
+                  (sizes.max() ?? normal) < normal,
+                  "\(sizes.map { Int($0 * 10) }) vs \(Int(normal * 10)) (tenths)")
         }
 
         // --- Slash menu -------------------------------------------------------
