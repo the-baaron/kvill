@@ -13,6 +13,18 @@ import ServiceManagement
 /// uninvited has answered a question nobody asked.
 enum BackgroundService {
 
+    /// What macOS thinks, rather than what the setting says. `Kvill
+    /// --login-item` prints it, so the two can be compared without guessing.
+    static var loginItemStatus: String {
+        switch SMAppService.mainApp.status {
+        case .enabled: return "enabled"
+        case .notRegistered: return "not registered"
+        case .requiresApproval: return "requires approval in System Settings"
+        case .notFound: return "not found"
+        @unknown default: return "unknown"
+        }
+    }
+
     /// Whether the app stays running with no windows and starts at login.
     static var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: "kvill.staysRunning") }
@@ -37,13 +49,18 @@ enum BackgroundService {
         do {
             switch (wanted, service.status) {
             case (true, .enabled):
-                break
+                break                       // already there
             case (true, _):
-                try service.register()
-            case (false, .enabled):
-                try service.unregister()
+                try service.register()      // includes .requiresApproval, where
+                                            // registering again is the way to
+                                            // prompt for it
+            case (false, .notRegistered):
+                break                       // already gone
             case (false, _):
-                break
+                // Anything that is not notRegistered is still an item, waiting
+                // for approval included. Unregistering only from .enabled left
+                // a pending one behind.
+                try service.unregister()
             }
         } catch {
             // Registration can be refused, most often because the user has

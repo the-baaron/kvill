@@ -44,6 +44,22 @@ if let index = CommandLine.arguments.firstIndex(of: "--benchmark"),
     exit(Benchmark.run(path: CommandLine.arguments[index + 1]))
 }
 
+// Reads and sets the login item without going through the interface, so what
+// the toggle does can be checked rather than taken on trust.
+if let index = CommandLine.arguments.firstIndex(of: "--login-item") {
+    startHeadless()
+    let argument = CommandLine.arguments.count > index + 1
+        ? CommandLine.arguments[index + 1] : "status"
+    switch argument {
+    case "on": BackgroundService.isEnabled = true
+    case "off": BackgroundService.isEnabled = false
+    default: break
+    }
+    print("setting: \(BackgroundService.isEnabled ? "on" : "off")")
+    print("macOS says: \(BackgroundService.loginItemStatus)")
+    exit(0)
+}
+
 if let request = ScreenshotRenderer.parse(CommandLine.arguments) {
     // Headless PNG render: no document controller, no menu, no untitled window.
     startHeadless()

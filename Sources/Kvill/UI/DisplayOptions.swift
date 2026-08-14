@@ -269,7 +269,11 @@ final class OptionsPalette: NSViewController {
     private let pastEndToggle = NSButton(checkboxWithTitle: "Scroll past end", target: nil, action: nil)
     private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
     private let backgroundToggle = NSButton(
-        checkboxWithTitle: "Keep running in the background", target: nil, action: nil)
+        checkboxWithTitle: "Open files faster", target: nil, action: nil)
+    /// "Open files faster" says nothing about the cost. This says what is
+    /// actually being agreed to, in the place where it is being agreed to.
+    private let backgroundNote = NSTextField(
+        labelWithString: "Stays running with no windows, and starts at login")
 
     init(section: Section) {
         self.section = section
@@ -346,8 +350,13 @@ final class OptionsPalette: NSViewController {
             markersToggle.action = #selector(toggleMarkers)
             backgroundToggle.target = self
             backgroundToggle.action = #selector(toggleBackground)
-            backgroundToggle.toolTip = "Starts Kvill at login and keeps it running with no windows open, so opening a file costs a window rather than a whole process."
-            return [focusToggle, typewriterToggle, pastEndToggle, markersToggle, backgroundToggle]
+            backgroundNote.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            backgroundNote.textColor = .secondaryLabelColor
+            backgroundToggle.toolTip =
+                "A first document costs about 100ms, nearly all of it starting up. "
+                + "A second one, with Kvill already running, costs about 25ms."
+            return [focusToggle, typewriterToggle, pastEndToggle, markersToggle,
+                    backgroundToggle, backgroundNote]
         }
     }
 

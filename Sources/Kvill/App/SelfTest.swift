@@ -160,25 +160,30 @@ enum SelfTest {
 
         // --- Staying resident -------------------------------------------------
         do {
-            let was = BackgroundService.isEnabled
+            // Written straight to defaults rather than through
+            // BackgroundService.isEnabled, whose setter registers a real login
+            // item. A test has no business changing what starts on someone's
+            // machine, and an earlier version of this left one behind.
+            let key = "kvill.staysRunning"
+            let was = UserDefaults.standard.bool(forKey: key)
             let delegate = AppDelegate()
 
-            BackgroundService.isEnabled = false
+            UserDefaults.standard.set(false, forKey: key)
             check("background: off means the app quits with its last window",
                   delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp), "")
             check("background: off still opens a blank document on its own",
                   delegate.applicationShouldOpenUntitledFile(NSApp), "")
 
-            BackgroundService.isEnabled = true
+            UserDefaults.standard.set(true, forKey: key)
             check("background: on keeps the app alive with no windows",
                   !delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp), "")
             check("background: on does not put a blank window in your face at login",
                   !delegate.applicationShouldOpenUntitledFile(NSApp), "")
 
-            BackgroundService.isEnabled = was
-            check("background: off by default",
-                  !UserDefaults.standard.bool(forKey: "kvill.staysRunning")
-                    || was, "")
+            UserDefaults.standard.set(was, forKey: key)
+            check("background: the test left no login item behind",
+                  BackgroundService.loginItemStatus == "not registered" || was,
+                  BackgroundService.loginItemStatus)
         }
 
         // --- Slash menu -------------------------------------------------------
