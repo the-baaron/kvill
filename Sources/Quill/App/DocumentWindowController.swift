@@ -40,6 +40,7 @@ final class DocumentWindowController: NSWindowController {
     /// keeps its launch appearance and the traffic lights stay wrong after a
     /// switch to a dark theme.
     private func start() {
+        addSoftScrollEdge()
         applyTheme()
         NotificationCenter.default.addObserver(
             self, selector: #selector(applyTheme), name: .quillThemeChanged, object: nil)
@@ -47,6 +48,25 @@ final class DocumentWindowController: NSWindowController {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Asks the system for the soft scroll edge under the title bar.
+    ///
+    /// In AppKit this is a property of a titlebar accessory, not of the scroll
+    /// view: `NSTitlebarAccessoryViewController.preferredScrollEdgeEffectStyle`.
+    /// There is no equivalent for the bottom of a window, which is drawn by hand.
+    private func addSoftScrollEdge() {
+        guard #available(macOS 26.1, *), let window else { return }
+
+        let accessory = NSTitlebarAccessoryViewController()
+        // An empty accessory: all that is wanted is the edge it brings with it.
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
+        host.translatesAutoresizingMaskIntoConstraints = true
+        accessory.view = host
+        accessory.layoutAttribute = .bottom
+        accessory.automaticallyAdjustsSize = false
+        accessory.preferredScrollEdgeEffectStyle = .soft
+        window.addTitlebarAccessoryViewController(accessory)
     }
 
     /// Matches the window chrome to the document's palette so the title bar does

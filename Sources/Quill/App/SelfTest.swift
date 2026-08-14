@@ -68,15 +68,28 @@ enum SelfTest {
         // Proved by pixels: render a strip of the document, blur it, and confirm
         // the result actually differs from the unblurred original.
         let textView = controller.editor.textView
-        let strip = NSRect(x: 0, y: 120, width: 700, height: 88)
-        let plain = ScrollEdgeRenderer.probeRender(strip: strip, scale: 2) { textView.renderPage($0) }
-        let blurred = ScrollEdgeRenderer.probeBlur(strip: strip, scale: 2) { textView.renderPage($0) }
-        check("strip renders", plain != nil && (plain?.ink ?? 0) > 0.001,
-              "ink \(String(format: "%.3f", plain?.ink ?? 0))")
-        check("strip blurs", blurred != nil && plain != nil
-                && abs((blurred?.ink ?? 0) - (plain?.ink ?? 0)) > 0.0002,
-              "plain \(String(format: "%.4f", plain?.ink ?? 0)) vs blurred \(String(format: "%.4f", blurred?.ink ?? 0))")
-        check("edge mask built", ScrollEdgeRenderer.probeMask(size: strip.size, scale: 2))
+        let size = NSSize(width: 700, height: 90)
+
+        for (name, edge) in [("top", ScrollEdgeView.Edge.top), ("bottom", .bottom)] {
+            let probe = ScrollEdgeView(edge: edge, theme: ThemeManager.shared.theme)
+            probe.source = textView
+            guard let rendered = probe.renderForTest(size: size) else {
+                check("edge renders: \(name)", false, "no bitmap")
+                continue
+            }
+            // NSBitmapImageRep indexes from the top-left, so row 0 is the top.
+            let rows = rendered.pixelsHigh
+            let band = rows / 4
+            let visualTop = ScrollEdgeRenderer.darkness(rendered, rows: 0..<band)
+            let visualBottom = ScrollEdgeRenderer.darkness(rendered, rows: (rows - band)..<rows)
+
+            check("edge renders: \(name)", visualTop + visualBottom > 0.0005,
+                  "top \(String(format: "%.4f", visualTop)) bottom \(String(format: "%.4f", visualBottom))")
+            // The covered end is the window edge: page colour hides the ink there.
+            let correct = edge == .top ? visualTop < visualBottom : visualBottom < visualTop
+            check("edge fades the right way: \(name)", correct,
+                  "top \(String(format: "%.4f", visualTop)) vs bottom \(String(format: "%.4f", visualBottom))")
+        }
 
         // --- Chrome ----------------------------------------------------------
         let dragAreas = controller.view.subviews.compactMap { $0 as? WindowDragArea }

@@ -11,6 +11,8 @@ final class DocumentViewController: NSViewController {
     private let stats = StatsPillView()
     private let optionsBar = DisplayOptionsBar()
     private let dragArea = WindowDragArea()
+    private var topEdge: ScrollEdgeView!
+    private var bottomEdge: ScrollEdgeView!
     private var toast: ToastView?
     /// Window-level blur behind a translucent palette. Hidden for opaque ones.
     private let backdrop = NSVisualEffectView()
@@ -27,6 +29,13 @@ final class DocumentViewController: NSViewController {
 
     private var theme: Theme { ThemeManager.shared.theme }
 
+    /// True when the system draws the top edge itself, through the window's
+    /// titlebar accessory, so the fallback overlay should stay out of the way.
+    private var systemDrawsTopEdge: Bool {
+        if #available(macOS 26.1, *) { return true }
+        return false
+    }
+
     // MARK: - Construction
 
     override func loadView() {
@@ -40,10 +49,15 @@ final class DocumentViewController: NSViewController {
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(backdrop)
 
+        topEdge = ScrollEdgeView(edge: .top, theme: theme)
+        bottomEdge = ScrollEdgeView(edge: .bottom, theme: theme)
+
         addChild(editor)
         let editorView = editor.view
         editorView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(editorView)
+        container.addSubview(topEdge)
+        container.addSubview(bottomEdge)
         container.addSubview(dragArea)
         container.addSubview(stats)
         container.addSubview(optionsBar)
@@ -59,6 +73,16 @@ final class DocumentViewController: NSViewController {
             editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             editorView.topAnchor.constraint(equalTo: container.topAnchor),
             editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
+            topEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            topEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            topEdge.topAnchor.constraint(equalTo: container.topAnchor),
+            topEdge.heightAnchor.constraint(equalToConstant: 90),
+
+            bottomEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bottomEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bottomEdge.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            bottomEdge.heightAnchor.constraint(equalToConstant: 74),
 
             dragArea.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             dragArea.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -76,6 +100,10 @@ final class DocumentViewController: NSViewController {
             self?.updateStats()
             self?.onTextChange?()
         }
+        topEdge.isHidden = systemDrawsTopEdge
+        topEdge.source = editor.textView
+        bottomEdge.source = editor.textView
+
         editor.onSelectionChange = { [weak self] in self?.updateSelectionToolbar() }
         editor.onScroll = { [weak self] _, _ in
         }
@@ -101,6 +129,8 @@ final class DocumentViewController: NSViewController {
 
         applyBackdrop()
         updateStats()
+        topEdge.viewportMoved()
+        bottomEdge.viewportMoved()
     }
 
     override func viewDidAppear() {
@@ -145,6 +175,8 @@ final class DocumentViewController: NSViewController {
     }
 
     @objc private func viewportMoved() {
+        topEdge.viewportMoved()
+        bottomEdge.viewportMoved()
         updateSelectionToolbar()
     }
 
@@ -153,6 +185,8 @@ final class DocumentViewController: NSViewController {
     }
 
     @objc private func themeChanged() {
+        topEdge.theme = theme
+        bottomEdge.theme = theme
         applyBackdrop()
     }
 

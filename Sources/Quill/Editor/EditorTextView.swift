@@ -190,46 +190,8 @@ final class EditorTextView: NSTextView {
         drawDecorations(in: dirtyRect)
         super.draw(dirtyRect)
         drawOverlays(in: dirtyRect)
-        drawScrollEdges(in: dirtyRect)
     }
 
-    /// The soft edges at the top and bottom of the viewport. Drawn here, pinned
-    /// to the visible rect, because this is the one draw path that is known to
-    /// render; an overlaying `NSVisualEffectView` drew nothing.
-    private func drawScrollEdges(in dirtyRect: NSRect) {
-        guard let clip = enclosingScrollView?.contentView else { return }
-        let visible = visibleRect
-        guard visible.width > 2, visible.height > 40 else { return }
-
-        let scale = window?.backingScaleFactor ?? 2
-        let page = theme.colors.page
-
-        // Only where content is actually sliding under the edge. At the very top
-        // of a document there is nothing to soften.
-        let scrolled = clip.bounds.origin.y
-        if scrolled > 2 {
-            let strip = NSRect(
-                x: visible.minX, y: visible.minY,
-                width: visible.width, height: ScrollEdgeRenderer.topHeight)
-            if strip.intersects(dirtyRect) {
-                ScrollEdgeRenderer.draw(
-                    strip: strip, fromTop: true, pageColor: page, scale: scale,
-                    render: { [weak self] rect in self?.renderPage(rect) })
-            }
-        }
-
-        let documentHeight = frame.height
-        if visible.maxY < documentHeight - 2 {
-            let strip = NSRect(
-                x: visible.minX, y: visible.maxY - ScrollEdgeRenderer.bottomHeight,
-                width: visible.width, height: ScrollEdgeRenderer.bottomHeight)
-            if strip.intersects(dirtyRect) {
-                ScrollEdgeRenderer.draw(
-                    strip: strip, fromTop: false, pageColor: page, scale: scale,
-                    render: { [weak self] rect in self?.renderPage(rect) })
-            }
-        }
-    }
 
     /// Draws a page of the document into the current graphics context without
     /// going through `NSView.draw`.

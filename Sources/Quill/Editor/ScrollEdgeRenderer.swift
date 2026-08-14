@@ -1,67 +1,87 @@
 import AppKit
 import CoreImage
 
-/// Draws the soft edge where content slides under the top and bottom of the
-/// window: a real blur of the text underneath, ramping up toward the edge, and a
-/// fade to the page colour.
+/// Draws a soft scroll edge: a blur of the content underneath that ramps up
+/// toward the window edge, then a fade to the page colour.
 ///
-/// This is done by re-rendering the strip and blurring it, rather than with an
-/// `NSVisualEffectView` in `.withinWindow` mode. That is the obvious approach and
-/// three attempts at it drew nothing at all: the effect view reports itself as
-/// visible, laid out and masked, and still samples nothing from the sibling text
-/// behind it. Rendering the strip is more work per frame, but it is work that can
-/// be seen and tested.
-struct ScrollEdgeRenderer {
+/// macOS 26.1 provides this for the top of a window through
+/// `NSTitlebarAccessoryViewController.preferredScrollEdgeEffectStyle`, which is
+/// what Quill uses there. AppKit exposes no equivalent for the bottom edge, and
+/// nothing at all before 26.1, so this covers those cases.
+///
+/// Every gradient here is drawn with explicit start and end points rather than
+/// an angle. Angles are measured in the current coordinate system, and this is
+/// drawn into a flipped view, which is how an earlier version ended up with the
+/// ramps upside down.
+enum ScrollEdgeRenderer {
 
-    /// Reused so a blur does not allocate a context per frame.
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
-
-    /// Gradient masks are the same for a given size, so they are cached.
     private static var masks: [String: CGImage] = [:]
 
-    static let topHeight: CGFloat = 88
-    static let bottomHeight: CGFloat = 72
-    static let blurRadius: CGFloat = 9
+    static let blurRadius: CGFloat = 10
 
-    /// Blurs `strip` of the view and draws it back behind a fade to the page
-    /// colour, both ramped so the effect is strongest at the window edge.
+    /// Draws the effect into `target`, taking its content from `sourceStrip` of
+    /// the document. Both rects are in flipped coordinates, so `minY` is the top.
     static func draw(
-        strip: NSRect,
-        fromTop: Bool,
+        into target: NSRect,
+        sourceStrip: NSRect,
+        strongAtTop: Bool,
         pageColor: NSColor,
         scale: CGFloat,
         render: (NSRect) -> Void
     ) {
-        guard strip.width > 2, strip.height > 2 else { return }
+        guard target.width > 2, target.height > 2,
+              let context = NSGraphicsContext.current?.cgContext else { return }
 
-        if let blurred = blur(strip: strip, scale: scale, render: render),
-           let mask = mask(size: strip.size, scale: scale, strongAtStart: fromTop),
-           let context = NSGraphicsContext.current?.cgContext {
+        if let blurred = blur(strip: sourceStrip, scale: scale, render: render),
+           let mask = mask(size: target.size, scale: scale, strongAtTop: strongAtTop) {
             context.saveGState()
-            context.clip(to: strip, mask: mask)
+            context.clip(to: target, mask: mask)
             blurred.draw(
-                in: strip, from: .zero, operation: .sourceOver, fraction: 1,
+                in: target, from: .zero, operation: .sourceOver, fraction: 1,
                 respectFlipped: true, hints: nil)
             context.restoreGState()
         }
 
-        // The fade sits on top of the blur, so text does not merely soften at the
-        // edge, it goes.
-        let gradient = NSGradient(
-            colors: fromTop
-                ? [pageColor, pageColor.withAlphaComponent(0)]
-                : [pageColor.withAlphaComponent(0), pageColor])
-        gradient?.draw(in: strip, angle: 270)
+        // The fade sits over the blur, so text at the very edge goes rather than
+        // merely softening.
+        drawFade(in: target, color: pageColor, strongAtTop: strongAtTop, context: context)
     }
 
-    // MARK: - Pieces
+    private static func drawFade(
+        in rect: NSRect, color: NSColor, strongAtTop: Bool, context: CGContext
+    ) {
+        guard let opaque = color.usingColorSpace(.sRGB) else { return }
+        let clear = opaque.withAlphaComponent(0)
+        let colors = strongAtTop
+            ? [opaque.cgColor, clear.cgColor]
+            : [clear.cgColor, opaque.cgColor]
 
-    private static func blur(strip: NSRect, scale: CGFloat, render: (NSRect) -> Void) -> NSImage? {
-        guard let representation = renderStrip(strip: strip, scale: scale, render: render) else {
-            return nil
-        }
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+            colors: colors as CFArray,
+            locations: [0, 1]
+        ) else { return }
 
-        guard let source = CIImage(bitmapImageRep: representation) else { return nil }
+        context.saveGState()
+        context.clip(to: rect)
+        // minY is the top of the view: these coordinates are flipped.
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: rect.midX, y: rect.minY),
+            end: CGPoint(x: rect.midX, y: rect.maxY),
+            options: [])
+        context.restoreGState()
+    }
+
+    // MARK: - Blur
+
+    private static func blur(
+        strip: NSRect, scale: CGFloat, render: (NSRect) -> Void
+    ) -> NSImage? {
+        guard let representation = renderStrip(strip: strip, scale: scale, render: render),
+              let source = CIImage(bitmapImageRep: representation) else { return nil }
+
         let blurred = source
             .clampedToExtent()
             .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blurRadius])
@@ -71,10 +91,11 @@ struct ScrollEdgeRenderer {
         return NSImage(cgImage: output, size: strip.size)
     }
 
-    /// Draws the strip of the document into a bitmap of its own.
-    private static func renderStrip(
+    /// Renders a strip of the document into a bitmap of its own.
+    static func renderStrip(
         strip: NSRect, scale: CGFloat, render: (NSRect) -> Void
     ) -> NSBitmapImageRep? {
+        guard strip.width > 1, strip.height > 1 else { return nil }
         guard let representation = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: Int(strip.width * scale), pixelsHigh: Int(strip.height * scale),
@@ -87,7 +108,6 @@ struct ScrollEdgeRenderer {
         let cgContext = base.cgContext
 
         NSGraphicsContext.saveGraphicsState()
-        // Into the strip's own coordinates, flipped to match the text view.
         cgContext.translateBy(x: 0, y: strip.height)
         cgContext.scaleBy(x: 1, y: -1)
         cgContext.translateBy(x: -strip.minX, y: -strip.minY)
@@ -98,25 +118,24 @@ struct ScrollEdgeRenderer {
     }
 
     /// A vertical alpha ramp used to clip the blur, opaque at the window edge.
-    private static func mask(size: NSSize, scale: CGFloat, strongAtStart: Bool) -> CGImage? {
-        let key = "\(Int(size.width))x\(Int(size.height))@\(scale)-\(strongAtStart)"
+    private static func mask(size: NSSize, scale: CGFloat, strongAtTop: Bool) -> CGImage? {
+        let key = "\(Int(size.width))x\(Int(size.height))@\(scale)-\(strongAtTop)"
         if let cached = masks[key] { return cached }
 
         let width = max(Int(size.width * scale), 1)
         let height = max(Int(size.height * scale), 1)
+        let space = CGColorSpaceCreateDeviceGray()
         guard let context = CGContext(
             data: nil, width: width, height: height,
             bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
+            space: space, bitmapInfo: CGImageAlphaInfo.none.rawValue
         ) else { return nil }
 
-        let space = CGColorSpaceCreateDeviceGray()
-        // White keeps the blur, black drops it. The strong end is the window edge.
-        let stops: [CGFloat] = [0, 1]
-        let components: [CGFloat] = strongAtStart ? [0, 0, 1, 1] : [1, 1, 0, 0]
+        // A CGContext is bottom-up, so y == 0 here is the *bottom* of the strip.
+        // White keeps the blur, black drops it.
+        let components: [CGFloat] = strongAtTop ? [0, 1] : [1, 0]
         guard let gradient = CGGradient(
-            colorSpace: space, colorComponents: components, locations: stops, count: 2
+            colorSpace: space, colorComponents: components, locations: [0, 1], count: 2
         ) else { return nil }
 
         context.drawLinearGradient(
@@ -130,39 +149,16 @@ struct ScrollEdgeRenderer {
         return image
     }
 
-    static func forgetMasks() {
-        masks.removeAll()
-    }
+    static func forgetMasks() { masks.removeAll() }
 
     // MARK: - Probes, used by --selftest
 
-    struct Sample {
-        /// Mean darkness of the strip, 0 for blank. Blurring text spreads its ink
-        /// out, so this moves measurably when a blur really happened.
-        let ink: Double
-    }
-
-    static func probeRender(strip: NSRect, scale: CGFloat, render: (NSRect) -> Void) -> Sample? {
-        guard let rep = renderStrip(strip: strip, scale: scale, render: render) else { return nil }
-        return Sample(ink: darkness(rep))
-    }
-
-    static func probeBlur(strip: NSRect, scale: CGFloat, render: (NSRect) -> Void) -> Sample? {
-        guard let image = blur(strip: strip, scale: scale, render: render),
-              let data = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: data) else { return nil }
-        return Sample(ink: darkness(rep))
-    }
-
-    static func probeMask(size: NSSize, scale: CGFloat) -> Bool {
-        mask(size: size, scale: scale, strongAtStart: true) != nil
-    }
-
-    /// Fraction of sampled pixels that carry ink, weighted by how dark they are.
-    private static func darkness(_ rep: NSBitmapImageRep) -> Double {
+    /// Mean darkness of a bitmap: 0 is blank, higher means more ink.
+    static func darkness(_ rep: NSBitmapImageRep, rows: Range<Int>? = nil) -> Double {
+        let range = rows ?? 0..<rep.pixelsHigh
         var total = 0.0
         var count = 0.0
-        for y in stride(from: 0, to: rep.pixelsHigh, by: 3) {
+        for y in stride(from: range.lowerBound, to: min(range.upperBound, rep.pixelsHigh), by: 2) {
             for x in stride(from: 0, to: rep.pixelsWide, by: 3) {
                 guard let colour = rep.colorAt(x: x, y: y) else { continue }
                 total += 1 - Double(colour.brightnessComponent)
