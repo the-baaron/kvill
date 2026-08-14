@@ -38,8 +38,9 @@ and the five GitHub alerts:
 > `[!NOTE]` text.
 
 **Eight colour themes, five typefaces.** Paper, Ink, Sepia, Nord, the glass pair
-Frost and Onyx that let the desktop show faintly through the way a native macOS
-window does, and a high contrast pair for light and dark. The typefaces are Editorial (New
+Frost and Onyx, which put the page on the system's `.sidebar` material so the
+desktop shows through the way it does in any other translucent macOS window, and
+a high contrast pair for light and dark. The typefaces are Editorial (New
 York), Grotesk (SF Pro),
 Contrast (serif headings over a sans body), Typewriter (SF Mono) and Soft
 (SF Rounded). Four text sizes, three measures. All of it app-wide and

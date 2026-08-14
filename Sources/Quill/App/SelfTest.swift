@@ -87,6 +87,18 @@ enum SelfTest {
             check("glass: page is translucent", alpha < 0.95,
                   "page alpha \(String(format: "%.2f", alpha))")
             check("system scroll edge effect requested", glassWindow.hasSoftScrollEdge)
+
+            // Half the materials are documented as opaque, and picking one of
+            // those is indistinguishable from having no glass at all.
+            let opaqueMaterials: Set<NSVisualEffectView.Material> = [
+                .windowBackground, .contentBackground, .underWindowBackground, .underPageBackground,
+            ]
+            let material = ThemeManager.shared.theme.colors.material
+            check("glass: material is a translucent one",
+                  !opaqueMaterials.contains(material), "material \(material.rawValue)")
+            check("glass: tint is light enough to see through",
+                  ThemeManager.shared.theme.colors.pageAlpha < 0.4,
+                  "tint \(String(format: "%.2f", ThemeManager.shared.theme.colors.pageAlpha))")
         } else {
             check("glass: window builds", false)
         }

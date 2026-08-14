@@ -99,10 +99,18 @@ struct ColorTheme {
     /// When true the page is painted semi-transparent over a window-level blur,
     /// so the desktop shows faintly through, the way a native macOS window does.
     var isTranslucent: Bool = false
-    /// Alpha the page colour is painted at. Only meaningful when translucent.
+    /// How strongly the palette's own colour is laid over the material. Only
+    /// meaningful when translucent, and deliberately light: a heavy tint is just
+    /// a flat colour with a blurred desktop wasted behind it.
     var pageAlpha: CGFloat = 1
     /// Material for the window-level blur behind a translucent page.
-    var material: NSVisualEffectView.Material = .underWindowBackground
+    ///
+    /// `.sidebar` is the translucent semantic material. The obvious-sounding
+    /// `.underWindowBackground` is for the area *under* a window, and
+    /// `.windowBackground` and `.contentBackground` are both documented as
+    /// opaque, which is why an earlier version of these palettes had no glass in
+    /// them at all.
+    var material: NSVisualEffectView.Material = .sidebar
 
     /// The page colour as it should actually be painted.
     var page: NSColor {
@@ -361,8 +369,8 @@ enum Palettes {
         genericCallout: CalloutColors(
             accent: NSColor(hex: "#6E6E73"), background: NSColor(hex: "#6E6E73", alpha: 0.08)),
         isTranslucent: true,
-        pageAlpha: 0.70,
-        material: .underWindowBackground
+        pageAlpha: 0.16,
+        material: .sidebar
     )
 
     /// Dark glass, the same idea after dark.
@@ -398,8 +406,8 @@ enum Palettes {
         genericCallout: CalloutColors(
             accent: NSColor(hex: "#98989F"), background: NSColor(hex: "#98989F", alpha: 0.10)),
         isTranslucent: true,
-        pageAlpha: 0.62,
-        material: .underWindowBackground
+        pageAlpha: 0.22,
+        material: .sidebar
     )
 
     static let all: [ColorTheme] = [
