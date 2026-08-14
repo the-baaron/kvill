@@ -82,16 +82,27 @@ final class ScrollEdgeView: NSView {
 
     /// Renders the effect into a bitmap so a test can measure which end of it is
     /// actually opaque, rather than taking the orientation on trust.
-    func renderForTest(size: NSSize, scale: CGFloat = 2) -> NSBitmapImageRep? {
+    /// Renders the document strip and then the effect over it, exactly as the
+    /// screen shows it. Rendering the effect alone would leave the unmasked part
+    /// of the bitmap transparent, which a measurement reads as solid black.
+    func renderForTest(size: NSSize, scale: CGFloat = 2, fade: Bool = true) -> NSBitmapImageRep? {
         guard let source else { return nil }
-        let target = NSRect(origin: .zero, size: size)
-        return ScrollEdgeRenderer.renderStrip(strip: target, scale: scale) { _ in
+        // Target and source are the same rect here, so the bitmap's coordinate
+        // space matches the document's. On screen they differ, because the view
+        // is in viewport coordinates and the document is not.
+        let strip = NSRect(x: 0, y: 200, width: size.width, height: size.height)
+
+        return ScrollEdgeRenderer.renderStrip(strip: strip, scale: scale) { _ in
+            // The content underneath.
+            source.renderPage(strip)
+            // Then the edge over the top of it.
             ScrollEdgeRenderer.draw(
-                into: target,
-                sourceStrip: NSRect(x: 0, y: 200, width: size.width, height: size.height),
+                into: strip,
+                sourceStrip: strip,
                 strongAtTop: self.edge == .top,
                 pageColor: self.theme.colors.page,
                 scale: scale,
+                fade: fade,
                 render: { rect in source.renderPage(rect) })
         }
     }

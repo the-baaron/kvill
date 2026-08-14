@@ -89,6 +89,25 @@ enum SelfTest {
             let correct = edge == .top ? visualTop < visualBottom : visualBottom < visualTop
             check("edge fades the right way: \(name)", correct,
                   "top \(String(format: "%.4f", visualTop)) vs bottom \(String(format: "%.4f", visualBottom))")
+
+            // Is the content actually blurred? Compare how sharp it is against
+            // the same strip drawn straight, in the band nearest the edge where
+            // the blur is strongest. Fading is switched off so the measurement
+            // is of blur and not of paint over the top of it.
+            let strip = NSRect(x: 0, y: 200, width: size.width, height: size.height)
+            guard let straight = ScrollEdgeRenderer.renderStrip(strip: strip, scale: 2, render: {
+                      textView.renderPage($0)
+                  }),
+                  let softened = probe.renderForTest(size: size, fade: false) else {
+                check("edge blurs: \(name)", false, "no bitmap")
+                continue
+            }
+            let rowsHigh = straight.pixelsHigh
+            let edgeBand = edge == .top ? 0..<(rowsHigh / 3) : (rowsHigh * 2 / 3)..<rowsHigh
+            let before = ScrollEdgeRenderer.sharpness(straight, rows: edgeBand)
+            let after = ScrollEdgeRenderer.sharpness(softened, rows: edgeBand)
+            check("edge blurs: \(name)", before > 0 && after < before * 0.7,
+                  "sharpness \(String(format: "%.4f", before)) to \(String(format: "%.4f", after))")
         }
 
         // --- Chrome ----------------------------------------------------------

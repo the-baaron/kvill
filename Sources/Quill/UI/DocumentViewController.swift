@@ -29,13 +29,6 @@ final class DocumentViewController: NSViewController {
 
     private var theme: Theme { ThemeManager.shared.theme }
 
-    /// True when the system draws the top edge itself, through the window's
-    /// titlebar accessory, so the fallback overlay should stay out of the way.
-    private var systemDrawsTopEdge: Bool {
-        if #available(macOS 26.1, *) { return true }
-        return false
-    }
-
     // MARK: - Construction
 
     override func loadView() {
@@ -100,7 +93,6 @@ final class DocumentViewController: NSViewController {
             self?.updateStats()
             self?.onTextChange?()
         }
-        topEdge.isHidden = systemDrawsTopEdge
         topEdge.source = editor.textView
         bottomEdge.source = editor.textView
 
