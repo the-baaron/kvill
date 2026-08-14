@@ -14,7 +14,14 @@ final class MarkdownDocument: NSDocument {
 
     private weak var controller: DocumentViewController?
 
+    /// Watches the file for changes made by anything other than this window.
+    private var watcher: FileWatcher?
+    /// When this document last wrote the file, so its own writes are not read
+    /// back in as somebody else's edit.
+    private var lastWrite = Date.distantPast
+
     override class var autosavesInPlace: Bool { true }
+
 
     override var windowNibName: NSNib.Name? { nil }
 
@@ -29,6 +36,7 @@ final class MarkdownDocument: NSDocument {
         }
         controller = viewController
         normalizeSource()
+        startWatching()
         viewController.documentURL = fileURL
         viewController.documentTitle = displayName
         viewController.loadText(content)
@@ -79,7 +87,48 @@ final class MarkdownDocument: NSDocument {
             // makes any relative paths already written resolve.
             controller?.documentURL = fileURL
             controller?.documentTitle = displayName
+            startWatching()
         }
+    }
+
+    // MARK: - Following the file
+
+    /// Watches the file so the window always shows what is actually on disk.
+    ///
+    /// Together with the half-second autosave this makes the file the single
+    /// copy of the truth: this window writes what you type almost immediately,
+    /// and picks up anything written by anything else almost immediately, so
+    /// the two can never drift far enough apart to need a conflict dialogue.
+    private func startWatching() {
+        watcher = nil
+        guard let url = fileURL else { return }
+        watcher = FileWatcher(url: url) { [weak self] in
+            self?.fileChangedOnDisk()
+        }
+    }
+
+    private func fileChangedOnDisk() {
+        guard let url = fileURL else { return }
+        // A write this document made itself is not news.
+        guard Date().timeIntervalSince(lastWrite) > 0.6 else { return }
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: encoding)
+                ?? String(data: data, encoding: .utf8) else { return }
+
+        let current = controller?.text ?? content
+        guard text != current else { return }
+
+        // An edit of our own that has not been written yet would be thrown away
+        // by reloading, so it is written first and the reload is skipped: the
+        // file and the window already agree once that write lands.
+        if isDocumentEdited {
+            autosave(withImplicitCancellability: false) { _ in }
+            return
+        }
+
+        content = text
+        controller?.replaceKeepingPlace(with: text)
+        updateChangeCount(.changeCleared)
     }
 
     override func data(ofType typeName: String) throws -> Data {
@@ -99,7 +148,18 @@ final class MarkdownDocument: NSDocument {
         for saveOperation: NSDocument.SaveOperationType,
         completionHandler: @escaping (Error?) -> Void
     ) {
+        // Tables are squared up on the way to disk, so a file is tidy even if
+        // the caret never left the table being typed into. Only on a save the
+        // user asked for: doing it on every autosave would reflow the columns
+        // under the cursor mid-word, which is the thing the caret-leave rule
+        // exists to avoid.
+        if saveOperation != .autosaveInPlaceOperation,
+           saveOperation != .autosaveElsewhereOperation {
+            controller?.formatTables()
+        }
+        lastWrite = Date()
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
+            self?.lastWrite = Date()
             completionHandler(error)
             // Autosaves happen on their own schedule; confirming those would be
             // noise. This is only for a save the user asked for.

@@ -101,6 +101,10 @@ struct MDLine {
     /// Set when the line is nothing but an image, which is drawn in place of
     /// the Markdown that describes it.
     var blockImage: BlockImage?
+    /// First and last line of their block, so a block can be given space above
+    /// and below it without every line inside it getting the same.
+    var isBlockStart = false
+    var isBlockEnd = false
     /// Characters in the longest row of the table this line belongs to. The
     /// table is monospace, so this is its width in one number, and the styler
     /// can size it to the measure without laying anything out.

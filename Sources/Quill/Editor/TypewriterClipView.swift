@@ -9,6 +9,24 @@ import AppKit
 /// halves the visible text area instead of adding slack below it.
 final class TypewriterClipView: NSClipView {
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUp()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUp()
+    }
+
+    /// Scrolling by copying pixels and redrawing only the newly exposed strip
+    /// cuts anything drawn outside that strip, which is why a table's panel lost
+    /// its right edge and corners while scrolling sideways. Redrawing the whole
+    /// visible area instead costs a little and is always right.
+    private func setUp() {
+        copiesOnScroll = false
+    }
+
     /// Extra scrollable space below the document, in points.
     var bottomSlack: CGFloat = 0 {
         didSet {

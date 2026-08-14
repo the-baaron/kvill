@@ -454,6 +454,12 @@ enum MarkdownParser {
             lines[index].decoration = decoration(for: lines[index])
         }
 
+        for index in lines.indices {
+            lines[index].isBlockStart = index == 0 || lines[index - 1].blockID != lines[index].blockID
+            lines[index].isBlockEnd =
+                index == lines.count - 1 || lines[index + 1].blockID != lines[index].blockID
+        }
+
         // A quote block that opens with `> [!NOTE]` is a callout all the way down,
         // not just on its title line.
         var index = 0

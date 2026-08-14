@@ -122,8 +122,12 @@ final class EditorTextView: NSTextView {
         isIncrementalSearchingEnabled = true
         smartInsertDeleteEnabled = false
         isVerticallyResizable = true
-        isHorizontallyResizable = false
-        textContainer?.widthTracksTextView = true
+        // The container is set explicitly, not tracked from the view's width: it
+        // has to be as wide as the widest table in the document so that a table
+        // can be scrolled sideways to, while prose is held to the measure by its
+        // own tail indent.
+        isHorizontallyResizable = true
+        textContainer?.widthTracksTextView = false
         textContainer?.lineFragmentPadding = 0
 
         registerForDraggedTypes([
@@ -391,9 +395,13 @@ final class EditorTextView: NSTextView {
                      stroke: theme.colors.codeBorder)
 
             case .table:
+                // A table is as wide as it is, not as wide as the measure: it
+                // runs on past the column and is scrolled to, so the panel has
+                // to follow it rather than cut it off.
+                let right = max(columnRight, bounds.maxX)
                 let box = NSRect(
                     x: columnLeft - 14, y: bounds.minY - 6,
-                    width: columnRight - columnLeft + 28, height: bounds.height + 12)
+                    width: right - columnLeft + 28, height: bounds.height + 12)
                 fill(box, radius: 8, color: theme.colors.codeBackground,
                      stroke: theme.colors.tableBorder.withAlpha(0.5))
 
@@ -512,7 +520,7 @@ final class EditorTextView: NSTextView {
         return rect
     }
 
-    private func blockRect(for ranges: [NSRange]) -> NSRect? {
+    func blockRect(for ranges: [NSRange]) -> NSRect? {
         var result: NSRect?
         for range in ranges {
             guard let rect = rect(for: range) else { continue }
@@ -522,6 +530,32 @@ final class EditorTextView: NSTextView {
     }
 
     // MARK: - Interaction
+
+    /// Sideways scrolling belongs to tables.
+    ///
+    /// The text container is wider than the measure only so that a table too
+    /// wide for the column can be reached. Everywhere else that extra width is
+    /// empty page, and scrolling into it would just push the writing off the
+    /// screen, so a horizontal swipe is ignored unless the pointer is on a
+    /// table. Vertical scrolling is never touched.
+    override func scrollWheel(with event: NSEvent) {
+        let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+        if sideways, !isOverTable(convert(event.locationInWindow, from: nil)) {
+            return
+        }
+        super.scrollWheel(with: event)
+    }
+
+    /// True when the point is inside a table's panel.
+    func isOverTable(_ point: NSPoint) -> Bool {
+        for decoration in decorations where decoration.kind == .table {
+            guard let bounds = blockRect(for: decoration.lineRanges) else { continue }
+            if bounds.insetBy(dx: 0, dy: -8).contains(NSPoint(x: bounds.midX, y: point.y)) {
+                return true
+            }
+        }
+        return false
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)

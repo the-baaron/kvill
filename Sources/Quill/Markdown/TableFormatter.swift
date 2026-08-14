@@ -111,68 +111,6 @@ enum TableFormatter {
         return result
     }
 
-    // MARK: - Reading a table out
-
-    /// A table lifted out of the document, ready to be edited as data.
-    struct Table {
-        /// Characters from the start of the first row to the end of the last,
-        /// with no trailing newline, so it can be replaced wholesale.
-        var range: NSRange
-        /// The header first, then the body. The delimiter row is not here: it
-        /// carries alignment, which is held separately, and nothing else.
-        var rows: [[String]]
-        var alignments: [Alignment]
-
-        var columnCount: Int { max(alignments.count, rows.map(\.count).max() ?? 0) }
-    }
-
-    /// The table containing the given line, or nil when there is not one.
-    static func table(atLine line: Int, in document: ParsedDocument, text: NSString) -> Table? {
-        guard line >= 0, line < document.lines.count, document.lines[line].kind.isTable else {
-            return nil
-        }
-        var start = line
-        while start > 0, document.lines[start - 1].kind.isTable { start -= 1 }
-        let end = tableEnd(from: start, in: document)
-        guard end - start >= 2 else { return nil }
-
-        let lines = Array(document.lines[start..<end])
-        let parsedRows = lines.map { cells(text.substring(with: $0.range)) }
-        let alignments = self.alignments(parsedRows[1])
-
-        var rows = parsedRows
-        rows.remove(at: 1)
-
-        let first = lines[0].range
-        let last = lines[lines.count - 1].range
-        return Table(
-            range: NSRange(location: first.location, length: NSMaxRange(last) - first.location),
-            rows: rows,
-            alignments: alignments)
-    }
-
-    /// The Markdown for a table held as data. `rows[0]` is the header; the
-    /// delimiter row is written for you.
-    static func render(rows: [[String]], alignments: [Alignment]) -> String {
-        guard let header = rows.first else { return "" }
-        let columns = max(alignments.count, rows.map(\.count).max() ?? 0)
-        guard columns > 0 else { return "" }
-
-        var widths = [Int](repeating: 3, count: columns)
-        for row in rows {
-            for (column, cell) in row.enumerated() where column < columns {
-                widths[column] = max(widths[column], cell.count)
-            }
-        }
-
-        var lines = [row(header, widths: widths, alignments: alignments)]
-        lines.append(delimiterRow(widths: widths, alignments: alignments))
-        for body in rows.dropFirst() {
-            lines.append(row(body, widths: widths, alignments: alignments))
-        }
-        return lines.joined(separator: "\n")
-    }
-
     // MARK: - Cells
 
     /// Splits a row on its unescaped pipes, dropping the empty fields that a

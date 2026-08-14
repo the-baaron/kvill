@@ -21,10 +21,16 @@ final class EditorViewController: NSViewController {
     private var isFormatting = false
     /// Line of the table the caret was in last, so leaving one can be noticed.
     private var caretTableLineNumber: Int?
-    /// Held so the popover is not deallocated the moment it is shown.
-    private var tablePopover: NSPopover?
     private var isAutoScrolling = false
     private var lastContentWidth: CGFloat = -1
+    /// The insert menu, built the first time a `/` is typed.
+    private var slashMenu: SlashMenuPanel?
+    /// Range of the `/` that opened the menu, so the query after it can be read
+    /// and taken back out again.
+    private var slashRange: NSRange?
+    /// Width the widest table needs, so a document with one can be scrolled
+    /// sideways to reach it.
+    private var widestTable: CGFloat = 0
 
     private var theme: Theme { ThemeManager.shared.theme }
 
@@ -58,7 +64,10 @@ final class EditorViewController: NSViewController {
         storage.addLayoutManager(layoutManager)
 
         let container = NSTextContainer(size: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
-        container.widthTracksTextView = true
+        // The container is set explicitly rather than tracking the view: it has
+        // to be as wide as the widest table so a table can be scrolled to, while
+        // prose is held to the measure by its own tail indent.
+        container.widthTracksTextView = false
         container.lineFragmentPadding = 0
         layoutManager.addTextContainer(container)
 
@@ -74,7 +83,9 @@ final class EditorViewController: NSViewController {
     override func loadView() {
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.autoresizingMask = [.width]
+        textView.autoresizingMask = []
+        textView.isHorizontallyResizable = true
+        textView.isVerticallyResizable = true
         textView.delegate = self
         textView.textStorage?.delegate = self
         textView.theme = theme
@@ -87,7 +98,9 @@ final class EditorViewController: NSViewController {
         scrollView.contentView = TypewriterClipView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        // Only ever in use when a table is wider than the column; it autohides
+        // the rest of the time, which is nearly always.
+        scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = !theme.colors.isTranslucent
         scrollView.backgroundColor = theme.colors.page
@@ -134,6 +147,34 @@ final class EditorViewController: NSViewController {
         textView.string
     }
 
+    /// Replaces the document with what is now on disk, keeping the caret and
+    /// the scroll position.
+    ///
+    /// Reloading a file you are looking at is only pleasant if it does not throw
+    /// you back to the top, so the scroll offset is put back and the caret is
+    /// carried to the same place in the new text, clamped if the file got
+    /// shorter. Undo is left alone: an outside change is not something this
+    /// window can undo.
+    func replaceKeepingPlace(with text: String) {
+        guard let storage = textView.textStorage else { return }
+        let scroll = scrollView.contentView.bounds.origin
+        let caret = textView.selectedRange().location
+
+        isStyling = true
+        storage.beginEditing()
+        storage.replaceCharacters(
+            in: NSRange(location: 0, length: storage.length), with: text)
+        storage.endEditing()
+        isStyling = false
+
+        refresh(fullRestyle: true)
+
+        let length = (textView.string as NSString).length
+        textView.setSelectedRange(NSRange(location: min(caret, length), length: 0))
+        scrollView.contentView.setBoundsOrigin(scroll)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
     // MARK: - Layout
 
     private func updateInsets() {
@@ -155,10 +196,55 @@ final class EditorViewController: NSViewController {
             clip.bottomSlack = max(0, scrollView.frame.height * 0.7)
         }
 
+        // As wide as the document needs: the measure, or the widest table in it.
+        applyContainerWidth()
+        let wanted = max(metrics.contentWidth, widestTable) + horizontal * 2
+        if abs(textView.frame.width - wanted) > 0.5 {
+            textView.frame.size.width = wanted
+        }
+
+        containerOrigin = textView.textContainerOrigin
+
         if lastContentWidth != metrics.contentWidth {
             lastContentWidth = metrics.contentWidth
             textView.needsDisplay = true
         }
+    }
+
+    /// Width the widest table wants. Changing it re-lays out the container, so
+    /// it is only acted on when it actually moves.
+    private func measureTables() {
+        var widest = 0
+        for line in parsed.lines where line.kind.isTable {
+            widest = max(widest, line.tableWidth)
+        }
+        let width = styler.tableWidth(characters: widest)
+        guard abs(width - widestTable) > 0.5 else { return }
+        widestTable = width
+        // The container can be resized here: it invalidates layout without
+        // performing any. The text view's frame cannot, because resizing it
+        // forces layout, and this runs inside the storage's endEditing where
+        // that raises. The frame follows in the next layout pass.
+        applyContainerWidth()
+        view.needsLayout = true
+    }
+
+    /// Last known container origin, refreshed at layout time. Asking the text
+    /// view for it mid-edit would force layout.
+    private var containerOrigin: NSPoint = .zero
+
+    /// Widens the text container to whichever is greater, the measure or the
+    /// widest table in the document.
+    private func applyContainerWidth() {
+        guard let container = textView.textContainer else { return }
+        let wanted = max(theme.metrics.contentWidth, widestTable)
+        guard container.size.width != wanted else { return }
+        container.size = NSSize(width: wanted, height: CGFloat.greatestFiniteMagnitude)
+        // Changing the container throws away the layout that was there. Without
+        // asking for a redraw the window can sit blank until something else
+        // happens to invalidate it, which is why a document could open showing
+        // nothing until it was scrolled.
+        textView.needsDisplay = true
     }
 
     // MARK: - Parse and style
@@ -177,6 +263,7 @@ final class EditorViewController: NSViewController {
         let text = storage.string as NSString
         parsed = MarkdownParser.parse(text)
         textView.document = parsed
+        measureTables()
         indexBlocks()
         recomputeActiveBlocks()
 
@@ -231,7 +318,10 @@ final class EditorViewController: NSViewController {
               let container = textView.textContainer,
               !parsed.lines.isEmpty else { return 0..<0 }
 
-        let origin = textView.textContainerOrigin
+        // Not `textView.textContainerOrigin`: on a horizontally resizable text
+        // view that recomputes the frame, which forces layout, and this is
+        // reached from inside the storage's endEditing where layout raises.
+        let origin = containerOrigin
         let visible = textView.visibleRect
             .insetBy(dx: 0, dy: -textView.visibleRect.height)
             .offsetBy(dx: -origin.x, dy: -origin.y)
@@ -453,8 +543,19 @@ final class EditorViewController: NSViewController {
     /// trick: the columns are never rewritten under the cursor while a cell is
     /// half-typed, and by the time the table is read it is already square.
     private func formatTable(atLine line: Int) {
+        guard let storage = textView.textStorage else { return }
+        apply(TableFormatter.edits(forLine: line, in: parsed, text: storage.string as NSString))
+    }
+
+    /// Squares up every table in the document at once. Used on save, where the
+    /// caret may never have left the table being typed into.
+    func formatAllTables() {
+        guard let storage = textView.textStorage else { return }
+        apply(TableFormatter.allEdits(in: parsed, text: storage.string as NSString))
+    }
+
+    private func apply(_ edits: [TableFormatter.Edit]) {
         guard !isFormatting, let storage = textView.textStorage else { return }
-        let edits = TableFormatter.edits(forLine: line, in: parsed, text: storage.string as NSString)
         guard !edits.isEmpty else { return }
 
         let ranges = edits.map { NSValue(range: $0.range) }
@@ -484,55 +585,141 @@ final class EditorViewController: NSViewController {
         textView.setSelectedRange(selection)
     }
 
-    /// Rect of the table the caret is in, in the given view's coordinates, so a
-    /// control can be put on its corner. Nil when the caret is elsewhere.
-    func caretTableRect(in target: NSView) -> NSRect? {
-        guard let storage = textView.textStorage,
-              let line = caretTableLine(),
-              let table = TableFormatter.table(
-                atLine: line, in: parsed, text: storage.string as NSString),
-              let rect = textView.rect(for: table.range) else { return nil }
-        return textView.convert(rect, to: target)
+    /// True while the insert menu is up. Tracked here rather than asked of the
+    /// panel: a floating panel reports itself invisible whenever the app is not
+    /// active, and the menu's state is about the document, not about focus.
+    private(set) var isSlashMenuOpen = false
+
+    /// Shuts the insert menu, for the self test.
+    func closeSlashMenuForTest() { closeSlashMenu() }
+
+    // MARK: - Slash menu
+
+    /// Opens the insert menu when a `/` is typed where a block could start.
+    ///
+    /// The menu takes no focus, so typing carries on into the document and the
+    /// list narrows underneath. That is what keeps it feeling like part of the
+    /// text rather than a dialogue you have been sent off to.
+    private func slashTyped(at location: Int) {
+        guard let storage = textView.textStorage else { return }
+        let text = storage.string as NSString
+        guard location < text.length, text.character(at: location) == 47 else { return }
+
+        // Only where something new could begin: the start of a line, or after a
+        // space. Otherwise every URL would open a menu.
+        if location > 0 {
+            let before = text.character(at: location - 1)
+            let atLineStart = before == 10 || before == 13
+            guard atLineStart || MarkdownParser.isSpace(before) else { return }
+        }
+
+        slashRange = NSRange(location: location, length: 1)
+        // Not shown from here. Placing the menu asks the layout manager where
+        // the caret is, and this runs inside the storage's endEditing where
+        // forcing layout raises. A turn of the run loop later it is safe.
+        DispatchQueue.main.async { [weak self] in self?.showSlashMenu() }
     }
 
-    /// Opens the table editor on the table the caret is in.
-    ///
-    /// Returns false when there is no table there, so the Table command can fall
-    /// back to inserting one.
-    @discardableResult
-    func editTableAtCaret() -> Bool {
-        guard let storage = textView.textStorage,
-              let line = caretTableLine(),
-              let table = TableFormatter.table(
-                atLine: line, in: parsed, text: storage.string as NSString) else { return false }
-
-        // The popover points at the table, so it never covers what is being
-        // edited unless there is nowhere else for it to go.
-        let anchor = textView.rect(for: table.range) ?? textView.visibleRect
-
-        var range = table.range
-        let editor = TableEditorViewController(table: table) { [weak self] markdown in
-            guard let self, let storage = self.textView.textStorage else { return }
-            guard NSMaxRange(range) <= storage.length else { return }
-            guard self.textView.shouldChangeText(in: range, replacementString: markdown) else {
-                return
-            }
-            self.isFormatting = true
-            storage.replaceCharacters(in: range, with: markdown)
-            self.isFormatting = false
-            self.textView.didChangeText()
-            // The replacement is the table's new extent, and the next edit from
-            // the panel has to overwrite that rather than the old one.
-            range = NSRange(location: range.location, length: (markdown as NSString).length)
+    private func showSlashMenu() {
+        let menu = slashMenu ?? SlashMenuPanel()
+        slashMenu = menu
+        menu.onChoose = { [weak self] command in
+            guard let self else { return }
+            self.closeSlashMenu()
+            guard let command else { return }
+            self.removeSlashQuery()
+            command.run(self)
         }
-        editor.preferredContentSize = editor.preferredSize
+        guard menu.update(query: "") else {
+            closeSlashMenu()
+            return
+        }
+        // The caret's own line fragment: it exists even on an empty line, where
+        // asking for the rect of a zero-length selection gives nothing.
+        let caret = textView.lineFragmentRect(
+            atCharacterIndex: textView.selectedRange().location)
+            ?? slashCaretRect()
+            ?? NSRect(origin: textView.visibleRect.origin, size: NSSize(width: 1, height: 20))
+        menu.position(below: caret, in: textView)
+        menu.orderFront(nil)
+        isSlashMenuOpen = true
+    }
 
-        let popover = NSPopover()
-        popover.contentViewController = editor
-        popover.behavior = .transient
-        popover.show(relativeTo: anchor, of: textView, preferredEdge: .maxY)
-        tablePopover = popover
-        return true
+    private func slashCaretRect() -> NSRect? {
+        guard let slashRange else { return nil }
+        return textView.rect(for: slashRange)
+    }
+
+
+    /// Keeps the list in step with what has been typed since the slash, and
+    /// closes it once the text stops looking like a command.
+    private func updateSlashMenu() {
+        guard let menu = slashMenu, let slashRange, let storage = textView.textStorage else {
+            return
+        }
+        let caret = textView.selectedRange()
+        let start = NSMaxRange(slashRange)
+        guard caret.length == 0, caret.location >= start, NSMaxRange(slashRange) <= storage.length
+        else {
+            closeSlashMenu()
+            return
+        }
+        let queryRange = NSRange(location: start, length: caret.location - start)
+        guard NSMaxRange(queryRange) <= storage.length else {
+            closeSlashMenu()
+            return
+        }
+        let query = (storage.string as NSString).substring(with: queryRange)
+        // A space means it was prose after all, not a command.
+        guard !query.contains(" "), !query.contains("\n"), query.count < 24 else {
+            closeSlashMenu()
+            return
+        }
+        guard menu.update(query: query) else {
+            closeSlashMenu()
+            return
+        }
+    }
+
+    /// Takes the `/query` back out, so the command acts on a clean line.
+    private func removeSlashQuery() {
+        guard let slashRange, let storage = textView.textStorage else { return }
+        let caret = textView.selectedRange().location
+        let end = max(NSMaxRange(slashRange), caret)
+        guard end <= storage.length else { return }
+        let range = NSRange(location: slashRange.location, length: end - slashRange.location)
+        guard textView.shouldChangeText(in: range, replacementString: "") else { return }
+        storage.replaceCharacters(in: range, with: "")
+        textView.didChangeText()
+        textView.setSelectedRange(NSRange(location: range.location, length: 0))
+    }
+
+    private func closeSlashMenu() {
+        slashMenu?.orderOut(nil)
+        slashRange = nil
+        isSlashMenuOpen = false
+    }
+
+    /// Arrow keys, Return and Escape belong to the menu while it is open. The
+    /// text view asks first, which is how the caret can stay in the document.
+    private func slashMenuHandles(_ selector: Selector) -> Bool {
+        guard let menu = slashMenu, isSlashMenuOpen else { return false }
+        switch selector {
+        case #selector(NSResponder.moveUp(_:)):
+            menu.moveSelection(by: -1)
+            return true
+        case #selector(NSResponder.moveDown(_:)):
+            menu.moveSelection(by: 1)
+            return true
+        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)):
+            menu.chooseSelected()
+            return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            closeSlashMenu()
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - Scroll edges
@@ -655,6 +842,18 @@ extension EditorViewController: NSTextStorageDelegate {
         guard editedMask.contains(.editedCharacters), !isStyling else { return }
         refresh(fullRestyle: false, editedRange: editedRange)
         onTextChange?()
+
+        // A `/` just typed opens the insert menu. The check is on the character
+        // behind the caret rather than on the edited range, because attribute
+        // fixing widens that range to the whole paragraph and it is never the
+        // single character it started as.
+        // The selection has not moved on yet at this point, so it still marks
+        // where the character went. The edited range is no help: attribute
+        // fixing widens it well past the one character that was typed.
+        let caret = textView.selectedRange()
+        if delta == 1, slashRange == nil, caret.length == 0 {
+            slashTyped(at: caret.location)
+        }
     }
 }
 
@@ -663,6 +862,7 @@ extension EditorViewController: NSTextStorageDelegate {
 extension EditorViewController: NSTextViewDelegate {
 
     func textViewDidChangeSelection(_ notification: Notification) {
+        updateSlashMenu()
         let table = caretTableLine()
         if let left = caretTableLineNumber, table == nil || !sameTable(left, table) {
             formatTable(atLine: left)
@@ -675,6 +875,7 @@ extension EditorViewController: NSTextViewDelegate {
     }
 
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if slashMenuHandles(selector) { return true }
         switch selector {
         case #selector(NSResponder.insertNewline(_:)):
             return continueListOnReturn()

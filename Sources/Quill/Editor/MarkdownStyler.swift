@@ -121,7 +121,11 @@ final class MarkdownStyler {
             spacingBefore: layout.before,
             spacingAfter: layout.after,
             // A caption belongs under the middle of its picture.
-            alignment: image != nil ? .center : .natural
+            alignment: image != nil ? .center : .natural,
+            // The container is as wide as the widest table in the document, so
+            // prose is held to the measure here instead of by the container.
+            // A table gets no tail indent and runs on to its natural width.
+            tailIndent: line.kind.isTable ? 0 : metrics.contentWidth
         )
 
         let base = baseAttributes(for: line, style: style, lineHeight: layout.height)
@@ -178,29 +182,18 @@ final class MarkdownStyler {
 
     }
 
-    /// The size a table is set at so it fits the measure.
+    /// How wide a table of this many characters wants to be.
     ///
-    /// A monospace table's width is its longest row times one advance, so the
-    /// fit is a division rather than a layout pass: no cell is measured, nothing
-    /// is kerned, and nothing iterates. Below the floor a table is genuinely too
-    /// wide for the column and is left to wrap.
-    private func tableFont(for line: MDLine, bold: Bool) -> NSFont {
-        let full = bold ? theme.monoSmallBold : theme.monoSmall
-        guard line.tableWidth > 0 else { return full }
-
-        let advance = monoAdvance(full)
-        let required = CGFloat(line.tableWidth) * advance
-        // The panel behind the table is inset by 14pt on each side.
-        let available = theme.metrics.measure - 4
-        guard required > available else { return full }
-
-        let scale = max(0.7, available / required)
-        let key = "table|\(bold)|\(round(full.pointSize * scale * 10))"
-        if let cached = traitFonts[key] { return cached }
-        let sized = FontBuilder.font(.mono, size: full.pointSize * scale,
-                                     weight: bold ? .semibold : .regular)
-        traitFonts[key] = sized
-        return sized
+    /// Monospace makes this arithmetic rather than a layout pass: one advance
+    /// times the longest row. The text container is widened to the answer so a
+    /// table that will not fit the measure can be scrolled to instead of being
+    /// shrunk or, worse, wrapped.
+    func tableWidth(characters: Int) -> CGFloat {
+        guard characters > 0 else { return 0 }
+        // The panel behind a table is drawn 14pt wider than the text on each
+        // side, so the container has to leave room for it or the rounded corner
+        // falls off the end of the view.
+        return theme.metrics.gutter + CGFloat(characters) * monoAdvance(theme.monoSmall) + 34
     }
 
     /// Width of one character in a monospace face. Uniform by definition, so it
@@ -263,10 +256,10 @@ final class MarkdownStyler {
             font = theme.monoSmall
             color = colors.textSecondary
         case .tableRow(let header):
-            font = tableFont(for: line, bold: header)
+            font = header ? theme.monoSmallBold : theme.monoSmall
             color = colors.text
         case .tableDelimiter:
-            font = tableFont(for: line, bold: false)
+            font = theme.monoSmall
             color = colors.textSecondary.withAlpha(0.55)
         case .blockquote, .calloutTitle:
             color = colors.quoteText
@@ -607,7 +600,12 @@ final class MarkdownStyler {
         case .codeLine, .indentedCode:
             return LineLayout(height: base * 1.48, before: 0, after: 0)
         case .tableRow, .tableDelimiter:
-            return LineLayout(height: base * 1.55, before: 0, after: 0)
+            // The panel needs air around it, but only at the block's edges: put
+            // it on every line and the rows would drift apart inside the table.
+            return LineLayout(
+                height: base * 1.55,
+                before: line.isBlockStart ? base * 1.1 : 0,
+                after: line.isBlockEnd ? base * 1.1 : 0)
         case .fenceDelimiter, .frontMatterDelimiter:
             // The delimiter is usually invisible, so it reads as the block's top
             // and bottom padding. Kept at a fixed height so revealing it on the
@@ -631,14 +629,16 @@ final class MarkdownStyler {
     private func paragraphStyle(
         firstIndent: CGFloat, headIndent: CGFloat, lineHeight: CGFloat,
         spacingBefore: CGFloat, spacingAfter: CGFloat,
-        alignment: NSTextAlignment = .natural
+        alignment: NSTextAlignment = .natural,
+        tailIndent: CGFloat = 0
     ) -> NSParagraphStyle {
-        let key = "\(round(firstIndent))|\(round(headIndent))|\(round(lineHeight))|\(round(spacingBefore))|\(round(spacingAfter))|\(alignment.rawValue)"
+        let key = "\(round(firstIndent))|\(round(headIndent))|\(round(lineHeight))|\(round(spacingBefore))|\(round(spacingAfter))|\(alignment.rawValue)|\(round(tailIndent))"
         if let cached = paragraphStyles[key] { return cached }
 
         let style = NSMutableParagraphStyle()
         style.firstLineHeadIndent = max(0, firstIndent)
         style.headIndent = max(0, headIndent)
+        style.tailIndent = tailIndent
         style.minimumLineHeight = lineHeight
         style.maximumLineHeight = lineHeight
         style.paragraphSpacingBefore = spacingBefore

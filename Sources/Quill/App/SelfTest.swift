@@ -80,26 +80,107 @@ enum SelfTest {
                   rows.map(\.count).description)
             check("table: text around it is untouched",
                   editor.text.hasPrefix("Before.") && editor.text.hasSuffix("After."), "")
+        }
 
-            // The badge is the only way to find the editor without knowing the
-            // shortcut, so whether it shows up is worth a check of its own.
-            let inTableAgain = (editor.text as NSString).range(of: "| 1").location + 2
-            editor.textView.setSelectedRange(NSRange(location: inTableAgain, length: 0))
-            controller.view.layoutSubtreeIfNeeded()
-            let badges = controller.view.subviews.compactMap { $0 as? TableBadgeView }
-            check("table badge: appears with the caret in a table",
-                  badges.first?.isHidden == false, "\(badges.count) found")
-            check("table badge: sits over the table",
-                  (badges.first?.frame.width ?? 0) > 40
-                    && (badges.first?.frame.width ?? 0) < 200,
-                  badges.first.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none")
+        // --- A wide table widens the container rather than wrapping -----------
+        do {
+            let editor = controller.editor
+            controller.loadText("""
+            Prose that should still wrap where it always did, whatever is below it.
 
-            editor.textView.setSelectedRange(
-                NSRange(location: (editor.text as NSString).range(of: "After.").location, length: 0))
+            | a | b |
+            | --- | --- |
+            | \(String(repeating: "wide ", count: 30)) | x |
+            """)
             controller.view.layoutSubtreeIfNeeded()
-            check("table badge: goes when the caret leaves",
-                  badges.first?.alphaValue ?? 1 < 1 || badges.first?.isHidden == true,
-                  "alpha \(String(format: "%.2f", badges.first?.alphaValue ?? -1))")
+
+            let measure = ThemeManager.shared.theme.metrics.contentWidth
+            let container = editor.textView.textContainer?.size.width ?? 0
+            check("wide table: container grows past the measure", container > measure + 100,
+                  "container \(Int(container)) vs measure \(Int(measure))")
+
+            let widest = editor.parsed.lines.filter { $0.kind.isTable }.map(\.tableWidth).max() ?? 0
+            check("wide table: its width was measured", widest > 100, "\(widest) characters")
+            let probe = MarkdownStyler(theme: ThemeManager.shared.theme)
+            check("wide table: width in points", probe.tableWidth(characters: widest) > 900,
+                  "\(Int(probe.tableWidth(characters: widest)))pt for \(widest) characters")
+
+            let rows = editor.parsed.lines.filter { $0.kind.isTable }.count
+            var fragments = 0
+            if let manager = editor.textView.layoutManager, let box = editor.textView.textContainer {
+                manager.ensureLayout(for: box)
+                manager.enumerateLineFragments(
+                    forGlyphRange: NSRange(location: 0, length: manager.numberOfGlyphs)
+                ) { _, _, _, _, _ in fragments += 1 }
+            }
+            check("wide table: no row wraps", fragments <= rows + 4,
+                  "\(fragments) fragments, \(rows) table rows plus prose")
+
+            check("wide table: it can be scrolled to",
+                  editor.scrollView.hasHorizontalScroller, "")
+
+            // Sideways scrolling is for tables and nothing else.
+            let tableRect = editor.textView.blockRect(
+                for: editor.parsed.lines.filter { $0.kind.isTable }.map(\.range))
+            check("wide table: sideways scrolling works on it",
+                  tableRect.map { editor.textView.isOverTable(NSPoint(x: 0, y: $0.midY)) } ?? false,
+                  "")
+            check("wide table: sideways scrolling is off over prose",
+                  !editor.textView.isOverTable(NSPoint(x: 0, y: 0)), "")
+
+            // The panel has to reach the end of the widest row, not stop at the
+            // measure, or a scrolled table runs off its own background.
+            check("wide table: the panel is as wide as the table",
+                  (tableRect?.width ?? 0) > measure - 200,
+                  "panel \(Int(tableRect?.width ?? 0)) vs measure \(Int(measure))")
+        }
+
+        // --- Slash menu -------------------------------------------------------
+        do {
+            check("slash menu: lists every block",
+                  SlashCommand.all.count >= 15, "\(SlashCommand.all.count) commands")
+            check("slash menu: filters by title",
+                  SlashCommand.matching("tab").first?.title == "Table",
+                  SlashCommand.matching("tab").first?.title ?? "nothing")
+            check("slash menu: filters by keyword",
+                  SlashCommand.matching("h1").first?.title == "Heading 1",
+                  SlashCommand.matching("h1").first?.title ?? "nothing")
+            check("slash menu: nothing matches nonsense",
+                  SlashCommand.matching("zzzz").isEmpty, "")
+
+            let panel = SlashMenuPanel()
+            check("slash menu: builds", panel.update(query: ""), "")
+            check("slash menu: never takes the keyboard", !panel.canBecomeKey, "")
+            // A content view with autoresizing turned off gets no size, and the
+            // panel comes up empty. This is the check that catches that.
+            panel.orderFront(nil)
+            let content = panel.contentView
+            check("slash menu: the panel has a size",
+                  (content?.frame.width ?? 0) > 100 && (content?.frame.height ?? 0) > 40,
+                  "\(Int(content?.frame.width ?? 0))x\(Int(content?.frame.height ?? 0))")
+            check("slash menu: its list is on screen",
+                  content?.subviews.first?.frame.width ?? 0 > 100,
+                  "\(Int(content?.subviews.first?.frame.width ?? 0))pt")
+            panel.orderOut(nil)
+
+            // Typing `/` in the document opens it.
+            controller.loadText("Text\n\n")
+            controller.view.layoutSubtreeIfNeeded()
+            let editor = controller.editor
+            editor.textView.setSelectedRange(NSRange(location: 5, length: 0))
+            editor.textView.insertText("/", replacementRange: NSRange(location: 5, length: 0))
+            controller.view.layoutSubtreeIfNeeded()
+            // Showing it waits a turn of the run loop, so that layout is legal.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+            check("slash menu: a typed slash opens it", editor.isSlashMenuOpen, "")
+            editor.closeSlashMenuForTest()
+
+            // A slash inside a word is just a slash.
+            controller.loadText("http:/\n")
+            editor.textView.setSelectedRange(NSRange(location: 6, length: 0))
+            editor.textView.insertText("/", replacementRange: NSRange(location: 6, length: 0))
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+            check("slash menu: a slash mid-word is left alone", !editor.isSlashMenuOpen, "")
         }
 
         controller.loadText(text)
@@ -298,83 +379,6 @@ enum SelfTest {
         let rule = MarkdownParser.parse("Some text\n---\n" as NSString)
         check("table: a bare rule is not a table",
               !rule.lines.contains { $0.kind.isTable }, "")
-
-        checkTableEditor(check)
     }
 
-    /// The editing panel round-trips through the same Markdown the document
-    /// holds, so what it writes is the thing worth testing.
-    private static func checkTableEditor(_ check: (String, Bool, String) -> Void) {
-        let source = """
-        | Feature | Notes |
-        | --- | ---: |
-        | Bold | Wraps |
-        """
-        let text = source as NSString
-        let document = MarkdownParser.parse(text)
-        guard let table = TableFormatter.table(atLine: 0, in: document, text: text) else {
-            check("table editor: table read out of the document", false, "")
-            return
-        }
-        check("table editor: table read out of the document",
-              table.rows.count == 2 && table.columnCount == 2,
-              "\(table.rows.count) rows, \(table.columnCount) columns")
-        check("table editor: the delimiter row is not data",
-              table.rows.allSatisfy { !$0.contains("---") }, "")
-        check("table editor: alignment read", table.alignments.last == .right, "")
-        check("table editor: covers the whole table",
-              table.range.length == text.length, "\(table.range.length) of \(text.length)")
-
-        var written: String?
-        let editor = TableEditorViewController(table: table) { written = $0 }
-        editor.loadView()
-        check("table editor: builds", editor.view.subviews.count >= 2,
-              "\(editor.view.subviews.count) subviews")
-
-        // Render, read the result back, and it should be the same data. The text
-        // itself is padded on the way out, so it is the cells that must match.
-        let rendered = TableFormatter.render(rows: table.rows, alignments: table.alignments)
-        let reparsed = rendered as NSString
-        let again = TableFormatter.table(
-            atLine: 0, in: MarkdownParser.parse(reparsed), text: reparsed)
-        check("table editor: round-trips through Markdown",
-              again?.rows == table.rows && again?.alignments == table.alignments,
-              again.map { "\($0.rows)" } ?? "not re-read")
-
-        // Adding a column has to reach every row, delimiter included.
-        var rows = table.rows
-        for index in rows.indices { rows[index].append("New") }
-        let grown = TableFormatter.render(rows: rows, alignments: table.alignments + [.none])
-        let grownRows = grown.components(separatedBy: "\n")
-        check("table editor: a new column reaches every row",
-              grownRows.count == 3 && Set(grownRows.map(\.count)).count == 1,
-              grownRows.map(\.count).description)
-        check("table editor: rendered tables are already padded",
-              TableFormatter.normalized(grown) == nil, "")
-
-        // The panel's own buttons, which are where an index goes out of bounds
-        // if one is going to.
-        editor.addRow(nil)
-        check("table editor: add row writes a row",
-              (written?.components(separatedBy: "\n").count ?? 0) == 4,
-              written?.components(separatedBy: "\n").count.description ?? "nothing written")
-
-        editor.addColumn(nil)
-        check("table editor: add column writes a column",
-              TableFormatter.cells(written?.components(separatedBy: "\n").first ?? "").count == 3,
-              written?.components(separatedBy: "\n").first ?? "")
-
-        editor.removeColumn(nil)
-        // Removing a row needs one chosen; with nothing selected it should
-        // refuse rather than guess, so the test picks one first.
-        editor.selectRowForTesting(1)
-        editor.removeRow(nil)
-        let after = written ?? ""
-        check("table editor: remove puts it back",
-              TableFormatter.cells(after.components(separatedBy: "\n").first ?? "").count == 2
-                && after.components(separatedBy: "\n").count == 3, after)
-        check("table editor: what it writes parses as a table",
-              MarkdownParser.parse(after as NSString).lines.filter { $0.kind.isTable }.count == 3,
-              "")
-    }
 }

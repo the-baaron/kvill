@@ -21,13 +21,9 @@ final class DocumentViewController: NSViewController {
     /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
     /// work, and none of it is needed until there is a selection to act on.
     private var selectionToolbar: SelectionToolbarView?
-    /// Also built on first use: most documents have no table in them at all.
-    private var tableBadge: TableBadgeView?
 
     private var toolbarLeading: NSLayoutConstraint!
     private var toolbarTop: NSLayoutConstraint!
-    private var badgeLeading: NSLayoutConstraint!
-    private var badgeTop: NSLayoutConstraint!
     private var mouseMonitor: Any?
 
     /// Fired after the editor's text changes, so the document can mark itself dirty.
@@ -103,10 +99,7 @@ final class DocumentViewController: NSViewController {
             self?.updateStats()
             self?.onTextChange?()
         }
-        editor.onSelectionChange = { [weak self] in
-            self?.updateSelectionToolbar()
-            self?.updateTableBadge()
-        }
+        editor.onSelectionChange = { [weak self] in self?.updateSelectionToolbar() }
         editor.onScroll = { [weak self] _, _ in
         }
         editor.textView.onSelectionGestureEnded = { [weak self] in self?.updateSelectionToolbar() }
@@ -178,76 +171,6 @@ final class DocumentViewController: NSViewController {
     @objc private func viewportMoved() {
         updateTitleVisibility()
         updateSelectionToolbar()
-        updateTableBadge()
-    }
-
-    // MARK: - Table badge
-
-    private func makeTableBadge() -> TableBadgeView {
-        if let tableBadge { return tableBadge }
-        let created = TableBadgeView()
-        created.alphaValue = 0
-        created.isHidden = true
-        created.onClick = { [weak self] in self?.editor.editTableAtCaret() }
-        view.addSubview(created, positioned: .below, relativeTo: optionsBar)
-
-        badgeLeading = created.leadingAnchor.constraint(equalTo: view.leadingAnchor)
-        badgeTop = created.topAnchor.constraint(equalTo: view.topAnchor)
-        NSLayoutConstraint.activate([badgeLeading, badgeTop])
-
-        tableBadge = created
-        return created
-    }
-
-    /// Puts the badge on the table's top-right corner while the caret is inside
-    /// it. Hidden the rest of the time, which is nearly always.
-    private func updateTableBadge() {
-        guard !ThemeManager.shared.chromeHidden,
-              let table = editor.caretTableRect(in: view) else {
-            hideTableBadge()
-            return
-        }
-
-        let badge = makeTableBadge()
-        let size = badge.fittingSize
-        let bounds = view.bounds
-        guard size.width > 0 else { return }
-
-        // Anchors are measured from the visual top, and this view is not flipped.
-        let leading = min(max(12, table.maxX - size.width), bounds.width - size.width - 12)
-        var top = bounds.height - table.maxY - size.height - 6
-        // A table starting at the very top of the window has no room above it,
-        // so the badge tucks just inside its first row instead.
-        if top < 12 { top = bounds.height - table.maxY + 4 }
-        guard top > 0, top < bounds.height - size.height else {
-            hideTableBadge()
-            return
-        }
-
-        badgeLeading.constant = leading
-        badgeTop.constant = top
-        showTableBadge()
-    }
-
-    private func showTableBadge() {
-        let badge = makeTableBadge()
-        guard badge.isHidden || badge.alphaValue < 1 else { return }
-        badge.isHidden = false
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            badge.animator().alphaValue = 1
-        }
-    }
-
-    private func hideTableBadge() {
-        guard let badge = tableBadge, !badge.isHidden else { return }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.12
-            badge.animator().alphaValue = 0
-        }, completionHandler: {
-            badge.isHidden = true
-        })
     }
 
     /// The file name belongs to the top of the document. Once you have scrolled
@@ -334,11 +257,23 @@ final class DocumentViewController: NSViewController {
         updateStats()
     }
 
+    /// Takes new text from disk without throwing away where the reader was.
+    func replaceKeepingPlace(with text: String) {
+        editor.replaceKeepingPlace(with: text)
+        updateStats()
+    }
+
     var text: String { editor.text }
 
-    /// Brief confirmation that a save happened, since saving is otherwise silent.
+    /// Squares up every table in the document. Used on save.
+    func formatTables() { editor.formatAllTables() }
+
+    /// Answers Cmd S. There is nothing to confirm, because the document has been
+    /// saving itself all along, so the toast says that rather than pretending
+    /// the keystroke did the work.
     func confirmSaved() {
-        makeToast().show("Saved", symbol: "checkmark.circle.fill")
+        makeToast().show("Your files are auto-saved, don't worry",
+                         symbol: "checkmark.circle.fill")
     }
 
     private func makeToast() -> ToastView {

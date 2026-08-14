@@ -13,6 +13,25 @@ import AppKit
 /// text? If it does, open it. If it does not, skip it quietly.
 final class QuillDocumentController: NSDocumentController {
 
+    /// How long a document sits on an edit before writing it.
+    ///
+    /// The default is 30 seconds. That is far too long here, because a window
+    /// reloads whenever its file changes underneath it: an edit that has not
+    /// been written yet is a conflict waiting to happen. Half a second is short
+    /// enough that the file on disk is always what is on screen, and long enough
+    /// that a burst of typing is one write rather than fifty.
+    static let saveDelay: TimeInterval = 0.5
+
+    override init() {
+        super.init()
+        autosavingDelay = Self.saveDelay
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        autosavingDelay = Self.saveDelay
+    }
+
     override func openDocument(
         withContentsOf url: URL,
         display displayDocument: Bool,
