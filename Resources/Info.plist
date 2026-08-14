@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Quill</string>
+	<string>Signet</string>
 	<key>CFBundleDisplayName</key>
-	<string>Quill</string>
+	<string>Signet</string>
 	<key>CFBundleIdentifier</key>
-	<string>design.baars.Quill</string>
+	<string>design.baars.Signet</string>
 	<key>CFBundleExecutable</key>
-	<string>Quill</string>
+	<string>Signet</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -17,9 +17,17 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleIconFile</key>
-	<string>Quill</string>
+	<string>Signet</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<!-- Required for the App Store: which shelf the app sits on. -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<!-- Signet contains no encryption beyond what macOS itself provides, and
+	     makes no network connections at all. Declaring it here answers the
+	     export compliance question once instead of at every upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticTermination</key>
@@ -31,7 +39,7 @@
 	<key>NSSupportsSuddenTermination</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>MIT licensed. Source at github.com/the-baaron/quill</string>
+	<string>MIT licensed. Source at github.com/the-baaron/signet</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

@@ -1,16 +1,16 @@
 import Foundation
 
-/// The document opened by Help › Quill Markdown Reference. It is deliberately a
-/// working example of every construct Quill styles, so it doubles as a way to
+/// The document opened by Help › Signet Markdown Reference. It is deliberately a
+/// working example of every construct Signet styles, so it doubles as a way to
 /// see what a theme looks like before committing to it.
 enum MarkdownReference {
     static let text = #"""
     ---
-    title: Quill Markdown Reference
+    title: Signet Markdown Reference
     author: you
     ---
 
-    # Quill
+    # Signet
 
     A full-screen Markdown editor. Syntax markers hang in the left gutter, dimmed
     and right-aligned, so the text itself stays on one clean column.
@@ -37,7 +37,7 @@ enum MarkdownReference {
 
     [^1]: And the definition sits at the bottom, dimmed.
 
-    Two trailing spaces force a hard break, which Quill marks faintly.
+    Two trailing spaces force a hard break, which Signet marks faintly.
 
     ## Lists
 

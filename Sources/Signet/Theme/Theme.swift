@@ -71,27 +71,27 @@ final class Theme {
 }
 
 extension Notification.Name {
-    static let quillThemeChanged = Notification.Name("QuillThemeChanged")
-    static let quillPreferencesChanged = Notification.Name("QuillPreferencesChanged")
+    static let signetThemeChanged = Notification.Name("SignetThemeChanged")
+    static let signetPreferencesChanged = Notification.Name("SignetPreferencesChanged")
 }
 
 /// Owns the current theme and the small set of reading preferences, and persists
-/// them. Every editor observes `quillThemeChanged` and restyles in place.
+/// them. Every editor observes `signetThemeChanged` and restyles in place.
 final class ThemeManager {
     static let shared = ThemeManager()
 
     private enum Key {
-        static let palette = "quill.palette"
-        static let preset = "quill.typography"
-        static let size = "quill.textSize"
-        static let width = "quill.lineWidth"
-        static let followSystem = "quill.followSystemAppearance"
-        static let lightPalette = "quill.lightPalette"
-        static let darkPalette = "quill.darkPalette"
-        static let focusMode = "quill.focusMode"
-        static let typewriter = "quill.typewriterScrolling"
-        static let scrollPastEnd = "quill.scrollPastEnd"
-        static let showMarkers = "quill.showMarkers"
+        static let palette = "signet.palette"
+        static let preset = "signet.typography"
+        static let size = "signet.textSize"
+        static let width = "signet.lineWidth"
+        static let followSystem = "signet.followSystemAppearance"
+        static let lightPalette = "signet.lightPalette"
+        static let darkPalette = "signet.darkPalette"
+        static let focusMode = "signet.focusMode"
+        static let typewriter = "signet.typewriterScrolling"
+        static let scrollPastEnd = "signet.scrollPastEnd"
+        static let showMarkers = "signet.showMarkers"
     }
 
     private let defaults = UserDefaults.standard
@@ -146,7 +146,7 @@ final class ThemeManager {
     var focusMode: Bool {
         didSet {
             defaults.set(focusMode, forKey: Key.focusMode)
-            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .signetPreferencesChanged, object: nil)
         }
     }
 
@@ -154,7 +154,7 @@ final class ThemeManager {
     var typewriterScrolling: Bool {
         didSet {
             defaults.set(typewriterScrolling, forKey: Key.typewriter)
-            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .signetPreferencesChanged, object: nil)
         }
     }
 
@@ -164,14 +164,14 @@ final class ThemeManager {
     var scrollPastEnd: Bool {
         didSet {
             defaults.set(scrollPastEnd, forKey: Key.scrollPastEnd)
-            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .signetPreferencesChanged, object: nil)
         }
     }
 
     var alwaysShowMarkers: Bool {
         didSet {
             defaults.set(alwaysShowMarkers, forKey: Key.showMarkers)
-            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .signetPreferencesChanged, object: nil)
         }
     }
 
@@ -180,7 +180,7 @@ final class ThemeManager {
     var chromeHidden = false {
         didSet {
             guard chromeHidden != oldValue else { return }
-            NotificationCenter.default.post(name: .quillPreferencesChanged, object: nil)
+            NotificationCenter.default.post(name: .signetPreferencesChanged, object: nil)
         }
     }
 
@@ -277,7 +277,7 @@ final class ThemeManager {
         )
         guard next.identifier != theme.identifier else { return }
         theme = next
-        NotificationCenter.default.post(name: .quillThemeChanged, object: nil)
+        NotificationCenter.default.post(name: .signetThemeChanged, object: nil)
     }
 
     // MARK: - Step helpers used by the View menu

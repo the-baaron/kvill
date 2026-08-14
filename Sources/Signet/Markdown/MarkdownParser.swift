@@ -2,7 +2,7 @@ import Foundation
 
 /// A line-oriented Markdown scanner.
 ///
-/// It is deliberately not a full CommonMark implementation: Quill never converts
+/// It is deliberately not a full CommonMark implementation: Signet never converts
 /// the document to HTML, it only needs to know what each line *is* so it can be
 /// styled and indented. That makes a single left-to-right pass enough, and keeps
 /// re-parsing cheap enough to run on every keystroke.

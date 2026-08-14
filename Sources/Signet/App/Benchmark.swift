@@ -2,7 +2,7 @@ import AppKit
 
 /// Phase timings for opening a document.
 ///
-///     Quill --benchmark file.md
+///     Signet --benchmark file.md
 ///
 /// Startup is the thing this app is judged on, so it is measured rather than
 /// guessed at: process start to ready, then read, parse, style and layout.

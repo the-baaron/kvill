@@ -1,6 +1,6 @@
 import AppKit
 
-// Quill has no nib and no storyboard, so the app is assembled here by hand.
+// Signet has no nib and no storyboard, so the app is assembled here by hand.
 // NSDocumentController is touched early so it registers as the handler for the
 // Apple Events Finder sends when a Markdown file is double-clicked.
 let application = NSApplication.shared
@@ -11,7 +11,7 @@ let application = NSApplication.shared
 /// `finishLaunching()` delivers the Apple Event that a normal launch carries, and
 /// a document-based app answers it by opening every path in the arguments. In the
 /// headless modes those paths are a PNG to write and a document to render, so
-/// AppKit would put up "Quill cannot open files in the PNG image format" and sit
+/// AppKit would put up "Signet cannot open files in the PNG image format" and sit
 /// in a modal loop waiting for a click that no one is there to give.
 final class HeadlessDelegate: NSObject, NSApplicationDelegate {
     func application(_ sender: NSApplication, openFile filename: String) -> Bool { true }
@@ -50,9 +50,9 @@ if let request = ScreenshotRenderer.parse(CommandLine.arguments) {
     exit(ScreenshotRenderer.run(request))
 }
 
-// The first document controller created becomes the shared one, so Quill's own
+// The first document controller created becomes the shared one, so Signet's own
 // subclass has to be built here, before AppKit reaches for the stock class.
-let documentController = QuillDocumentController()
+let documentController = SignetDocumentController()
 
 let delegate = AppDelegate()
 application.delegate = delegate

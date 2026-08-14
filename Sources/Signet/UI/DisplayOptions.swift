@@ -295,7 +295,7 @@ final class OptionsPalette: NSViewController {
         sync()
 
         NotificationCenter.default.addObserver(
-            self, selector: #selector(sync), name: .quillThemeChanged, object: nil)
+            self, selector: #selector(sync), name: .signetThemeChanged, object: nil)
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }

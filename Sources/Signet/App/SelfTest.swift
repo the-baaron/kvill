@@ -2,7 +2,7 @@ import AppKit
 
 /// Runtime checks for the parts of the interface a screenshot cannot show.
 ///
-///     Quill --selftest [document.md]
+///     Signet --selftest [document.md]
 ///
 /// The floating chrome is built from glass and visual-effect views, which never
 /// render in an off-screen window, so the only honest way to know whether they

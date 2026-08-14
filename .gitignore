@@ -3,3 +3,6 @@ build/
 .DS_Store
 *.xcuserstate
 .swiftpm/
+
+# Issued per machine and per bundle id; not a source file.
+*.provisionprofile

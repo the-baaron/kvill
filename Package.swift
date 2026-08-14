@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Quill",
+    name: "Signet",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Quill",
-            path: "Sources/Quill"
+            name: "Signet",
+            path: "Sources/Signet"
         )
     ]
 )

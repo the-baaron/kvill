@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    /// Quill is one file per window and nothing else. With the last window shut
+    /// Signet is one file per window and nothing else. With the last window shut
     /// there is no document, no palette and no state to come back to, so leaving
     /// the process running would only be an icon in the Dock that does nothing.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: false)
     }
 
-    /// Launching Quill on its own opens a blank document, the same as TextEdit.
+    /// Launching Signet on its own opens a blank document, the same as TextEdit.
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { true }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Default handler
 
-    /// Registers Quill as the system's Markdown editor. This changes a setting
+    /// Registers Signet as the system's Markdown editor. This changes a setting
     /// outside the app, so it asks first.
     @objc func setAsDefaultMarkdownEditor(_ sender: Any?) {
         guard let markdown = UTType("net.daringfireball.markdown")
@@ -105,9 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Open all Markdown files in Quill?"
+        alert.messageText = "Open all Markdown files in Signet?"
         alert.informativeText = """
-            Double-clicking a .md file in Finder will open it in Quill from now on. \
+            Double-clicking a .md file in Finder will open it in Signet from now on. \
             You can change this back at any time in Finder with Get Info › Open With.
             """
         alert.addButton(withTitle: "Make Default")
@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let error else { return }
             DispatchQueue.main.async {
                 self?.present(
-                    message: "Could not set Quill as the default",
+                    message: "Could not set Signet as the default",
                     detail: error.localizedDescription)
             }
         }
@@ -141,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openCheatSheet(_ sender: Any?) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         guard let support else { return }
-        let folder = support.appendingPathComponent("Quill", isDirectory: true)
+        let folder = support.appendingPathComponent("Signet", isDirectory: true)
         let url = folder.appendingPathComponent("Markdown Reference.md")
 
         do {

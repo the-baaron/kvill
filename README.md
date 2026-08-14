@@ -1,4 +1,4 @@
-# Quill
+# Signet
 
 A full-screen Markdown editor for macOS. One file, one window, no sidebar.
 Syntax markers hang in the left margin, dimmed and right-aligned, so
@@ -6,7 +6,7 @@ Syntax markers hang in the left margin, dimmed and right-aligned, so
 clean line of measure.
 
 ```
- #   Quill
+ #   Signet
          A full-screen Markdown editor.
 
  ##  Headings
@@ -67,20 +67,20 @@ Requires macOS 14 or later to run, and the Xcode Command Line Tools to build.
 Full Xcode is not needed.
 
 ```sh
-git clone https://github.com/the-baaron/quill.git
-cd quill
+git clone https://github.com/the-baaron/signet.git
+cd signet
 ./build.sh
-open build/Quill.app
+open build/Signet.app
 ```
 
 To install it:
 
 ```sh
-cp -R build/Quill.app /Applications/
+cp -R build/Signet.app /Applications/
 ```
 
-Then either drop a `.md` file on the icon, or open Quill and choose
-**Quill › Make Quill the Default Markdown Editor…** to make double-clicking work
+Then either drop a `.md` file on the icon, or open Signet and choose
+**Signet › Make Signet the Default Markdown Editor…** to make double-clicking work
 everywhere. The app is ad-hoc signed, which is enough to run it locally; a
 Developer ID signature would be needed to distribute it.
 
@@ -119,12 +119,12 @@ kern on last gap char = gap - naturalGapWidth        pins content to contentX
 
 Because the marker's width is measured and compensated for, `#`, `######`,
 `1.` and `100.` all leave the text on the same column. See
-`Sources/Quill/Editor/MarkdownStyler.swift`.
+`Sources/Signet/Editor/MarkdownStyler.swift`.
 
 ## Layout of the source
 
 ```
-Sources/Quill/
+Sources/Signet/
   Markdown/    line scanner, inline scanner, model types
   Editor/      styler (the gutter maths), text view, controller, commands
   Theme/       palettes, typography presets, derived metrics
@@ -138,7 +138,7 @@ The app can draw a document to an image without opening a window, which is how
 the screenshots here are made:
 
 ```sh
-./build/Quill.app/Contents/MacOS/Quill --render notes.md out.png \
+./build/Signet.app/Contents/MacOS/Signet --render notes.md out.png \
   --theme ink --typography editorial --geometry 900x900 --scale 2 --offset 0
 ```
 
@@ -148,7 +148,7 @@ never runs a display pass, so there is nothing to capture.
 
 ## Images
 
-Drag an image in and Quill writes the Markdown for it. A file already inside the
+Drag an image in and Signet writes the Markdown for it. A file already inside the
 document's folder is referenced where it lies; anything from outside is copied
 into an `images/` folder beside the document, under a name that is not already
 taken. Image data dragged from a browser or Photos is written out the same way.
@@ -169,7 +169,7 @@ opening a file never rewrites it on disk.
 ## Tables
 
 A table row is one paragraph, so the moment it wraps a kerned grid becomes
-meaningless. Quill measures every column, sets the table in the reading face
+meaningless. Signet measures every column, sets the table in the reading face
 rather than a monospace one, and kerns each cell onto the grid with two
 adjustments: one that puts the cell's first character exactly one padding past
 the column edge, and one that fills the rest of the column. The pipes are then

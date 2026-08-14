@@ -129,7 +129,7 @@ enum ImageDrop {
             guard let support = FileManager.default.urls(
                 for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
             folder = support
-                .appendingPathComponent("Quill", isDirectory: true)
+                .appendingPathComponent("Signet", isDirectory: true)
                 .appendingPathComponent("Dropped Images", isDirectory: true)
         }
 
