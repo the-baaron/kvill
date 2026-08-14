@@ -29,8 +29,8 @@ rm -f store/screenshots/*.png store/page-*.png
 
 echo "==> Composing"
 shot 1 paper editorial centre light \
-  "Change one line and go" \
-  "0.09 seconds from double-click to cursor. No project, nothing to index."
+  "Straight to the page" \
+  "No project to open, nothing to index. The cursor is already waiting."
 shot 2 ink editorial right dark \
   "All of Markdown, none of the weight" \
   "Tables, callouts, code, footnotes. No sidebar, no inspector, no workspace."
