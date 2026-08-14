@@ -60,6 +60,14 @@ if let index = CommandLine.arguments.firstIndex(of: "--login-item") {
     exit(0)
 }
 
+// The options popover is glass and glass renders as nothing off screen, but the
+// specimens inside it are ordinary views and can be looked at.
+if let index = CommandLine.arguments.firstIndex(of: "--specimens"),
+   CommandLine.arguments.count > index + 1 {
+    startHeadless()
+    exit(SpecimenSheet.render(to: CommandLine.arguments[index + 1]))
+}
+
 if let request = ScreenshotRenderer.parse(CommandLine.arguments) {
     // Headless PNG render: no document controller, no menu, no untitled window.
     startHeadless()

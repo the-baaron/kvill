@@ -260,6 +260,7 @@ final class OptionsPalette: NSViewController {
 
     private let section: Section
     private var swatches: [PaletteSwatchButton] = []
+    private var specimens: [SpecimenButton] = []
     private let followSystem = NSButton(checkboxWithTitle: "Match system", target: nil, action: nil)
     private let typeface = NSPopUpButton()
     private let textSize = NSPopUpButton()
@@ -273,7 +274,7 @@ final class OptionsPalette: NSViewController {
     /// "Open files faster" says nothing about the cost. This says what is
     /// actually being agreed to, in the place where it is being agreed to.
     private let backgroundNote = NSTextField(
-        labelWithString: "Stays running with no windows, and starts at login")
+        labelWithString: "Kvill starts at login and waits in the background")
 
     init(section: Section) {
         self.section = section
@@ -330,13 +331,30 @@ final class OptionsPalette: NSViewController {
             return rows + [followSystem]
 
         case .typography:
-            configure(typeface, titles: TypographyPreset.all.map(\.name), action: #selector(selectTypeface))
-            configure(textSize, titles: TextSize.allCases.map(\.name), action: #selector(selectSize))
-            configure(measure, titles: LineWidth.allCases.map(\.name), action: #selector(selectMeasure))
-            for popup in [typeface, textSize, measure] {
-                popup.widthAnchor.constraint(equalToConstant: 168).isActive = true
+            // Specimens rather than a list of names: a face, a size and a
+            // measure are all things you recognise on sight and cannot recall
+            // from a word.
+            func row(_ kinds: [SpecimenButton.Kind], _ action: Selector) -> NSStackView {
+                let stack = NSStackView(views: kinds.map { kind in
+                    let button = SpecimenButton(kind: kind, target: self, action: action)
+                    specimens.append(button)
+                    return button
+                })
+                stack.orientation = .horizontal
+                stack.spacing = 8
+                stack.alignment = .centerY
+                return stack
             }
-            return [label("Typeface"), typeface, label("Size"), textSize, label("Width"), measure]
+
+            var views: [NSView] = [label("Typeface")]
+            for chunk in TypographyPreset.all.chunked(into: 3) {
+                views.append(row(chunk.map { .typeface($0) }, #selector(selectTypefaceSpecimen(_:))))
+            }
+            views.append(label("Size"))
+            views.append(row(TextSize.allCases.map { .size($0) }, #selector(selectSizeSpecimen(_:))))
+            views.append(label("Width"))
+            views.append(row(LineWidth.allCases.map { .width($0) }, #selector(selectMeasureSpecimen(_:))))
+            return views
 
         case .reading:
             for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle, backgroundToggle] {
@@ -381,6 +399,14 @@ final class OptionsPalette: NSViewController {
         let manager = ThemeManager.shared
         let active = manager.activePaletteID
         for swatch in swatches { swatch.isSelectedSwatch = swatch.palette.id == active }
+        for specimen in specimens {
+            switch specimen.kind {
+            case .typeface: specimen.isChosen = specimen.kind.identifier == manager.presetID
+            case .size: specimen.isChosen = specimen.kind.identifier == manager.textSize.rawValue
+            case .width: specimen.isChosen = specimen.kind.identifier == manager.lineWidth.rawValue
+            }
+            specimen.needsDisplay = true
+        }
         followSystem.state = manager.followsSystemAppearance ? .on : .off
         typeface.selectItem(at: TypographyPreset.all.firstIndex { $0.id == manager.presetID } ?? 0)
         textSize.selectItem(at: TextSize.allCases.firstIndex(of: manager.textSize) ?? 0)
@@ -421,6 +447,20 @@ final class OptionsPalette: NSViewController {
     }
 
     @objc private func toggleFocus() { ThemeManager.shared.focusMode = focusToggle.state == .on }
+    @objc private func selectTypefaceSpecimen(_ sender: SpecimenButton) {
+        ThemeManager.shared.presetID = sender.kind.identifier
+    }
+
+    @objc private func selectSizeSpecimen(_ sender: SpecimenButton) {
+        guard let size = TextSize(rawValue: sender.kind.identifier) else { return }
+        ThemeManager.shared.textSize = size
+    }
+
+    @objc private func selectMeasureSpecimen(_ sender: SpecimenButton) {
+        guard let width = LineWidth(rawValue: sender.kind.identifier) else { return }
+        ThemeManager.shared.lineWidth = width
+    }
+
     @objc private func toggleBackground() {
         BackgroundService.isEnabled = backgroundToggle.state == .on
     }
