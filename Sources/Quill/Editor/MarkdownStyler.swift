@@ -334,10 +334,14 @@ final class MarkdownStyler {
         let image = imageDisplay(for: line)
         let layout: LineLayout
         if let image {
+            // The picture lives in the space *before* the paragraph, not inside
+            // its line height. Line height applies to every wrapped fragment, so
+            // reserving the image there gave a source line that wrapped two
+            // picture-tall fragments and a caret the height of the image.
             layout = LineLayout(
-                height: imageTopPadding() + image.size.height + imageCaptionZone(),
-                before: metrics.base * 0.6,
-                after: metrics.base * 0.6)
+                height: metrics.base * 1.5,
+                before: metrics.imageTopPadding + image.size.height + metrics.base * 0.45,
+                after: metrics.base * 0.9)
         } else {
             layout = lineLayout(for: line)
         }
@@ -487,16 +491,9 @@ final class MarkdownStyler {
         // bottom of its line. Lifting the baseline by half the surplus centres it
         // again, which is what makes checkboxes, highlights and inline code
         // backgrounds line up with the words next to them.
-        if line.blockImage != nil, imageDisplay(for: line) != nil {
-            // The surplus is the picture. Leaving the text at the bottom of the
-            // line is exactly where a caption goes; it only needs lifting clear
-            // of the very edge.
-            attributes[.baselineOffset] = theme.metrics.base * 0.45
-        } else {
-            let surplus = lineHeight - naturalLineHeight(of: font)
-            if surplus > 0.5 {
-                attributes[.baselineOffset] = surplus / 2
-            }
+        let surplus = lineHeight - naturalLineHeight(of: font)
+        if surplus > 0.5 {
+            attributes[.baselineOffset] = surplus / 2
         }
 
         if theme.preset.bodyTracking != 0, !line.kind.isCode, !line.kind.isTable {
@@ -560,11 +557,7 @@ final class MarkdownStyler {
         return (url, size)
     }
 
-    /// Space above a rendered image.
-    func imageTopPadding() -> CGFloat { theme.metrics.base * 0.25 }
 
-    /// Space below a rendered image, holding its caption.
-    func imageCaptionZone() -> CGFloat { theme.metrics.base * 2.1 }
 
     /// True when this line's bullet should be drawn as a dot rather than shown
     /// as its literal `-`, `*` or `+`.

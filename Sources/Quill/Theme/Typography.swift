@@ -216,6 +216,11 @@ struct Metrics {
     /// Horizontal space a task checkbox reserves inside the text column.
     var checkboxAdvance: CGFloat { checkboxSize + checkboxGap }
 
+    /// Space above a rendered image.
+    var imageTopPadding: CGFloat { base * 0.25 }
+    /// Space below a rendered image, which holds its caption.
+    var imageCaptionZone: CGFloat { base * 2.1 }
+
     init(preset: TypographyPreset, size: TextSize, width: LineWidth) {
         let base = size.points
         self.base = base

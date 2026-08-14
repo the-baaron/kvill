@@ -153,10 +153,16 @@ enum ImageDrop {
         }
     }
 
-    /// Percent-encodes the parts of a path Markdown would otherwise mis-read.
+    /// Wraps a path in angle brackets when it holds characters Markdown would
+    /// otherwise mis-read. Percent-encoding also works, but turns a screenshot
+    /// called "Schermafbeelding 2026-08-14 om 10.38.56.png" into an unreadable
+    /// smear of `%20` in a caption the user has to look at.
     private static func escape(_ path: String) -> String {
-        var allowed = CharacterSet.urlPathAllowed
-        allowed.remove(charactersIn: "()")
-        return path.addingPercentEncoding(withAllowedCharacters: allowed) ?? path
+        let awkward = CharacterSet(charactersIn: " ()<>\t")
+        guard path.rangeOfCharacter(from: awkward) != nil else { return path }
+        let inner = path
+            .replacingOccurrences(of: "<", with: "\\<")
+            .replacingOccurrences(of: ">", with: "\\>")
+        return "<\(inner)>"
     }
 }

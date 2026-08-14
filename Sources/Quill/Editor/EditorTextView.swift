@@ -295,18 +295,34 @@ final class EditorTextView: NSTextView {
             withAttributes: attributes)
     }
 
-    /// Draws an embedded image below its Markdown source line.
+    /// Where a picture sits: in the paragraph spacing directly above its caption.
+    func imageFrame(caption: NSRect, size: NSSize) -> NSRect {
+        let metrics = theme.metrics
+        let columnLeft = textContainerOrigin.x + metrics.gutter
+        return NSRect(
+            x: columnLeft + max(0, (metrics.measure - size.width) / 2),
+            y: caption.minY - metrics.base * 0.45 - size.height,
+            width: size.width,
+            height: size.height)
+    }
+
+    /// The picture for a point, if the point lands on one.
+    func imageOverlay(at point: NSPoint) -> (range: NSRange, frame: NSRect)? {
+        for overlay in overlays {
+            guard case .image(let range, _, let size) = overlay,
+                  let slot = rect(for: range) else { continue }
+            let frame = imageFrame(caption: slot, size: size)
+            if frame.contains(point) { return (range, frame) }
+        }
+        return nil
+    }
+
+    /// Draws an embedded image above its caption.
     private func drawImage(range: NSRange, url: URL, size: NSSize, dirtyRect: NSRect) {
         guard let slot = rect(for: range),
               let image = ImageStore.shared.image(at: url) else { return }
 
-        let metrics = theme.metrics
-        let columnLeft = textContainerOrigin.x + metrics.gutter
-        let frame = NSRect(
-            x: columnLeft + max(0, (metrics.measure - size.width) / 2),
-            y: slot.minY + metrics.base * 0.25,
-            width: size.width,
-            height: size.height)
+        let frame = imageFrame(caption: slot, size: size)
         guard frame.intersects(dirtyRect) else { return }
 
         let path = NSBezierPath(roundedRect: frame, xRadius: 7, yRadius: 7)
@@ -320,9 +336,21 @@ final class EditorTextView: NSTextView {
             respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
         NSGraphicsContext.restoreGraphicsState()
 
-        theme.colors.rule.withAlpha(0.6).setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        // A selected image gets a ring rather than a text highlight behind it.
+        let selection = selectedRange()
+        let selected = selection.length > 0
+            && NSIntersectionRange(selection, range).length == range.length
+        if selected {
+            theme.colors.accent.setStroke()
+            let ring = NSBezierPath(
+                roundedRect: frame.insetBy(dx: -2.5, dy: -2.5), xRadius: 9, yRadius: 9)
+            ring.lineWidth = 2.5
+            ring.stroke()
+        } else {
+            theme.colors.rule.withAlpha(0.6).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
     }
 
     private func drawDecorations(in dirtyRect: NSRect) {
@@ -507,6 +535,16 @@ final class EditorTextView: NSTextView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+
+        // Clicking a picture selects it, rather than dropping a caret into the
+        // Markdown that describes it.
+        if let hit = imageOverlay(at: point) {
+            setSelectedRange(hit.range)
+            needsDisplay = true
+            onSelectionGestureEnded?()
+            return
+        }
+
         let index = characterIndexForInsertion(at: point)
 
         if let document, let lineIndex = document.lineIndex(at: index) {
