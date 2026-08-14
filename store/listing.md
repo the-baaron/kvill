@@ -18,8 +18,8 @@ pushed rather than invented at the keyboard.
 
 ## Promotional text
 
-A README needs one word changed. Your editor takes eleven seconds to start, opens
-a workspace and reopens six tabs. Kvill is already waiting.
+A small, fast Markdown editor for macOS. Edits files in place on your disk.
+Free, open source, nothing to sign into.
 
 ## Description
 
