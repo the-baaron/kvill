@@ -131,10 +131,30 @@ can confirm a name.
 
 ## Architecture worth knowing before changing it
 
-The gutter is `firstLineHeadIndent` + `headIndent` + a kerned gap character.
-Nothing is inserted into or removed from the document to achieve it. Collapsing
-a run to zero width needs the glyphs shrunk to 0.5pt first, because negative
-kerning is clamped per glyph.
+```
+Sources/Kvill/
+  Markdown/    line scanner, inline scanner, model types
+  Editor/      styler (the gutter maths), text view, controller, commands
+  Theme/       palettes, typography presets, derived metrics
+  UI/          glass chrome: options bar, selection bar, insert menu, toasts
+  App/         NSDocument, window, menu bar, delegate, PNG renderer
+```
+
+Every line's text starts on the same x position and its marker is pushed into
+the space to the left, right-aligned, with two paragraph indents and one kerned
+space:
+
+```
+firstLineHeadIndent = contentX - gap - markerWidth   where the marker starts
+headIndent          = contentX                       where wrapped lines resume
+kern on last gap char = gap - naturalGapWidth        pins content to contentX
+```
+
+Because the marker's width is measured and compensated for, `#`, `######`, `1.`
+and `100.` all leave the text on the same column. Nothing is inserted into or
+removed from the document to achieve it. Collapsing a run to zero width needs
+the glyphs shrunk to 0.5pt first, because negative kerning is clamped per
+glyph.
 
 Tables are aligned by padding the source with spaces, not by measuring cells.
 Two attempts at a drawn grid were deleted. If a table will not fit, it is set

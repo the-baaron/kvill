@@ -60,10 +60,12 @@ one cost several milliseconds every frame and never matched it.
 scrolling** keeps the caret centred, and the view scrolls past the end of the
 document so the last line is never pinned to the bottom edge.
 
-## Build
+## Getting it
 
-Requires macOS 14 or later to run, and the Xcode Command Line Tools to build.
-Full Xcode is not needed.
+On the Mac App Store, free. Requires macOS 14 or later.
+
+To build it yourself you need the Xcode Command Line Tools; full Xcode is not
+required.
 
 ```sh
 git clone https://github.com/the-baaron/kvill.git
@@ -72,16 +74,9 @@ cd kvill
 open build/Kvill.app
 ```
 
-To install it:
-
-```sh
-cp -R build/Kvill.app /Applications/
-```
-
-Then either drop a `.md` file on the icon, or open Kvill and choose
-**Kvill › Make Kvill the Default Markdown Editor…** to make double-clicking work
-everywhere. The app is ad-hoc signed, which is enough to run it locally; a
-Developer ID signature would be needed to distribute it.
+Either drop a `.md` file on the icon, or choose
+**Kvill › Make Kvill the Default Markdown Editor…** so double-clicking works
+everywhere.
 
 ## Keyboard
 
@@ -103,47 +98,6 @@ Developer ID signature would be needed to distribute it.
 Return continues a list or quote and ends it on an empty item. Tab and Shift-Tab
 indent list items. Clicking a checkbox toggles it. Command-clicking a link opens
 it.
-
-## How the gutter works
-
-Every line's text starts on the same x position. Its marker is pushed into the
-space to the left, right-aligned, using two paragraph indents and one kerned
-space:
-
-```
-firstLineHeadIndent = contentX - gap - markerWidth   where the marker starts
-headIndent          = contentX                       where wrapped lines resume
-kern on last gap char = gap - naturalGapWidth        pins content to contentX
-```
-
-Because the marker's width is measured and compensated for, `#`, `######`,
-`1.` and `100.` all leave the text on the same column. See
-`Sources/Kvill/Editor/MarkdownStyler.swift`.
-
-## Layout of the source
-
-```
-Sources/Kvill/
-  Markdown/    line scanner, inline scanner, model types
-  Editor/      styler (the gutter maths), text view, controller, commands
-  Theme/       palettes, typography presets, derived metrics
-  UI/          glass chrome: options bar, selection bar, panel, edge effects
-  App/         NSDocument, window, menu bar, delegate, PNG renderer
-```
-
-## Rendering pages to PNG
-
-The app can draw a document to an image without opening a window, which is how
-the screenshots here are made:
-
-```sh
-./build/Kvill.app/Contents/MacOS/Kvill --render notes.md out.png \
-  --theme ink --typography editorial --geometry 900x900 --scale 2 --offset 0
-```
-
-This draws the page only. The floating glass chrome is not included: those views
-force the hierarchy to be layer-backed, and an off-screen layer-backed window
-never runs a display pass, so there is nothing to capture.
 
 ## Images
 
@@ -186,16 +140,14 @@ showing, because half a grid looks worse than none.
 
 ## Known limits
 
-- Re-parsing and restyling run over the whole document on each edit. That is
-  comfortably fast for normal notes; a multi-megabyte file will feel it.
+- Images referenced beside a document do not load unless you opened the folder
+  rather than the file. The sandbox grants access to what you chose, and a
+  neighbouring file is not that.
 - The emphasis matcher is a pragmatic approximation of the CommonMark flanking
   rules, not the full algorithm. It handles real prose, including `snake_case`,
   but a deliberately pathological nesting case may differ from a strict parser.
 - Code highlighting is language-agnostic: comments, strings, numbers and a
   shared keyword set. It is not a per-language grammar.
-- `--render` starts at the top of the document for a full-length file, but for a
-  document only a little taller than the canvas it can begin a line or two in.
-  It is a screenshot tool, so this has not been chased down.
 
 ## Licence
 
