@@ -18,8 +18,8 @@ pushed rather than invented at the keyboard.
 
 ## Promotional text
 
-Opens faster than you can say Markdown. About nine hundredths of a second from
-double-click to a page you can type on, which is not a figure of speech.
+A README needs one word changed. Your editor takes eleven seconds to start, opens
+a workspace and reopens six tabs. Kvill is already waiting.
 
 ## Description
 

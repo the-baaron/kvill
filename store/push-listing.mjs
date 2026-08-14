@@ -74,10 +74,16 @@ const problem = (result) =>
 // --- listing.md ------------------------------------------------------------
 
 const listing = fs.readFileSync(path.join(here, 'listing.md'), 'utf8');
-const section = (name) => {
-  const match = listing.match(new RegExp(`^## ${name}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`, 'm'));
-  return match ? match[1].trim() : null;
-};
+
+// Split on the headings rather than matching between them. A lazy match ending
+// at `$` under the multiline flag stops at the first line break, not at the end
+// of the section, so every field went up as its opening line and nothing else.
+const sections = new Map();
+for (const chunk of listing.split(/^## /m).slice(1)) {
+  const breakAt = chunk.indexOf('\n');
+  sections.set(chunk.slice(0, breakAt).trim(), chunk.slice(breakAt + 1).trim());
+}
+const section = (name) => sections.get(name) ?? null;
 const field = (name) => {
   const match = listing.match(new RegExp(`^- \\*\\*${name}\\*\\*: (.+)$`, 'm'));
   return match ? match[1].trim() : null;
