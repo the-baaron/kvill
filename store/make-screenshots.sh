@@ -29,14 +29,20 @@ rm -f store/screenshots/*.png store/page-*.png
 
 echo "==> Composing"
 shot 1 paper editorial centre light \
-  "Markdown that stays out of the way" \
-  "Syntax hangs in the margin, so your words keep one clean edge."
+  "Change one line and go" \
+  "0.09 seconds from double-click to cursor. No project, nothing to index."
 shot 2 ink editorial right dark \
-  "Written to be read" \
-  "Eight palettes. Five typefaces. Each with the line height and spacing that suit it."
+  "All of Markdown, none of the weight" \
+  "Tables, callouts, code, footnotes. No sidebar, no inspector, no workspace."
 shot 3 sepia editorial left light \
   "Yours, and only yours" \
   "No network, no account, no tracking. Free, and open source."
+shot 4 nord editorial centre dark \
+  "Set properly, not just styled" \
+  "Eight palettes and five typefaces, each with the spacing that suits it."
+shot 5 contrast-light grotesk right light \
+  "Everything, without the mouse" \
+  "Press / and the whole of Markdown is three keystrokes away."
 
 rm -f store/page-*.png
 echo

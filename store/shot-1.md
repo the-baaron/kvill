@@ -1,14 +1,14 @@
-# The margin does the work
+# Change one line and go
 
-Every syntax marker hangs in the left margin, dimmed and right-aligned, so a first-level heading and a sixth-level one finish on the same column and your words keep one clean edge down the page.
+Double-click a Markdown file and it is open in about a tenth of a second, cursor where you left it. No project to open, nothing to index, no workspace to choose.
 
 ## Nothing shouts
 
-Markers appear only where the cursor is. Move away and the line reads as what it is: a heading, a quote, a list. Move back and the source is there, exactly as you typed it.
+Every syntax marker hangs in the left margin, dimmed and right-aligned, so a first-level heading and a sixth-level one finish on the same column and your words keep one clean edge.
 
 > [!NOTE]
-> Callouts, tables, footnotes, task lists and reference links all work, and all stay ordinary Markdown on disk.
+> Markers appear only where the cursor is. Move away and a line reads as what it is. Move back and the source is there, exactly as you typed it.
 
-- [x] Eight colour palettes, five typefaces
-- [x] Focus mode dims all but the paragraph you are in
-- [ ] Typewriter scrolling keeps your line at eye level
+- [x] Opens in 0.09 seconds
+- [x] 0.12 seconds for a half-megabyte document
+- [ ] Close the last window and the app quits
