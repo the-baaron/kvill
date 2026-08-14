@@ -1,0 +1,57 @@
+import AppKit
+
+/// Decides what Quill will actually open.
+///
+/// The stock behaviour is to check a file's type and, when it does not match one
+/// the app declares, refuse with a modal alert: "Quill cannot open files in the
+/// PNG image format." That is the wrong answer twice over. Dropping a folder of
+/// notes and screenshots on the icon should open the notes and leave the rest
+/// alone, and a type check is the wrong question anyway, because Quill can show
+/// any text file whatever its extension says.
+///
+/// So the question asked here is the one that matters: does this file decode as
+/// text? If it does, open it. If it does not, skip it quietly.
+final class QuillDocumentController: NSDocumentController {
+
+    override func openDocument(
+        withContentsOf url: URL,
+        display displayDocument: Bool,
+        completionHandler: @escaping (NSDocument?, Bool, Error?) -> Void
+    ) {
+        guard QuillDocumentController.isReadableAsText(url) else {
+            // `userCancelled` is the one error AppKit shows nothing for, which is
+            // exactly right: the user asked for something Quill does not do, and
+            // an alert would not tell them anything the missing window does not.
+            completionHandler(nil, false, CocoaError(.userCancelled))
+            return
+        }
+        super.openDocument(
+            withContentsOf: url, display: displayDocument, completionHandler: completionHandler)
+    }
+
+    /// True when the start of the file reads as text.
+    ///
+    /// Only the first few kilobytes are looked at, so this stays instant on a
+    /// large file. A NUL byte settles it: no text encoding Quill would open puts
+    /// one in the first page, and every binary format has one early.
+    static func isReadableAsText(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+
+        let sample = (try? handle.read(upToCount: 8192)) ?? Data()
+        // An empty file is a new document waiting to be written into.
+        guard !sample.isEmpty else { return true }
+        guard !sample.contains(0) else { return false }
+
+        if String(data: sample, encoding: .utf8) != nil { return true }
+        // A multi-byte character can straddle the end of the sample, so a failure
+        // on the last few bytes is not proof of anything.
+        if sample.count == 8192, String(data: sample.dropLast(4), encoding: .utf8) != nil {
+            return true
+        }
+        // Not UTF-8, but the system may still recognise the encoding, which is
+        // what `MarkdownDocument.read` falls back to.
+        return NSString.stringEncoding(
+            for: sample, encodingOptions: nil, convertedString: nil, usedLossyConversion: nil) != 0
+    }
+}
