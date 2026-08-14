@@ -18,68 +18,79 @@ pushed rather than invented at the keyboard.
 
 ## Promotional text
 
-Double-click a Markdown file and it is open in 0.09 seconds. Fix
-the line, close it, get on. Free, open source, and it never touches the network.
+A README needs one word changed. Your editor takes eleven seconds to start,
+opens a workspace and restores six tabs. Kvill takes a tenth of a second.
 
 ## Description
 
-Kvill is for the file you want to change one line in.
+Kvill is a fast, focused Markdown editor for macOS.
 
-You know the one: a README, a note, a config comment, something in a repo you
-have open in a real editor that takes eleven seconds to start and wants to
-index the whole project first. Kvill opens it in 0.09 seconds,
-puts the cursor where you left it, and gets out of the way.
+It opens a file in about a tenth of a second, puts the cursor where you left
+it, and gets out of the way. Nothing to index, no project to open, no workspace
+to choose. Close the last window and it quits.
 
-FAST, MEASURED RATHER THAN CLAIMED
+# Built for the quick edit
 
-• 0.09 seconds from double-click to a page you can type on
-• 0.12 seconds for a half-megabyte document
-• 0.004 seconds of work per keystroke in that same half-megabyte file
-• Nothing to index, no project to open, no workspace to choose
+You want to fix a typo in a README, add a line to a note, uncomment something
+in a config file. Your usual editor wants to open a workspace, index the folder
+and restore the tabs you left on Thursday. Kvill just opens the file.
 
-One file, one window. A second file opens a second window, never a tab. There
-is no file list, no sidebar, no inspector, and nothing to set up before you can
-write. Close the last window and the app quits, because there is nothing left
-for it to do.
+- 0.09 seconds from double-click to a page you can type on
+- 0.12 seconds for a half-megabyte document
+- One file, one window. A second file opens a second window, never a tab
+- No sidebar, no file list, no inspector, nothing to set up
 
-AND STILL A PROPER EDITOR
+# Made for Mac
 
-Every syntax marker hangs in the left margin, dimmed and right-aligned, so a
-first-level heading and a sixth-level one finish on the same column and your
-words keep one clean edge. Markers appear only where the cursor is: move away
-and a line reads as what it is, move back and the source is there exactly as
-you typed it. Nothing is ever rewritten behind your back.
+Written in Swift with AppKit and set in the system typefaces. No web view, no
+cross-platform framework, no bundled runtime. It behaves the way a Mac app
+should: autosave and Versions, Dark Mode, the standard find bar, full screen,
+and every setting where you expect to find it.
 
-• Headings, emphasis, strikethrough, highlight, inline code and math
-• Bulleted, numbered and task lists, with real checkboxes you can click
-• Tables that square their own columns up as you leave them, so the file stays
-  tidy in a diff and on GitHub, not only on screen
-• Fenced code with syntax colouring, and indented code
-• GitHub-style callouts: note, tip, important, warning and caution
-• Footnotes, reference links, and links that hide their URL until you need it
-• Images, dropped straight into the document
-• YAML front matter
+# Markdown that stays out of the way
 
-Press / anywhere and an insert menu opens under the cursor, filtering as you
-type, so a heading, a table or a callout is three keystrokes away.
+Syntax markers hang in the left margin, dimmed and right-aligned, so headings
+of every level finish on the same column and your text keeps one clean edge
+down the page.
 
-Eight colour palettes, five typefaces, four text sizes and three measures.
-Focus mode dims everything but the paragraph you are in. Typewriter scrolling
-keeps your line at eye level. Settings are remembered across the app, not per
-document, because you should choose them once.
+Markers appear only where the cursor is. Move away and a line reads as a
+heading. Move back and the source is there, exactly as you typed it. Nothing is
+rewritten behind your back.
 
-WHAT IT DOES NOT DO
+- Headings, emphasis, strikethrough, highlight, inline code and math
+- Bulleted, numbered and task lists, with checkboxes you can click
+- Tables that square their own columns as you leave them, so the file reads
+  properly in a diff and on GitHub, not only here
+- Fenced code with syntax colouring
+- GitHub callouts: note, tip, important, warning and caution
+- Footnotes, reference links, and links that hide their URL until you want it
+- Images, dropped straight in
+- YAML front matter
 
-Kvill makes no network connections at all. There is no analytics, no account,
-no sync, no telemetry, and no entitlement in the app that would let any of that
-be added later by accident. It collects nothing because it can send nothing.
+Press / and an insert menu opens under the cursor, filtering as you type. A
+table, a callout, a code block: three keystrokes, no mouse.
 
-It is free, with no advertising and nothing to buy, and it will stay that way.
-The source is open.
+# Set the way you read
+
+Eight colour palettes and five typefaces, each with the line height, measure
+and spacing that suit it. Four text sizes and three column widths. Focus mode
+dims everything but the paragraph you are in. Typewriter scrolling keeps your
+line at eye level. Chosen once and remembered everywhere, not per document.
+
+# No network. At all.
+
+No analytics, no account, no sync, no telemetry. Kvill has no network
+entitlement, so macOS itself would refuse the connection if it tried. It
+collects nothing because it cannot send anything.
+
+# Free, and open
+
+No advertising, no in-app purchases, nothing to unlock, and it stays that way.
+The source is on GitHub.
 
 Markdown in, Markdown out. No proprietary format, no database, no wrapper
-around your writing. The file on disk is exactly what you typed, and every
-other editor can read it.
+around your writing. The file on disk is what you typed, and every other editor
+can read it.
 
 ## Keywords
 
