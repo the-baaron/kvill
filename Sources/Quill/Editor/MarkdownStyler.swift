@@ -599,6 +599,18 @@ final class MarkdownStyler {
 
     private func lineLayout(for line: MDLine) -> LineLayout {
         let base = theme.metrics.base
+        let layout = blockLayout(for: line)
+        guard line.number == 0 else { return layout }
+
+        // Air above the first line, so the document does not start hard against
+        // the title bar. Front matter is the exception: it is a panel, and a
+        // panel wants the margin a table gets, not a page's worth of white.
+        let top = line.kind == .frontMatterDelimiter ? base * 1.1 : base * 3
+        return LineLayout(height: layout.height, before: top, after: layout.after)
+    }
+
+    private func blockLayout(for line: MDLine) -> LineLayout {
+        let base = theme.metrics.base
 
         switch line.kind {
         case .heading(let level):

@@ -179,8 +179,7 @@ final class EditorViewController: NSViewController {
         let metrics = theme.metrics
         let available = scrollView.contentSize.width
         let horizontal = max(24, (available - metrics.contentWidth) / 2)
-        // Enough that the first line is not jammed under the title bar.
-        let vertical: CGFloat = 116
+        let vertical: CGFloat = 56
 
         if textView.textContainerInset.width != horizontal
             || textView.textContainerInset.height != vertical {
@@ -192,14 +191,7 @@ final class EditorViewController: NSViewController {
         // the limit a rule rather than a number someone picked: max scroll works
         // out to the document's height less one line. It also clears the half a
         // screen typewriter mode needs to bring the caret to the middle.
-        // Typewriter mode needs half a window of it whatever the setting says,
-        // or the caret cannot reach the middle.
-        if let clip = scrollView.contentView as? TypewriterClipView {
-            let full = max(0, scrollView.frame.height - metrics.lineHeight)
-            clip.bottomSlack = ThemeManager.shared.scrollPastEnd
-                ? full
-                : (ThemeManager.shared.typewriterScrolling ? scrollView.frame.height / 2 : 0)
-        }
+        applySlack()
 
         visibleLineRange()
 
@@ -207,6 +199,50 @@ final class EditorViewController: NSViewController {
             lastContentWidth = metrics.contentWidth
             textView.needsDisplay = true
         }
+    }
+
+    /// Makes the text view taller than its text, so there is somewhere to
+    /// scroll past the last line.
+    ///
+    /// The rule is that the last line can come to rest at the top of the window
+    /// and no further. A document that already fits the window has nothing to
+    /// scroll to, so it does not move at all, which is what an empty one should
+    /// do. Typewriter mode keeps half a window whatever the setting says, or the
+    /// caret cannot reach the middle.
+    ///
+    /// The height is the whole mechanism. Constraining the clip view's bounds
+    /// looked tidier and was not: it is honoured on some routes into scrolling
+    /// and ignored on others, so how far you could scroll depended on how you
+    /// scrolled.
+    private func applySlack() {
+        guard let manager = textView.layoutManager, let container = textView.textContainer else {
+            return
+        }
+        manager.ensureLayout(for: container)
+
+        let inset = textView.textContainerInset.height
+        let text = manager.usedRect(for: container).height
+        let content = text + inset * 2
+        let viewport = scrollView.contentSize.height
+        guard viewport > 0 else { return }
+
+        var wanted = max(content, viewport)
+        if ThemeManager.shared.scrollPastEnd, content > viewport {
+            // Where the last line starts, plus a window, is a view whose bottom
+            // is reached exactly as that line arrives at the top.
+            wanted = viewport + inset + max(0, text - theme.metrics.lineHeight)
+        }
+        if ThemeManager.shared.typewriterScrolling {
+            wanted = max(wanted, content + viewport / 2)
+        }
+
+        // Both, on purpose. `minSize` is the floor the text view will not size
+        // itself below when it next lays out, and the frame is what the scroll
+        // view reads right now; setting only the first leaves the view its old
+        // height until something else happens to resize it.
+        textView.minSize = NSSize(width: 0, height: wanted)
+        guard abs(textView.frame.height - wanted) > 0.5 else { return }
+        textView.setFrameSize(NSSize(width: textView.frame.width, height: wanted))
     }
 
     // MARK: - Parse and style
@@ -243,6 +279,10 @@ final class EditorViewController: NSViewController {
 
         rebuildDecorations()
         rebuildOverlays(context: context)
+        // The document just changed height, so the space below it has to be
+        // measured again. Not from here: reading the used rect lays out, and
+        // this runs inside the storage's endEditing.
+        view.needsLayout = true
     }
 
     /// Lines to restyle: everything on screen, plus whatever the edit touched.
@@ -723,7 +763,7 @@ final class EditorViewController: NSViewController {
         guard !isAutoScrolling else { return true }
         // Recentring mid-drag would pull the text out from under the pointer.
         guard !textView.isSelectingWithMouse else { return true }
-        guard let clip = scrollView.contentView as? TypewriterClipView else { return false }
+        guard let clip = scrollView.contentView as? NSClipView else { return false }
 
         let caret = textView.selectedRange().location
         guard let fragment = textView.lineFragmentRect(atCharacterIndex: caret) else { return false }
@@ -731,7 +771,7 @@ final class EditorViewController: NSViewController {
         let visibleHeight = clip.bounds.height
         guard visibleHeight > 0 else { return false }
 
-        let maxY = max(0, textView.frame.height + clip.bottomSlack - visibleHeight)
+        let maxY = max(0, textView.frame.height - visibleHeight)
         let target = min(max(fragment.midY - visibleHeight / 2, 0), maxY)
         guard abs(clip.bounds.origin.y - target) > 0.5 else { return true }
 
