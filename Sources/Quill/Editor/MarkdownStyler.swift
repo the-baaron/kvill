@@ -605,7 +605,9 @@ final class MarkdownStyler {
         // Air above the first line, so the document does not start hard against
         // the title bar. Front matter is the exception: it is a panel, and a
         // panel wants the margin a table gets, not a page's worth of white.
-        let top = line.kind == .frontMatterDelimiter ? base * 1.1 : base * 3
+        let top = line.kind == .frontMatterDelimiter
+            ? base * 1.1
+            : theme.metrics.firstLineMargin
         return LineLayout(height: layout.height, before: top, after: layout.after)
     }
 

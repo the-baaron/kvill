@@ -213,6 +213,11 @@ struct Metrics {
     /// Total width of gutter plus text column.
     var contentWidth: CGFloat { gutter + measure }
 
+    /// Air above the first line of a document. Also what the last line stops
+    /// short of when scrolling past the end, so it comes to rest where a first
+    /// line sits rather than jammed against the top edge.
+    var firstLineMargin: CGFloat { base * 3 }
+
     /// Horizontal space a task checkbox reserves inside the text column.
     var checkboxAdvance: CGFloat { checkboxSize + checkboxGap }
 

@@ -228,9 +228,12 @@ final class EditorViewController: NSViewController {
 
         var wanted = max(content, viewport)
         if ThemeManager.shared.scrollPastEnd, content > viewport {
-            // Where the last line starts, plus a window, is a view whose bottom
-            // is reached exactly as that line arrives at the top.
-            wanted = viewport + inset + max(0, text - theme.metrics.lineHeight)
+            // The last line comes to rest where a first line sits, not against
+            // the top edge, so the margin the first line gets is taken off the
+            // distance.
+            let margin = inset + theme.metrics.firstLineMargin
+            let lastLineTop = inset + max(0, text - theme.metrics.lineHeight)
+            wanted = viewport + max(0, lastLineTop - margin)
         }
         if ThemeManager.shared.typewriterScrolling {
             wanted = max(wanted, content + viewport / 2)
