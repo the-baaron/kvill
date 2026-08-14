@@ -25,6 +25,9 @@ main claim, not just in a benchmark.
 | `--tree folder out.png` | Draws the file-tree sidebar, `--theme` optional |
 | `--login-item [status\|on\|off]` | Reads what macOS thinks of the login item, not what the setting claims |
 | `./store/make-screenshots.sh` | Regenerates all five App Store screenshots |
+| `scripts/make-portfolio.swift` | Composes a rendered page in a window at any canvas size, `--wash HEX A` to fade it behind text |
+| `scripts/make-motif.swift` | Draws the hanging-marker signature as an abstract |
+| `scripts/make-logo.swift` | Writes the wordmark as SVG outlines |
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
 | `node store/submit.mjs` | Submits the current version for review |
 
