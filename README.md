@@ -5,15 +5,14 @@ Syntax markers hang in the left margin, dimmed and right-aligned, so
 `#` and `######` finish on the same column and the text itself stays on one
 clean line of measure.
 
-```
- #   Kvill
-         A full-screen Markdown editor.
+![Kvill](store/screenshots/1.png)
 
- ##  Headings
-         Markers hang left of the column.
-```
+Native AppKit. No Electron, no web view, no bundled runtime. About 0.09 seconds
+from double-click to a page you can type on.
 
-Native AppKit. No Electron, no web view, no bundled runtime.
+**Free on the Mac App Store.** No advertising, no in-app purchases, no account,
+and no network access at all: the app ships without a network entitlement, so
+macOS will not let it connect even if it tried.
 
 ## What it does
 
