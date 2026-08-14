@@ -254,13 +254,13 @@ enum SelfTest {
         // The reachable bottom is the view's height less a window, and the rule
         // says that lands with the last line at the top.
         let inset = controller.editor.textView.textContainerInset.height
-        let margin = ThemeManager.shared.theme.metrics.firstLineMargin
         let maxScroll = controller.editor.textView.frame.height - viewport
         // Stopping with the last line where a first line sits, not at the edge.
-        let expected = max(0, inset + used - line - inset - margin)
+        // The inset carries that margin, so it is an inset that comes off.
+        let expected = max(0, used - line)
         check("the last line stops where a first line sits",
               abs(maxScroll - expected) < 3,
-              "max scroll \(Int(maxScroll)), expected \(Int(expected)), margin \(Int(margin))pt")
+              "max scroll \(Int(maxScroll)), expected \(Int(expected))")
 
         // A document that fits has nowhere to go.
         controller.loadText("")

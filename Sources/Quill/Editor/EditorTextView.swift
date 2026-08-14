@@ -245,17 +245,29 @@ final class EditorTextView: NSTextView {
 
     private static let placeholder = "Start typing, or press / to insert"
 
+
     private func drawPlaceholder() {
-        guard textStorage?.length == 0 else { return }
+        guard textStorage?.length == 0, let layoutManager,
+              layoutManager.extraLineFragmentTextContainer != nil else { return }
+
+        // Drawn into the caret's own line fragment with the caret's own
+        // attributes, so it sits where the first character will, whatever the
+        // text size. The one addition is the baseline lift the styler gives
+        // every line: forcing a line height taller than the font's own puts the
+        // extra space above the glyphs, and half of it has to be given back.
+        var rect = layoutManager.extraLineFragmentRect
         let origin = textContainerOrigin
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: theme.body,
-            .foregroundColor: theme.colors.textSecondary.withAlpha(0.45),
-        ]
-        let point = NSPoint(
-            x: origin.x + theme.metrics.gutter,
-            y: origin.y + theme.metrics.firstLineMargin)
-        (Self.placeholder as NSString).draw(at: point, withAttributes: attributes)
+        rect.origin.x += origin.x
+        rect.origin.y += origin.y
+
+        var attributes = typingAttributes
+        attributes[.foregroundColor] = theme.colors.textSecondary.withAlpha(0.45)
+        let natural = ceil(theme.body.ascender + abs(theme.body.descender) + theme.body.leading)
+        let surplus = theme.metrics.lineHeight - natural
+        if surplus > 0.5 { attributes[.baselineOffset] = surplus / 2 }
+
+        NSAttributedString(string: Self.placeholder, attributes: attributes)
+            .draw(with: rect, options: [.usesLineFragmentOrigin], context: nil)
     }
 
     private func drawOverlays(in dirtyRect: NSRect) {

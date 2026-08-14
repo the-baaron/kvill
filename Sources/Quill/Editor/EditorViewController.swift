@@ -190,7 +190,14 @@ final class EditorViewController: NSViewController {
         let metrics = theme.metrics
         let available = scrollView.contentSize.width
         let horizontal = max(24, (available - metrics.contentWidth) / 2)
+        // Air above the first line. It has to be the inset: paragraph spacing
+        // before the first paragraph is not drawn by TextKit, which is why the
+        // margin looked right when it was an inset and vanished when it moved
+        // into the paragraph style. Front matter is the exception, being a panel
+        // that wants the margin a table gets rather than a page's worth of air.
+        let opensWithFrontMatter = parsed.lines.first?.kind == .frontMatterDelimiter
         let vertical: CGFloat = 56
+            + (opensWithFrontMatter ? metrics.base * 1.1 : metrics.firstLineMargin)
 
         if textView.textContainerInset.width != horizontal
             || textView.textContainerInset.height != vertical {
@@ -255,9 +262,10 @@ final class EditorViewController: NSViewController {
             // The last line comes to rest where a first line sits, not against
             // the top edge, so the margin the first line gets is taken off the
             // distance.
-            let margin = inset + theme.metrics.firstLineMargin
+            // The inset already carries the first line's margin, so leaving the
+            // last line where a first line sits means stopping an inset short.
             let lastLineTop = inset + max(0, text - theme.metrics.lineHeight)
-            wanted = viewport + max(0, lastLineTop - margin)
+            wanted = viewport + max(0, lastLineTop - inset)
         }
         if ThemeManager.shared.typewriterScrolling {
             wanted = max(wanted, content + viewport / 2)
