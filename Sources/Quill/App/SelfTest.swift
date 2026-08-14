@@ -143,8 +143,8 @@ enum SelfTest {
         // survivable.
         let stale = NSRange(location: 900_000, length: 500)
         controller.editor.textView.decorations = [
-            BlockDecoration(kind: .codeBlock, lineRanges: [stale], quoteDepth: 0, headerRow: nil),
-            BlockDecoration(kind: .table, lineRanges: [stale, stale], quoteDepth: 0, headerRow: 0),
+            BlockDecoration(kind: .codeBlock, lineRanges: [stale], quoteDepth: 0),
+            BlockDecoration(kind: .blockquote(depth: 1), lineRanges: [stale], quoteDepth: 1),
         ]
         controller.editor.textView.overlays = [
             .checkbox(stale, .open),

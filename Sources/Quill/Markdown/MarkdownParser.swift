@@ -14,7 +14,6 @@ enum MarkdownParser {
 
         classify(&lines, text: text)
         detectSetextHeadings(&lines, text: text)
-        detectTables(&lines, text: text)
         assignBlocks(&lines)
         scanInlines(&lines, text: text)
         detectBlockImages(&lines, text: text)
@@ -325,39 +324,6 @@ enum MarkdownParser {
         }
     }
 
-    // MARK: - Tables
-
-    private static func detectTables(_ lines: inout [MDLine], text: NSString) {
-        var index = 0
-        while index < lines.count - 1 {
-            defer { index += 1 }
-            let line = lines[index]
-            guard !line.kind.isCode, line.kind != .frontMatterLine,
-                  line.kind != .frontMatterDelimiter,
-                  containsPipe(text, line.contentRange) else { continue }
-            guard isTableDelimiterRow(text, lines[index + 1].range) else { continue }
-
-            lines[index].kind = .tableHeader
-            lines[index + 1].kind = .tableDelimiter
-            lines[index + 1].contentRange = lines[index + 1].range
-            lines[index + 1].markerRange = NSRange(location: lines[index + 1].range.location, length: 0)
-            lines[index + 1].gapRange = NSRange(location: lines[index + 1].range.location, length: 0)
-
-            var row = index + 2
-            while row < lines.count,
-                  !lines[row].kind.isCode,
-                  containsPipe(text, lines[row].range),
-                  !isBlank(text, lines[row].range.location, NSMaxRange(lines[row].range)) {
-                lines[row].kind = .tableRow
-                lines[row].contentRange = lines[row].range
-                lines[row].markerRange = NSRange(location: lines[row].range.location, length: 0)
-                lines[row].gapRange = NSRange(location: lines[row].range.location, length: 0)
-                row += 1
-            }
-            index = row - 1
-        }
-    }
-
     // MARK: - Block grouping
 
     private static func assignBlocks(_ lines: inout [MDLine]) {
@@ -404,7 +370,6 @@ enum MarkdownParser {
         switch line.kind {
         case .codeLine, .indentedCode, .fenceDelimiter: return "code"
         case .frontMatterLine, .frontMatterDelimiter: return "front"
-        case .tableHeader, .tableDelimiter, .tableRow: return "table"
         case .blockquote, .calloutTitle: return "quote"
         default:
             return line.quoteDepth > 0 ? "quote" : nil
@@ -415,7 +380,6 @@ enum MarkdownParser {
         switch line.kind {
         case .codeLine, .indentedCode, .fenceDelimiter: return .codeBlock
         case .frontMatterLine, .frontMatterDelimiter: return .frontMatter
-        case .tableHeader, .tableDelimiter, .tableRow: return .table
         case .thematicBreak: return .thematicBreak
         case .calloutTitle(let kind): return .callout(kind: kind)
         case .blockquote: return .blockquote(depth: line.quoteDepth)
@@ -483,21 +447,6 @@ enum MarkdownParser {
                                         length: callout.end - line.contentRange.location)
                     tokens.removeAll { NSIntersectionRange($0.range, range).length > 0 }
                     tokens.append(InlineToken(range: range, kind: .calloutLabel(kind)))
-                }
-            }
-
-            if line.kind.isTable {
-                let content = line.contentRange
-                var cursor = content.location
-                let end = NSMaxRange(content)
-                while cursor < end {
-                    if text.character(at: cursor) == 124,  // '|'
-                       !isEscaped(text, cursor, from: content.location) {
-                        let pipe = NSRange(location: cursor, length: 1)
-                        tokens.removeAll { NSIntersectionRange($0.range, pipe).length > 0 }
-                        tokens.append(InlineToken(range: pipe, kind: .tablePipe))
-                    }
-                    cursor += 1
                 }
             }
 
@@ -762,36 +711,6 @@ enum MarkdownParser {
         let next = text.character(at: start + 1)
         // <tag, </tag, <!-- and <!DOCTYPE all count.
         return (next >= 97 && next <= 122) || (next >= 65 && next <= 90) || next == 47 || next == 33
-    }
-
-    private static func containsPipe(_ text: NSString, _ range: NSRange) -> Bool {
-        var i = range.location
-        let end = NSMaxRange(range)
-        while i < end {
-            if text.character(at: i) == 124, !isEscaped(text, i, from: range.location) { return true }
-            i += 1
-        }
-        return false
-    }
-
-    /// A delimiter row is made only of pipes, dashes, colons and spaces, and has
-    /// at least one dash and one pipe.
-    private static func isTableDelimiterRow(_ text: NSString, _ range: NSRange) -> Bool {
-        var i = range.location
-        let end = NSMaxRange(range)
-        var dashes = 0
-        var pipes = 0
-        var sawOther = false
-        while i < end {
-            switch text.character(at: i) {
-            case 45: dashes += 1
-            case 124: pipes += 1
-            case 58, 32, 9: break
-            default: sawOther = true
-            }
-            i += 1
-        }
-        return !sawOther && dashes >= 1 && pipes >= 1
     }
 
     static func isEscaped(_ text: NSString, _ index: Int, from start: Int) -> Bool {

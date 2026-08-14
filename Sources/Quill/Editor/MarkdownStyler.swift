@@ -25,10 +25,6 @@ final class MarkdownStyler {
     private var traitFonts: [String: NSFont] = [:]
     private var lineHeights: [String: CGFloat] = [:]
 
-    /// Table blocks whose header row has nothing in it.
-    private(set) var emptyHeaderBlocks: Set<Int> = []
-
-
     init(theme: Theme) {
         self.theme = theme
     }
@@ -67,306 +63,12 @@ final class MarkdownStyler {
         let clamped = lineRange.clamped(to: 0..<document.lines.count)
         guard !clamped.isEmpty else { return }
 
-        showingSource = context.alwaysShowMarkers
         storage.beginEditing()
         for index in clamped {
             styleLine(document.lines[index], index: index, text: text, storage: storage, context: context)
         }
         storage.endEditing()
     }
-
-    // MARK: - Tables
-
-    private struct TableLayout {
-        /// Widest trimmed cell per column, at `fontSize`.
-        var columns: [CGFloat]
-        /// Point size after shrinking the table to fit the measure.
-        var fontSize: CGFloat
-        /// False when the table overflows even at the smallest size, in which
-        /// case rows wrap and the grid is abandoned rather than left broken.
-        var fits: Bool
-    }
-
-    private var tableLayouts: [Int: TableLayout] = [:]
-
-    /// Padding either side of a cell's text, as a share of the table's font size.
-    private func cellPadding(_ fontSize: CGFloat) -> CGFloat { fontSize * 0.55 }
-
-    /// The smallest a table is allowed to shrink before it is left to wrap.
-    private static let minimumTableScale: CGFloat = 0.58
-
-    /// Measures every table so its cells can be kerned onto a common grid, and
-    /// shrinks any table that would otherwise be too wide for the column.
-    ///
-    /// Fitting matters more than it looks: a row is one paragraph, so the moment
-    /// it wraps the kerned grid is meaningless. Shrinking to fit keeps rows on
-    /// one line, which is what keeps the table a table.
-    func prepareTables(_ document: ParsedDocument, text: NSString) {
-        tableLayouts.removeAll(keepingCapacity: true)
-        emptyHeaderBlocks.removeAll(keepingCapacity: true)
-
-        let available = theme.metrics.measure
-        let base = theme.metrics.base
-
-        var index = 0
-        while index < document.lines.count {
-            guard document.lines[index].kind.isTable else {
-                index += 1
-                continue
-            }
-            let blockID = document.lines[index].blockID
-            var end = index
-            while end < document.lines.count,
-                  document.lines[end].blockID == blockID,
-                  document.lines[end].kind.isTable {
-                end += 1
-            }
-            let rows = Array(document.lines[index..<end])
-
-            var size = base
-            var columns = measureColumns(rows, text: text, size: size)
-            var total = tableWidth(columns, size: size)
-
-            // Font metrics are not linear in point size, so one ratio rarely
-            // lands inside the measure. Aim a little under it and iterate, or
-            // the table ends up a hair too wide and loses its grid for nothing.
-            let target = available * 0.97
-            var attempts = 0
-            while total > target, attempts < 5 {
-                let next = max(base * Self.minimumTableScale, size * target / total)
-                if next >= size { break }  // already at the floor
-                size = next
-                columns = measureColumns(rows, text: text, size: size)
-                total = tableWidth(columns, size: size)
-                attempts += 1
-            }
-
-            let fits = total <= available
-            // A table that will not fit even at the smallest size gets no grid,
-            // so it drops back to plain monospace source with its pipes showing.
-            // Half a grid is worse than none.
-            tableLayouts[blockID] = TableLayout(
-                columns: columns,
-                fontSize: fits ? size : base * 0.86,
-                fits: fits)
-
-            let headerCells = cells(text, in: rows[0].contentRange)
-            if headerCells.allSatisfy({
-                text.substring(with: $0).trimmingCharacters(in: .whitespaces).isEmpty
-            }) {
-                emptyHeaderBlocks.insert(blockID)
-            }
-
-            index = end
-        }
-    }
-
-    private func measureColumns(_ rows: [MDLine], text: NSString, size: CGFloat) -> [CGFloat] {
-        var widths: [CGFloat] = []
-        for line in rows where line.kind != .tableDelimiter {
-            let font = tableFont(line.kind, size: size)
-            for (column, cell) in cells(text, in: line.contentRange).enumerated() {
-                let trimmed = text.substring(with: cell).trimmingCharacters(in: .whitespaces)
-                let value = trimmed.isEmpty ? 0 : width(of: trimmed, font: font)
-                if column < widths.count {
-                    widths[column] = max(widths[column], value)
-                } else {
-                    widths.append(value)
-                }
-            }
-        }
-        return widths
-    }
-
-    private func tableWidth(_ columns: [CGFloat], size: CGFloat) -> CGFloat {
-        let padding = cellPadding(size)
-        return columns.reduce(0) { $0 + $1 + padding * 2 }
-    }
-
-    /// The runs between the pipes of a table row, excluding the pipes themselves
-    /// and anything outside the outer pair.
-    private func cells(_ text: NSString, in range: NSRange) -> [NSRange] {
-        let pipes = pipePositions(text, in: range)
-        guard pipes.count >= 2 else { return [] }
-        return (0..<(pipes.count - 1)).map { index in
-            NSRange(location: pipes[index] + 1, length: pipes[index + 1] - pipes[index] - 1)
-        }
-    }
-
-    private func pipePositions(_ text: NSString, in range: NSRange) -> [Int] {
-        var result: [Int] = []
-        var index = range.location
-        let end = NSMaxRange(range)
-        while index < end {
-            if text.character(at: index) == 124,  // '|'
-               !MarkdownParser.isEscaped(text, index, from: range.location) {
-                result.append(index)
-            }
-            index += 1
-        }
-        return result
-    }
-
-    /// Tables are set in the reading face, not a monospace one. The columns line
-    /// up because they are kerned to measured widths, so nothing is gained by
-    /// making every glyph the same width, and a proportional table reads far
-    /// better next to proportional prose.
-    private func tableFont(_ kind: BlockKind, size: CGFloat) -> NSFont {
-        kind == .tableHeader
-            ? FontBuilder.font(theme.preset.bodyFamily, size: size, weight: .semibold)
-            : FontBuilder.font(theme.preset.bodyFamily, size: size)
-    }
-
-    func tableFits(blockID: Int) -> Bool {
-        tableLayouts[blockID]?.fits ?? true
-    }
-
-    private func tableFontSize(for line: MDLine) -> CGFloat {
-        tableLayouts[line.blockID]?.fontSize ?? theme.metrics.base
-    }
-
-    /// The face a table row is actually set in, accounting for the monospace
-    /// fallback used when the table could not be fitted to a grid.
-    private func tableFont(for line: MDLine) -> NSFont {
-        guard let layout = tableLayouts[line.blockID] else { return theme.body }
-        guard layout.fits else {
-            return FontBuilder.font(
-                .mono, size: layout.fontSize,
-                weight: line.kind == .tableHeader ? .semibold : .regular)
-        }
-        return tableFont(line.kind, size: layout.fontSize)
-    }
-
-    /// Pins every cell onto the column grid, measuring the text as it is
-    /// actually styled.
-    ///
-    /// This runs after styling rather than during it. Measuring the raw text
-    /// against the table's own font is wrong the moment a cell contains inline
-    /// code, which is set in a different face: the column then lands in the
-    /// wrong place and every row holding code drifts out of line with the rest.
-    func alignTables(
-        _ storage: NSTextStorage, document: ParsedDocument, text: NSString,
-        lines scope: Range<Int>? = nil
-    ) {
-        guard !tableLayouts.isEmpty else { return }
-        let limit = scope ?? 0..<document.lines.count
-
-        var index = limit.lowerBound
-        while index < min(limit.upperBound, document.lines.count) {
-            guard document.lines[index].kind.isTable,
-                  let layout = tableLayouts[document.lines[index].blockID], layout.fits else {
-                index += 1
-                continue
-            }
-            let blockID = document.lines[index].blockID
-            var end = index
-            while end < document.lines.count, document.lines[end].blockID == blockID,
-                  document.lines[end].kind.isTable {
-                end += 1
-            }
-
-            // Measuring an attributed string counts its kerning, so a second
-            // pass over an already-aligned table would read every cell as the
-            // width it was stretched to and cancel its own correction out. The
-            // old kerning goes first.
-            for row in index..<end where document.lines[row].range.length > 0 {
-                guard NSMaxRange(document.lines[row].range) <= storage.length else { continue }
-                storage.removeAttribute(.kern, range: document.lines[row].range)
-            }
-
-            // Widths come from the styled text, so a code span counts at the
-            // width it will actually be drawn.
-            var widths: [CGFloat] = []
-            for row in index..<end where document.lines[row].kind != .tableDelimiter {
-                for (column, cell) in cells(text, in: document.lines[row].contentRange).enumerated() {
-                    let content = trimmed(cell, in: text)
-                    let value = content.length == 0 ? 0 : measure(content, in: storage)
-                    if column < widths.count {
-                        widths[column] = max(widths[column], value)
-                    } else {
-                        widths.append(value)
-                    }
-                }
-            }
-
-            let padding = cellPadding(layout.fontSize)
-            for row in index..<end where document.lines[row].kind != .tableDelimiter {
-                alignRow(document.lines[row], widths: widths, padding: padding,
-                         text: text, storage: storage)
-            }
-            index = end
-        }
-    }
-
-    private func trimmed(_ range: NSRange, in text: NSString) -> NSRange {
-        var start = range.location
-        var end = NSMaxRange(range)
-        while start < end, isSpace(text.character(at: start)) { start += 1 }
-        while end > start, isSpace(text.character(at: end - 1)) { end -= 1 }
-        return NSRange(location: start, length: end - start)
-    }
-
-    private func measure(_ range: NSRange, in storage: NSTextStorage) -> CGFloat {
-        guard range.length > 0, NSMaxRange(range) <= storage.length else { return 0 }
-        return storage.attributedSubstring(from: range).size().width
-    }
-
-    private func alignRow(
-        _ line: MDLine, widths: [CGFloat], padding: CGFloat,
-        text: NSString, storage: NSTextStorage
-    ) {
-        guard NSMaxRange(line.contentRange) <= storage.length else { return }
-        let pipes = pipePositions(text, in: line.contentRange)
-        guard pipes.count >= 2, !widths.isEmpty else { return }
-
-        for column in 0..<(pipes.count - 1) {
-            guard column < widths.count else { break }
-            let openPipe = pipes[column]
-            let cellStart = openPipe + 1
-            let cellEnd = pipes[column + 1]
-            let content = trimmed(NSRange(location: cellStart, length: cellEnd - cellStart), in: text)
-
-            let leadRange = NSRange(location: openPipe, length: content.location - openPipe)
-            let trailRange = NSRange(
-                location: NSMaxRange(content), length: cellEnd - NSMaxRange(content))
-
-            let leadWidth = measure(leadRange, in: storage)
-            let contentWidth = measure(content, in: storage)
-            let trailWidth = measure(trailRange, in: storage)
-            let segmentTarget = padding * 2 + widths[column]
-
-            let leadAnchor = content.location > cellStart ? content.location - 1 : openPipe
-            let tailAnchor = cellEnd > NSMaxRange(content)
-                ? cellEnd - 1
-                : (content.length > 0 ? NSMaxRange(content) - 1 : leadAnchor)
-
-            if tailAnchor == leadAnchor {
-                storage.addAttribute(
-                    .kern, value: segmentTarget - leadWidth - trailWidth,
-                    range: NSRange(location: leadAnchor, length: 1))
-            } else {
-                storage.addAttribute(
-                    .kern, value: padding - leadWidth,
-                    range: NSRange(location: leadAnchor, length: 1))
-                storage.addAttribute(
-                    .kern, value: segmentTarget - padding - contentWidth - trailWidth,
-                    range: NSRange(location: tailAnchor, length: 1))
-            }
-        }
-
-        if let last = pipes.last, last >= line.contentRange.location {
-            let pipeWidth = measure(NSRange(location: last, length: 1), in: storage)
-            storage.addAttribute(
-                .kern, value: -pipeWidth, range: NSRange(location: last, length: 1))
-        }
-    }
-
-    private func span(_ text: NSString, _ from: Int, _ to: Int, _ font: NSFont) -> CGFloat {
-        guard to > from else { return 0 }
-        return width(of: text.substring(with: NSRange(location: from, length: to - from)), font: font)
-    }
-
-    private func isSpace(_ c: unichar) -> Bool { c == 32 || c == 9 }
 
     // MARK: - One line
 
@@ -469,22 +171,6 @@ final class MarkdownStyler {
         }
 
 
-        // --- Table structure --------------------------------------------------
-        // Runs last: the inline pass colours every pipe, so hiding a row has to
-        // come after it, and the cell kerning must not be overwritten.
-        if line.kind.isTable {
-            let isDelimiter = line.kind == .tableDelimiter
-            let isEmptyHeader = line.kind == .tableHeader
-                && emptyHeaderBlocks.contains(line.blockID)
-
-            if isDelimiter || isEmptyHeader {
-                // The drawn rule already says what this row says.
-                if revealed == nil, line.range.length > 0 {
-                    storage.addAttribute(
-                        .foregroundColor, value: NSColor.clear, range: line.range)
-                }
-            }
-        }
     }
 
     // MARK: - Base attributes
@@ -509,12 +195,6 @@ final class MarkdownStyler {
         case .fenceDelimiter:
             font = theme.monoSmall
             color = colors.textSecondary
-        case .tableHeader, .tableRow:
-            font = tableFont(for: line)
-            color = colors.text
-        case .tableDelimiter:
-            font = theme.monoSmall
-            color = colors.marker
         case .frontMatterLine, .frontMatterDelimiter:
             font = theme.monoSmall
             color = colors.textSecondary
@@ -561,7 +241,7 @@ final class MarkdownStyler {
             attributes[.baselineOffset] = surplus / 2
         }
 
-        if theme.preset.bodyTracking != 0, !line.kind.isCode, !line.kind.isTable {
+        if theme.preset.bodyTracking != 0, !line.kind.isCode {
             attributes[.kern] = theme.preset.bodyTracking * theme.metrics.base
         }
         return attributes
@@ -592,13 +272,6 @@ final class MarkdownStyler {
     /// the document reads as finished prose, which is the whole point of the
     /// hanging gutter: structure without clutter.
     private func markerColor(for line: MDLine, context: Context) -> NSColor? {
-        // A table keeps its grid whatever the caret is doing. Revealing a whole
-        // table's pipes because the caret landed in one cell fills the block
-        // with punctuation and, worse, re-measures every column, so the grid
-        // jumps sideways as you click around it. `alwaysShowMarkers` still shows
-        // the source for anyone who wants to edit the structure.
-        if line.kind.isTable { return context.alwaysShowMarkers ? theme.colors.marker : nil }
-
         if context.activeBlockIDs.contains(line.blockID) { return theme.colors.markerActive }
         if context.alwaysShowMarkers { return theme.colors.marker }
 
@@ -680,17 +353,11 @@ final class MarkdownStyler {
             storage.addAttribute(.backgroundColor, value: colors.highlightBackground, range: range)
 
         case .code:
-            var attributes: [NSAttributedString.Key: Any] = [
+            storage.addAttributes([
                 .font: theme.mono,
                 .foregroundColor: colors.code,
-            ]
-            // No panel inside a table cell. The row already has its own banding,
-            // and a background behind a cell that gets kerned onto the grid
-            // stretches with it into a box wider than its text.
-            if !line.kind.isTable {
-                attributes[.backgroundColor] = colors.codeBackground
-            }
-            storage.addAttributes(attributes, range: range)
+                .backgroundColor: colors.codeBackground,
+            ], range: range)
 
         case .linkText:
             storage.addAttributes([
@@ -782,12 +449,6 @@ final class MarkdownStyler {
                          to: width(of: title, font: theme.calloutTitle))
             }
 
-        case .tablePipe:
-            // Pipes are scaffolding. Once the cells are on a grid they say
-            // nothing the columns do not. They come back only when the source is
-            // being shown, or when the table was too wide to fit a grid at all.
-            let visible = revealed ?? (tableFits(blockID: line.blockID) ? nil : colors.marker)
-            storage.addAttribute(.foregroundColor, value: visible ?? NSColor.clear, range: range)
 
         case .hardBreak:
             storage.addAttribute(.backgroundColor, value: colors.marker.withAlpha(0.18), range: range)
@@ -870,21 +531,8 @@ final class MarkdownStyler {
         let after: CGFloat
     }
 
-    /// Set for the duration of a styling pass, so line heights can account for
-    /// rows whose text is only shown when the source is.
-    private var showingSource = false
-
     private func lineLayout(for line: MDLine) -> LineLayout {
         let base = theme.metrics.base
-
-        // A delimiter row, and a header row with nothing in it, are structure
-        // rather than content: a thin gap where the rule is drawn, unless the
-        // source is being shown, when they need room for their text.
-        if line.kind == .tableDelimiter
-            || (line.kind == .tableHeader && emptyHeaderBlocks.contains(line.blockID)) {
-            return LineLayout(
-                height: showingSource ? base * 1.15 : base * 0.4, before: 0, after: 0)
-        }
 
         switch line.kind {
         case .heading(let level):
@@ -902,10 +550,6 @@ final class MarkdownStyler {
             return LineLayout(height: base * 0.95, before: 0, after: 0)
         case .setextUnderline:
             return LineLayout(height: base * 0.6, before: 0, after: 0)
-        case .tableHeader, .tableRow:
-            return LineLayout(height: tableFontSize(for: line) * 1.85, before: 0, after: 0)
-        case .tableDelimiter:
-            return LineLayout(height: base * 1.15, before: 0, after: 0)
         case .frontMatterLine:
             return LineLayout(height: base * 1.45, before: 0, after: 0)
         case .listItem, .definition:

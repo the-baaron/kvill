@@ -17,9 +17,6 @@ enum BlockKind: Equatable {
     /// The `> [!NOTE]` line that opens a GitHub alert.
     case calloutTitle(kind: CalloutKind?)
     case thematicBreak
-    case tableRow
-    case tableHeader
-    case tableDelimiter
     case frontMatterDelimiter
     case frontMatterLine
     case footnoteDefinition
@@ -40,12 +37,6 @@ enum BlockKind: Equatable {
         }
     }
 
-    var isTable: Bool {
-        switch self {
-        case .tableRow, .tableHeader, .tableDelimiter: return true
-        default: return false
-        }
-    }
 }
 
 enum TaskState: Equatable {
@@ -58,7 +49,6 @@ enum DecorationKind: Equatable {
     case codeBlock
     case blockquote(depth: Int)
     case callout(kind: CalloutKind?)
-    case table
     case frontMatter
     case thematicBreak
 }
@@ -121,7 +111,6 @@ enum InlineKind: Equatable {
     case escape
     case taskMarker(TaskState)
     case calloutLabel(CalloutKind?)
-    case tablePipe
     case hardBreak
 }
 

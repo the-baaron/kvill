@@ -21,12 +21,10 @@ struct BlockDecoration {
     let lineRanges: [NSRange]
     /// Deepest `>` nesting in the block, for drawing quote bars.
     let quoteDepth: Int
-    /// Index into `lineRanges` of the table header row, if this is a table.
-    let headerRow: Int?
 }
 
 /// The text view itself. It owns the drawing of everything that sits *behind*
-/// the text: code block panels, callout tints, quote bars, table rules.
+/// the text: code block panels, callout tints, quote bars.
 final class EditorTextView: NSTextView {
 
     var theme: Theme = ThemeManager.shared.theme {
@@ -427,8 +425,6 @@ final class EditorTextView: NSTextView {
                     NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
                 }
 
-            case .table:
-                drawTable(decoration, columnLeft: columnLeft, columnRight: columnRight)
 
             case .thematicBreak:
                 theme.colors.rule.setStroke()
@@ -462,52 +458,6 @@ final class EditorTextView: NSTextView {
             return true
         }
         tinted.draw(in: NSRect(origin: point, size: size))
-    }
-
-    private func drawTable(_ decoration: BlockDecoration, columnLeft: CGFloat, columnRight: CGFloat) {
-        // With no header there is nothing to show for the blank header row or the
-        // delimiter under it, so the panel starts at the first row of data.
-        let visibleRows = decoration.headerRow == nil
-            ? Array(decoration.lineRanges.dropFirst(2))
-            : decoration.lineRanges
-        guard !visibleRows.isEmpty, let bounds = blockRect(for: visibleRows) else { return }
-
-        let box = NSRect(
-            x: columnLeft - 10, y: bounds.minY - 4,
-            width: columnRight - columnLeft + 20, height: bounds.height + 8)
-
-        // Header fill, then zebra striping on the body rows.
-        for (index, range) in decoration.lineRanges.enumerated() {
-            // Skip the rows that were dropped from the panel above.
-            if decoration.headerRow == nil, index < 2 { continue }
-            guard let lineRect = rect(for: range) else { continue }
-            let rowRect = NSRect(
-                x: box.minX, y: lineRect.minY, width: box.width, height: lineRect.height)
-            if index == decoration.headerRow {
-                theme.colors.tableHeaderBackground.setFill()
-                rowRect.fill()
-            } else if index > 1, index % 2 == 1 {
-                theme.colors.tableStripe.setFill()
-                rowRect.fill()
-            }
-        }
-
-        theme.colors.tableBorder.setStroke()
-        let path = NSBezierPath(roundedRect: box, xRadius: 6, yRadius: 6)
-        path.lineWidth = 1
-        path.stroke()
-
-        // Rule under the header, drawn along the hidden delimiter row so it sits
-        // where the `| --- |` line would have been.
-        if decoration.headerRow != nil, decoration.lineRanges.count > 1,
-           let delimiter = rect(for: decoration.lineRanges[1]) {
-            let rule = NSBezierPath()
-            let y = delimiter.midY
-            rule.move(to: NSPoint(x: box.minX, y: y))
-            rule.line(to: NSPoint(x: box.maxX, y: y))
-            rule.lineWidth = 1
-            rule.stroke()
-        }
     }
 
     private func fill(_ rect: NSRect, radius: CGFloat, color: NSColor, stroke: NSColor?) {

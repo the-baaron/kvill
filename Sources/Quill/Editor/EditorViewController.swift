@@ -175,12 +175,10 @@ final class EditorViewController: NSViewController {
         recomputeActiveBlocks()
 
         styler.update(theme: theme)
-        styler.prepareTables(parsed, text: text)
         let context = makeContext()
 
         let scope = styleScope(for: editedRange)
         styler.style(storage, document: parsed, lines: scope, context: context)
-        styler.alignTables(storage, document: parsed, text: text, lines: scope)
         styledLines = scope
 
         if ThemeManager.shared.focusMode {
@@ -252,7 +250,6 @@ final class EditorViewController: NSViewController {
         let scope = lower..<upper
         let context = makeContext()
         styler.style(storage, document: parsed, lines: scope, context: context)
-        styler.alignTables(storage, document: parsed, text: storage.string as NSString, lines: scope)
         if ThemeManager.shared.focusMode {
             styler.applyFocusDimming(
                 storage, document: parsed, lines: scope,
@@ -360,24 +357,18 @@ final class EditorViewController: NSViewController {
                         result.append(BlockDecoration(
                             kind: .blockquote(depth: level),
                             lineRanges: (runStart..<runEnd).map { parsed.lines[$0].range },
-                            quoteDepth: level,
-                            headerRow: nil))
+                            quoteDepth: level))
                         runStart = runEnd
                     }
                 }
             } else if case .thematicBreak = kind {
                 for range in ranges {
                     result.append(BlockDecoration(
-                        kind: .thematicBreak, lineRanges: [range], quoteDepth: 0, headerRow: nil))
+                        kind: .thematicBreak, lineRanges: [range], quoteDepth: 0))
                 }
             } else {
-                // A table whose header row is blank gets no header band: it is a
-                // two-column layout, not a titled table.
-                let hasHeader = kind == .table
-                    && !styler.emptyHeaderBlocks.contains(blockID)
                 result.append(BlockDecoration(
-                    kind: kind, lineRanges: ranges, quoteDepth: maxDepth,
-                    headerRow: hasHeader ? 0 : nil))
+                    kind: kind, lineRanges: ranges, quoteDepth: maxDepth))
             }
             index = end
         }
@@ -423,18 +414,13 @@ final class EditorViewController: NSViewController {
             styler.applyFocusDimming(
                 storage, document: parsed, lines: 0..<parsed.lines.count,
                 activeParagraphID: context.activeParagraphID)
-            styler.alignTables(storage, document: parsed, text: storage.string as NSString)
         } else {
             for id in current.symmetricDifference(previous) {
                 guard let range = blockLineRanges[id] else { continue }
                 styler.style(storage, document: parsed, lines: range, context: context)
             }
-            // Restyling a block clears its kerning, so the grid is re-applied.
-            styler.alignTables(storage, document: parsed, text: storage.string as NSString)
         }
-
-        // Bullets and callout titles are drawn only where the raw marker is
-        // hidden, so the overlay list changes with the selection too.
+        rebuildDecorations()
         rebuildOverlays(context: context)
     }
 
