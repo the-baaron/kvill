@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Signet",
+    name: "Foldout",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Signet",
-            path: "Sources/Signet"
+            name: "Foldout",
+            path: "Sources/Foldout"
         )
     ]
 )

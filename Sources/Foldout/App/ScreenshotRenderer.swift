@@ -5,7 +5,7 @@ import AppKit
 /// This exists so the README images can be regenerated from the real editor
 /// rather than mocked up, and so layout can be checked in a headless session.
 ///
-///     Signet --render input.md output.png [--theme ink] [--typography editorial]
+///     Foldout --render input.md output.png [--theme ink] [--typography editorial]
 ///           [--size medium] [--width normal] [--panel] [--geometry 900x720]
 enum ScreenshotRenderer {
 

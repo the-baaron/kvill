@@ -2,7 +2,7 @@ import AppKit
 
 /// Phase timings for opening a document.
 ///
-///     Signet --benchmark file.md
+///     Foldout --benchmark file.md
 ///
 /// Startup is the thing this app is judged on, so it is measured rather than
 /// guessed at: process start to ready, then read, parse, style and layout.

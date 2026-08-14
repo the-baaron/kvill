@@ -10,7 +10,7 @@ import AppKit
 //     right   window running off the right edge, words down the left
 //     left    window running off the left edge, words down the right
 //
-// Signet's window has no title bar: the content view is full size and the bar is
+// Foldout's window has no title bar: the content view is full size and the bar is
 // transparent, so the page runs right up under the traffic lights. Drawing a
 // grey strip across the top, which is what a generic mockup does, would show
 // something the app does not have. The page fills the whole window here and the

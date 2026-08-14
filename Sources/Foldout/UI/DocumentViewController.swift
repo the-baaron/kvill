@@ -105,10 +105,10 @@ final class DocumentViewController: NSViewController {
         editor.textView.onSelectionGestureEnded = { [weak self] in self?.updateSelectionToolbar() }
 
         NotificationCenter.default.addObserver(
-            self, selector: #selector(themeChanged), name: .signetThemeChanged, object: nil)
+            self, selector: #selector(themeChanged), name: .foldoutThemeChanged, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(preferencesChanged),
-            name: .signetPreferencesChanged, object: nil)
+            name: .foldoutPreferencesChanged, object: nil)
         // Watched here as well as through the editor's own callback: the bar
         // lives in this view's coordinates while the selection lives in the text
         // view's, so every scroll moves the text out from under it.

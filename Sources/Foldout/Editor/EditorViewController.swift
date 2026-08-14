@@ -116,10 +116,10 @@ final class EditorViewController: NSViewController {
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(themeChanged),
-            name: .signetThemeChanged, object: nil)
+            name: .foldoutThemeChanged, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(preferencesChanged),
-            name: .signetPreferencesChanged, object: nil)
+            name: .foldoutPreferencesChanged, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(clipViewBoundsChanged),
             name: NSView.boundsDidChangeNotification, object: scrollView.contentView)

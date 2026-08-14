@@ -1,6 +1,6 @@
 # Yours, and only yours
 
-Signet makes no network connections at all. There is no analytics, no account, no sync, and no entitlement that would let any of that be added later by accident.
+Foldout makes no network connections at all. There is no analytics, no account, no sync, and no entitlement that would let any of that be added later by accident.
 
 ## It is your file
 

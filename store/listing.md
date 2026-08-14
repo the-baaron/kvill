@@ -3,18 +3,18 @@
 Everything App Store Connect asks for, written out so it can be pasted or
 pushed rather than invented at the keyboard.
 
-- **Name**: Signet
+- **Name**: Foldout
 - **Subtitle**: Markdown, open and shut
-- **Bundle ID**: design.baars.Signet
-- **SKU**: Signet_1
+- **Bundle ID**: design.baars.Foldout
+- **SKU**: Foldout_1
 - **Primary language**: English (U.S.)
 - **Category**: Productivity (secondary: Developer Tools)
 - **Price**: Free, no in-app purchases
 - **Age rating**: 4+, no objectionable content of any kind
 - **Copyright**: 2026 Ronald Baars
-- **Support URL**: https://github.com/the-baaron/signet
-- **Marketing URL**: https://github.com/the-baaron/signet
-- **Privacy policy URL**: https://github.com/the-baaron/signet/blob/main/PRIVACY.md
+- **Support URL**: https://github.com/the-baaron/foldout
+- **Marketing URL**: https://github.com/the-baaron/foldout
+- **Privacy policy URL**: https://github.com/the-baaron/foldout/blob/main/PRIVACY.md
 
 ## Promotional text
 
@@ -23,11 +23,11 @@ the line, close it, get on. Free, open source, and it never touches the network.
 
 ## Description
 
-Signet is for the file you want to change one line in.
+Foldout is for the file you want to change one line in.
 
 You know the one: a README, a note, a config comment, something in a repo you
 have open in a real editor that takes eleven seconds to start and wants to
-index the whole project first. Signet opens it in 0.09 seconds,
+index the whole project first. Foldout opens it in 0.09 seconds,
 puts the cursor where you left it, and gets out of the way.
 
 FAST, MEASURED RATHER THAN CLAIMED
@@ -70,7 +70,7 @@ document, because you should choose them once.
 
 WHAT IT DOES NOT DO
 
-Signet makes no network connections at all. There is no analytics, no account,
+Foldout makes no network connections at all. There is no analytics, no account,
 no sync, no telemetry, and no entitlement in the app that would let any of that
 be added later by accident. It collects nothing because it can send nothing.
 

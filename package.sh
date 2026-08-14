@@ -5,7 +5,7 @@
 # What `build.sh` makes is for this machine: an ad-hoc signature that no other
 # Mac trusts. This makes the real thing.
 #
-#   ./package.sh                 build and sign, leaving build/Signet.pkg
+#   ./package.sh                 build and sign, leaving build/Foldout.pkg
 #   ./package.sh --upload        the same, then hand it to App Store Connect
 #
 # Credentials for the upload come from ~/.appstoreconnect/env, the same file the
@@ -14,11 +14,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP="build/Signet.app"
-PKG="build/Signet.pkg"
+APP="build/Foldout.app"
+PKG="build/Foldout.pkg"
 APP_IDENTITY="3rd Party Mac Developer Application"
 INSTALLER_IDENTITY="3rd Party Mac Developer Installer"
-PROFILE="Resources/Signet.provisionprofile"
+PROFILE="Resources/Foldout.provisionprofile"
 
 for identity in "$APP_IDENTITY" "$INSTALLER_IDENTITY"; do
   if ! security find-identity -v | grep -q "$identity"; then
@@ -44,7 +44,7 @@ fi
 
 echo "==> Signing for distribution"
 codesign --force --options runtime --timestamp \
-  --entitlements Resources/Signet.entitlements \
+  --entitlements Resources/Foldout.entitlements \
   --sign "$APP_IDENTITY" "$APP"
 
 echo "==> Verifying"
