@@ -120,6 +120,18 @@ enum SelfTest {
                   "\(sizes.map { Int($0 * 10) }) vs \(Int(normal * 10)) (tenths)")
         }
 
+        // --- An empty document says what to do --------------------------------
+        do {
+            controller.loadText("")
+            controller.view.layoutSubtreeIfNeeded()
+            check("an empty document has a placeholder",
+                  controller.editor.textView.placeholderForTest != nil, "")
+            controller.loadText("x")
+            controller.view.layoutSubtreeIfNeeded()
+            check("a document with anything in it has none",
+                  controller.editor.textView.placeholderForTest == nil, "")
+        }
+
         // --- Checkbox and bullet sit on the same line -------------------------
         do {
             let editor = controller.editor

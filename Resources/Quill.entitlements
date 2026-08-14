@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required for the Mac App Store. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Quill only ever touches the file you opened and the folder it is in:
+	     images dropped into a document are written next to it. Both are covered
+	     by the user having chosen the file, through Open, a double-click in the
+	     Finder, or a drag onto the icon. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Reopening what you had open last time, which macOS does through
+	     security-scoped bookmarks in the document's autosave state. -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+
+	<!-- No network entitlement of any kind. Quill makes no connections, and
+	     leaving these out means it cannot start making them by accident. -->
+</dict>
+</plist>

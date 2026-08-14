@@ -187,6 +187,7 @@ final class EditorTextView: NSTextView {
         drawDecorations(in: dirtyRect)
         super.draw(dirtyRect)
         drawOverlays(in: dirtyRect)
+        drawPlaceholder()
     }
 
     /// Draws a page of the document into the current graphics context without
@@ -216,6 +217,7 @@ final class EditorTextView: NSTextView {
         }
 
         drawOverlays(in: rect)
+        drawPlaceholder()
     }
 
     /// Paints the page colour, or nothing at all for a translucent palette.
@@ -229,6 +231,31 @@ final class EditorTextView: NSTextView {
         guard !theme.colors.isTranslucent else { return }
         theme.colors.background.setFill()
         rect.fill()
+    }
+
+    /// What an empty document says, so a blank window is not a dead end.
+    ///
+    /// Drawn rather than inserted: the document is genuinely empty, so nothing
+    /// has to be taken back out before the first keystroke, and it cannot end up
+    /// saved to the file.
+    /// The placeholder text, or nil when there is a document to show.
+    var placeholderForTest: String? {
+        textStorage?.length == 0 ? Self.placeholder : nil
+    }
+
+    private static let placeholder = "Start typing, or press / to insert"
+
+    private func drawPlaceholder() {
+        guard textStorage?.length == 0 else { return }
+        let origin = textContainerOrigin
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: theme.body,
+            .foregroundColor: theme.colors.textSecondary.withAlpha(0.45),
+        ]
+        let point = NSPoint(
+            x: origin.x + theme.metrics.gutter,
+            y: origin.y + theme.metrics.firstLineMargin)
+        (Self.placeholder as NSString).draw(at: point, withAttributes: attributes)
     }
 
     private func drawOverlays(in dirtyRect: NSRect) {

@@ -31,9 +31,21 @@ iconutil -c icns "$ICONSET" -o "$CONTENTS/Resources/Quill.icns"
 rm -rf "$ICONSET"
 
 echo "==> Signing"
-# Ad-hoc signature. Enough for the app to run locally and for Launch Services to
-# register it; a Developer ID signature would be needed to distribute it.
-codesign --force --sign - --timestamp=none "$APP"
+# Ad-hoc, with the real entitlements. The signature is only good on this machine,
+# but the sandbox is enforced from the entitlements either way, so what runs here
+# behaves like what ships.
+#
+# QUILL_SANDBOX=0 leaves them off. The sandbox stops the app reading a path
+# handed to it on the command line, which is exactly what --render, --benchmark
+# and --selftest with a document do, so the development tools need a build
+# without it.
+if [ "${QUILL_SANDBOX:-1}" = "0" ]; then
+  echo "    without the sandbox (QUILL_SANDBOX=0)"
+  codesign --force --sign - --timestamp=none "$APP"
+else
+  codesign --force --sign - --timestamp=none \
+    --entitlements Resources/Quill.entitlements "$APP"
+fi
 
 echo "==> Registering with Launch Services"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
