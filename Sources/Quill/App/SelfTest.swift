@@ -190,6 +190,44 @@ enum SelfTest {
         check("can scroll past the last line", reached > plainMax + 20,
               "reached \(Int(reached)) of plain max \(Int(plainMax))")
 
+        // --- Typing does not move the page ------------------------------------
+        do {
+            let editor = controller.editor
+            check("layout is contiguous",
+                  editor.textView.layoutManager?.allowsNonContiguousLayout == false, "")
+
+            let wasTypewriter = ThemeManager.shared.typewriterScrolling
+            ThemeManager.shared.typewriterScrolling = false
+            controller.loadText(String(repeating: "A line of the document.\n\n", count: 200))
+            controller.view.layoutSubtreeIfNeeded()
+
+            // Somewhere in the middle, then type.
+            let middle = (editor.text as NSString).length / 2
+            editor.textView.setSelectedRange(NSRange(location: middle, length: 0))
+            editor.textView.scrollRangeToVisible(NSRange(location: middle, length: 0))
+            controller.view.layoutSubtreeIfNeeded()
+            let before = editor.scrollView.contentView.bounds.origin.y
+
+            for _ in 0..<40 {
+                let caret = editor.textView.selectedRange()
+                editor.textView.insertText("x", replacementRange: caret)
+            }
+            controller.view.layoutSubtreeIfNeeded()
+            let after = editor.scrollView.contentView.bounds.origin.y
+            check("typing leaves the page where it was", abs(after - before) < 2,
+                  "moved \(Int(after - before))pt over 40 keystrokes")
+
+            // And the document is still all there and still styled.
+            let styled = editor.textView.textStorage.map { storage -> Bool in
+                guard storage.length > 0 else { return false }
+                let font = storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+                return font != nil
+            } ?? false
+            check("the page is still drawn after typing", styled, "")
+
+            ThemeManager.shared.typewriterScrolling = wasTypewriter
+        }
+
         // --- Translucent palettes ---------------------------------------------
         // Every piece of the chain has to be right for a glass theme to read as
         // glass: a see-through window, a backdrop behind the page, a scroll view

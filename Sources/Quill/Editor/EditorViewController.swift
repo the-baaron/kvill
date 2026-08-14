@@ -16,6 +16,14 @@ final class EditorViewController: NSViewController {
     /// kept to what has been edited and what is on screen, so a keystroke does
     /// not rewrite the whole document.
     private var styledLines: Range<Int> = 0..<0
+    /// Lines last seen on screen, refreshed on scroll and at layout.
+    ///
+    /// Working this out asks the layout manager to lay out the visible rect, and
+    /// a restyle runs inside the storage's `endEditing`, where forcing layout is
+    /// not allowed. Doing it anyway is what left the window blank now and then.
+    /// The cached answer is a hint about how much to style, so being a keystroke
+    /// out of date costs nothing.
+    private var lastVisibleLines: Range<Int> = 0..<0
     private var isStyling = false
     /// Set while a table is being padded, so the edit does not trigger another.
     private var isFormatting = false
@@ -53,11 +61,11 @@ final class EditorViewController: NSViewController {
     init() {
         let storage = NSTextStorage()
         let layoutManager = NSLayoutManager()
-        // Lay out only what is being looked at. Asking for a glyph rect forces
-        // layout of that range, so decorations still measure correctly, and a
-        // large document no longer has to be laid out end to end before its
-        // window can appear.
-        layoutManager.allowsNonContiguousLayout = true
+        // Contiguous layout. The lazy kind is faster to first paint on a large
+        // file, but it leaves the document's height provisional and its layout
+        // full of holes, so how far you could scroll past the end changed as you
+        // went and parts of the page came up empty. Predictable beats quick.
+        layoutManager.allowsNonContiguousLayout = false
         storage.addLayoutManager(layoutManager)
 
         let container = NSTextContainer(size: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
@@ -186,6 +194,8 @@ final class EditorViewController: NSViewController {
             clip.bottomSlack = max(0, scrollView.frame.height * 0.7)
         }
 
+        visibleLineRange()
+
         if lastContentWidth != metrics.contentWidth {
             lastContentWidth = metrics.contentWidth
             textView.needsDisplay = true
@@ -240,7 +250,7 @@ final class EditorViewController: NSViewController {
             length: min(editedRange.length, max(0, length - min(editedRange.location, length))))
 
         let edited = parsed.lineIndices(in: clamped)
-        let visible = visibleLineRange()
+        let visible = lastVisibleLines.clamped(to: 0..<parsed.lines.count)
         // A fence or a table can change how everything after it reads, so the
         // scope runs to the end of the block the edit landed in.
         let lower = min(edited.lowerBound, visible.lowerBound)
@@ -257,6 +267,7 @@ final class EditorViewController: NSViewController {
     }
 
     /// Lines currently on screen, with a screenful of margin either side.
+    @discardableResult
     private func visibleLineRange() -> Range<Int> {
         guard let layoutManager = textView.layoutManager,
               let container = textView.textContainer,
@@ -269,7 +280,9 @@ final class EditorViewController: NSViewController {
         let glyphs = layoutManager.glyphRange(forBoundingRect: visible, in: container)
         let characters = layoutManager.characterRange(
             forGlyphRange: glyphs, actualGlyphRange: nil)
-        return parsed.lineIndices(in: characters)
+        let lines = parsed.lineIndices(in: characters)
+        lastVisibleLines = lines
+        return lines
     }
 
     /// Styles anything that has scrolled into view since the last pass.

@@ -16,9 +16,11 @@ final class MarkdownDocument: NSDocument {
 
     /// Watches the file for changes made by anything other than this window.
     private var watcher: FileWatcher?
-    /// When this document last wrote the file, so its own writes are not read
-    /// back in as somebody else's edit.
-    private var lastWrite = Date.distantPast
+    /// Exactly what this document last put on disk, so its own writes are not
+    /// read back as somebody else's edit. Compared by content rather than by
+    /// timing: autosave runs every half second, and any window in which a write
+    /// counts as "recent" is a race that eventually loses.
+    private var lastWritten: String?
 
     override class var autosavesInPlace: Bool { true }
 
@@ -70,6 +72,7 @@ final class MarkdownDocument: NSDocument {
             encoding = String.Encoding(rawValue: detected)
         }
         normalizeSource()
+        lastWritten = content
         controller?.loadText(content)
     }
 
@@ -109,24 +112,22 @@ final class MarkdownDocument: NSDocument {
 
     private func fileChangedOnDisk() {
         guard let url = fileURL else { return }
-        // A write this document made itself is not news.
-        guard Date().timeIntervalSince(lastWrite) > 0.6 else { return }
         guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: encoding)
                 ?? String(data: data, encoding: .utf8) else { return }
 
-        let current = controller?.text ?? content
-        guard text != current else { return }
-
-        // An edit of our own that has not been written yet would be thrown away
-        // by reloading, so it is written first and the reload is skipped: the
-        // file and the window already agree once that write lands.
-        if isDocumentEdited {
-            autosave(withImplicitCancellability: false) { _ in }
-            return
-        }
+        // Our own write coming back around.
+        guard text != lastWritten else { return }
+        // Already showing it.
+        guard text != (controller?.text ?? content) else { return }
+        // There are unsaved edits here. Reloading would throw them away, and
+        // writing from inside a file-change handler is how a write loop starts.
+        // The autosave already scheduled lands within half a second and settles
+        // it, so this does nothing at all.
+        guard !isDocumentEdited else { return }
 
         content = text
+        lastWritten = text
         controller?.replaceKeepingPlace(with: text)
         updateChangeCount(.changeCleared)
     }
@@ -134,6 +135,7 @@ final class MarkdownDocument: NSDocument {
     override func data(ofType typeName: String) throws -> Data {
         let text = controller?.text ?? content
         content = text
+        lastWritten = text
         guard let data = text.data(using: encoding) ?? text.data(using: .utf8) else {
             throw NSError(
                 domain: NSCocoaErrorDomain, code: NSFileWriteInapplicableStringEncodingError,
@@ -157,9 +159,7 @@ final class MarkdownDocument: NSDocument {
            saveOperation != .autosaveElsewhereOperation {
             controller?.formatTables()
         }
-        lastWrite = Date()
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
-            self?.lastWrite = Date()
             completionHandler(error)
             // Autosaves happen on their own schedule; confirming those would be
             // noise. This is only for a save the user asked for.
