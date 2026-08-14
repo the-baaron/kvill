@@ -20,6 +20,15 @@ final class MarkdownStyler {
     private var markerWidths: [String: CGFloat] = [:]
     private var paragraphStyles: [String: NSParagraphStyle] = [:]
     private var traitFonts: [String: NSFont] = [:]
+    private var lineHeights: [String: CGFloat] = [:]
+
+    /// Measured column widths per table block, so cells can be kerned onto a grid.
+    private var tableColumns: [Int: [CGFloat]] = [:]
+    /// Table blocks whose header row has nothing in it.
+    private(set) var emptyHeaderBlocks: Set<Int> = []
+
+    /// Padding either side of a table cell's text.
+    private var cellPadding: CGFloat { theme.metrics.base * 0.6 }
 
     init(theme: Theme) {
         self.theme = theme
@@ -31,6 +40,7 @@ final class MarkdownStyler {
         markerWidths.removeAll()
         paragraphStyles.removeAll()
         traitFonts.removeAll()
+        lineHeights.removeAll()
     }
 
     struct Context {
@@ -65,6 +75,126 @@ final class MarkdownStyler {
         storage.endEditing()
     }
 
+    // MARK: - Tables
+
+    /// Measures every table in the document so its cells can be kerned onto a
+    /// common grid. Must run before `style` for the tables to line up.
+    func prepareTables(_ document: ParsedDocument, text: NSString) {
+        tableColumns.removeAll(keepingCapacity: true)
+        emptyHeaderBlocks.removeAll(keepingCapacity: true)
+
+        var index = 0
+        while index < document.lines.count {
+            guard document.lines[index].kind.isTable else {
+                index += 1
+                continue
+            }
+            let blockID = document.lines[index].blockID
+            var end = index
+            while end < document.lines.count,
+                  document.lines[end].blockID == blockID,
+                  document.lines[end].kind.isTable {
+                end += 1
+            }
+
+            var widths: [CGFloat] = []
+            for row in index..<end {
+                let line = document.lines[row]
+                guard line.kind != .tableDelimiter else { continue }
+                let font = tableFont(for: line.kind)
+                for (column, cell) in cells(text, in: line.contentRange).enumerated() {
+                    let value = width(of: text.substring(with: cell), font: font)
+                    if column < widths.count {
+                        widths[column] = max(widths[column], value)
+                    } else {
+                        widths.append(value)
+                    }
+                }
+            }
+            tableColumns[blockID] = widths
+
+            let header = document.lines[index]
+            let headerIsEmpty = cells(text, in: header.contentRange).allSatisfy { cell in
+                text.substring(with: cell).trimmingCharacters(in: .whitespaces).isEmpty
+            }
+            if headerIsEmpty { emptyHeaderBlocks.insert(blockID) }
+
+            index = end
+        }
+    }
+
+    /// The runs between the pipes of a table row, excluding the pipes themselves
+    /// and any leading or trailing empty segment outside the outer pipes.
+    private func cells(_ text: NSString, in range: NSRange) -> [NSRange] {
+        var result: [NSRange] = []
+        var start = range.location
+        var index = range.location
+        let end = NSMaxRange(range)
+        var sawPipe = false
+
+        while index < end {
+            if text.character(at: index) == 124,  // '|'
+               !MarkdownParser.isEscaped(text, index, from: range.location) {
+                if sawPipe {
+                    result.append(NSRange(location: start, length: index - start))
+                }
+                sawPipe = true
+                start = index + 1
+            }
+            index += 1
+        }
+        // Anything after the final pipe is trailing whitespace, not a cell.
+        return result
+    }
+
+    private func tableFont(for kind: BlockKind) -> NSFont {
+        kind == .tableHeader
+            ? FontBuilder.font(.mono, size: theme.metrics.base * 0.92, weight: .semibold)
+            : theme.mono
+    }
+
+    /// Kerns each cell so every column ends on the same x position.
+    private func alignTableRow(
+        _ line: MDLine, text: NSString, storage: NSTextStorage
+    ) {
+        guard let widths = tableColumns[line.blockID], !widths.isEmpty else { return }
+        let font = tableFont(for: line.kind)
+        let padding = cellPadding
+
+        // Pipe positions, needed so an empty cell can be padded via the pipe
+        // before it: there is no character inside the cell to hang kerning on.
+        var pipes: [Int] = []
+        var index = line.contentRange.location
+        let end = NSMaxRange(line.contentRange)
+        while index < end {
+            if text.character(at: index) == 124,
+               !MarkdownParser.isEscaped(text, index, from: line.contentRange.location) {
+                pipes.append(index)
+            }
+            index += 1
+        }
+        guard pipes.count >= 2 else { return }
+
+        for column in 0..<(pipes.count - 1) {
+            guard column < widths.count else { break }
+            let cellStart = pipes[column] + 1
+            let cellEnd = pipes[column + 1]
+            let target = widths[column] + padding * 2
+
+            if cellEnd > cellStart {
+                let natural = width(
+                    of: text.substring(with: NSRange(location: cellStart, length: cellEnd - cellStart)),
+                    font: font)
+                let last = NSRange(location: cellEnd - 1, length: 1)
+                storage.addAttribute(.kern, value: target - natural, range: last)
+            } else {
+                // Empty cell: widen the pipe that opens it instead.
+                storage.addAttribute(
+                    .kern, value: target, range: NSRange(location: pipes[column], length: 1))
+            }
+        }
+    }
+
     // MARK: - One line
 
     private func styleLine(
@@ -88,7 +218,7 @@ final class MarkdownStyler {
         var markerX = contentX - effectiveGap - markerWidth
         if markerX < 0 { markerX = 0 }
 
-        let layout = lineLayout(for: line.kind)
+        let layout = lineLayout(for: line)
         let style = paragraphStyle(
             firstIndent: markerString.isEmpty ? contentX : markerX,
             headIndent: contentX,
@@ -97,7 +227,7 @@ final class MarkdownStyler {
             spacingAfter: layout.after
         )
 
-        let base = baseAttributes(for: line, style: style)
+        let base = baseAttributes(for: line, style: style, lineHeight: layout.height)
         storage.setAttributes(base, range: line.fullRange)
 
         let revealed = markerColor(for: line, context: context)
@@ -131,21 +261,42 @@ final class MarkdownStyler {
         }
 
         // --- Inline runs ------------------------------------------------------
-        guard !line.inlines.isEmpty else { return }
-        let sorted = line.inlines.sorted {
-            $0.range.location == $1.range.location
-                ? $0.range.length > $1.range.length          // outer wrappers first
-                : $0.range.location < $1.range.location
+        if !line.inlines.isEmpty {
+            let sorted = line.inlines.sorted {
+                $0.range.location == $1.range.location
+                    ? $0.range.length > $1.range.length      // outer wrappers first
+                    : $0.range.location < $1.range.location
+            }
+            for token in sorted {
+                apply(token, line: line, revealed: revealed, text: text,
+                      storage: storage, context: context)
+            }
         }
-        for token in sorted {
-            apply(token, line: line, revealed: revealed, text: text, storage: storage, context: context)
+
+        // --- Table structure --------------------------------------------------
+        // Runs last: the inline pass colours every pipe, so hiding a row has to
+        // come after it, and the cell kerning must not be overwritten.
+        if line.kind.isTable {
+            let isDelimiter = line.kind == .tableDelimiter
+            let isEmptyHeader = line.kind == .tableHeader
+                && emptyHeaderBlocks.contains(line.blockID)
+
+            if isDelimiter || isEmptyHeader {
+                // The drawn rule already says what this row says.
+                if revealed == nil, line.range.length > 0 {
+                    storage.addAttribute(
+                        .foregroundColor, value: NSColor.clear, range: line.range)
+                }
+            } else {
+                alignTableRow(line, text: text, storage: storage)
+            }
         }
     }
 
     // MARK: - Base attributes
 
     private func baseAttributes(
-        for line: MDLine, style: NSParagraphStyle
+        for line: MDLine, style: NSParagraphStyle, lineHeight: CGFloat
     ) -> [NSAttributedString.Key: Any] {
         let colors = theme.colors
         var font = theme.body
@@ -195,10 +346,31 @@ final class MarkdownStyler {
             .foregroundColor: color,
             .paragraphStyle: style,
         ]
-        if theme.preset.bodyTracking != 0, !line.kind.isCode {
+
+        // Forcing a line height taller than the font's natural one makes TextKit
+        // put all the extra space above the glyphs, so the text sits on the
+        // bottom of its line. Lifting the baseline by half the surplus centres it
+        // again, which is what makes checkboxes, highlights and inline code
+        // backgrounds line up with the words next to them.
+        let surplus = lineHeight - naturalLineHeight(of: font)
+        if surplus > 0.5 {
+            attributes[.baselineOffset] = surplus / 2
+        }
+
+        if theme.preset.bodyTracking != 0, !line.kind.isCode, !line.kind.isTable {
             attributes[.kern] = theme.preset.bodyTracking * theme.metrics.base
         }
         return attributes
+    }
+
+    /// The height TextKit would give a line set in this font, cached because it
+    /// is asked for on every line of every restyle.
+    private func naturalLineHeight(of font: NSFont) -> CGFloat {
+        let key = "\(font.fontName)|\(font.pointSize)"
+        if let cached = lineHeights[key] { return cached }
+        let value = ceil(font.ascender + abs(font.descender) + font.leading)
+        lineHeights[key] = value
+        return value
     }
 
     private func markerFont(for kind: BlockKind) -> NSFont {
@@ -440,9 +612,18 @@ final class MarkdownStyler {
         let after: CGFloat
     }
 
-    private func lineLayout(for kind: BlockKind) -> LineLayout {
+    private func lineLayout(for line: MDLine) -> LineLayout {
         let base = theme.metrics.base
-        switch kind {
+
+        // A delimiter row, and a header row with nothing in it, are structure
+        // rather than content. Both are given a fixed compact height so that
+        // revealing their text when the caret arrives does not shift the page.
+        if line.kind == .tableDelimiter
+            || (line.kind == .tableHeader && emptyHeaderBlocks.contains(line.blockID)) {
+            return LineLayout(height: base * 1.15, before: 0, after: 0)
+        }
+
+        switch line.kind {
         case .heading(let level):
             let size = theme.headingSize(level: level)
             return LineLayout(

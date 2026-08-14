@@ -52,6 +52,44 @@ final class EditorTextView: NSTextView {
     /// True while a mouse-driven selection is in progress.
     private(set) var isSelectingWithMouse = false
 
+    /// Intercepts AppKit's scroll-to-caret. Returning true means the handler has
+    /// positioned the view itself, which is how typewriter mode stops fighting
+    /// the text view's own scrolling on every keystroke.
+    var typewriterScroll: ((NSRange) -> Bool)?
+
+    override func scrollRangeToVisible(_ range: NSRange) {
+        if typewriterScroll?(range) == true { return }
+        super.scrollRangeToVisible(range)
+    }
+
+    /// The line fragment containing `index`, in this view's coordinates.
+    ///
+    /// This is deliberately the *fragment* rather than the glyph bounds: it does
+    /// not move while typing along a line, so typewriter scrolling has a stable
+    /// target and only moves when the caret actually changes line.
+    func lineFragmentRect(atCharacterIndex index: Int) -> NSRect? {
+        guard let layoutManager, let storage = textStorage else { return nil }
+        let origin = textContainerOrigin
+
+        // Caret past the last character, on the empty line a trailing newline makes.
+        if index >= storage.length, layoutManager.extraLineFragmentTextContainer != nil {
+            var rect = layoutManager.extraLineFragmentRect
+            rect.origin.x += origin.x
+            rect.origin.y += origin.y
+            return rect
+        }
+        guard layoutManager.numberOfGlyphs > 0 else { return nil }
+
+        let character = min(max(index, 0), max(0, storage.length - 1))
+        let glyph = min(
+            layoutManager.glyphIndexForCharacter(at: character),
+            layoutManager.numberOfGlyphs - 1)
+        var rect = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        rect.origin.x += origin.x
+        rect.origin.y += origin.y
+        return rect
+    }
+
     // MARK: - Setup
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -107,6 +145,31 @@ final class EditorTextView: NSTextView {
         drawDecorations(in: dirtyRect)
         super.draw(dirtyRect)
         drawOverlays(in: dirtyRect)
+    }
+
+    /// Draws a page of the document into the current graphics context without
+    /// going through `NSView.draw`.
+    ///
+    /// `draw(_:)` consults the view's `visibleRect`, which is unreliable for a
+    /// window that was never put on screen, so the headless PNG renderer would
+    /// get a blank or partial page depending on the canvas size. Going straight
+    /// to the layout manager is deterministic.
+    func renderPage(_ rect: NSRect) {
+        theme.colors.background.setFill()
+        rect.fill()
+        drawDecorations(in: rect)
+
+        if let layoutManager, let textContainer {
+            let origin = textContainerOrigin
+            // `glyphRange(forBoundingRect:)` works in the container's coordinates,
+            // which are the view's shifted by the container origin.
+            let containerRect = rect.offsetBy(dx: -origin.x, dy: -origin.y)
+            let glyphs = layoutManager.glyphRange(forBoundingRect: containerRect, in: textContainer)
+            layoutManager.drawBackground(forGlyphRange: glyphs, at: origin)
+            layoutManager.drawGlyphs(forGlyphRange: glyphs, at: origin)
+        }
+
+        drawOverlays(in: rect)
     }
 
     private func drawOverlays(in dirtyRect: NSRect) {
@@ -280,17 +343,25 @@ final class EditorTextView: NSTextView {
     }
 
     private func drawTable(_ decoration: BlockDecoration, columnLeft: CGFloat, columnRight: CGFloat) {
-        guard let bounds = blockRect(for: decoration.lineRanges) else { return }
+        // With no header there is nothing to show for the blank header row or the
+        // delimiter under it, so the panel starts at the first row of data.
+        let visibleRows = decoration.headerRow == nil
+            ? Array(decoration.lineRanges.dropFirst(2))
+            : decoration.lineRanges
+        guard !visibleRows.isEmpty, let bounds = blockRect(for: visibleRows) else { return }
+
         let box = NSRect(
             x: columnLeft - 10, y: bounds.minY - 4,
             width: columnRight - columnLeft + 20, height: bounds.height + 8)
 
         // Header fill, then zebra striping on the body rows.
         for (index, range) in decoration.lineRanges.enumerated() {
+            // Skip the rows that were dropped from the panel above.
+            if decoration.headerRow == nil, index < 2 { continue }
             guard let lineRect = rect(for: range) else { continue }
             let rowRect = NSRect(
                 x: box.minX, y: lineRect.minY, width: box.width, height: lineRect.height)
-            if index == 0 {
+            if index == decoration.headerRow {
                 theme.colors.tableHeaderBackground.setFill()
                 rowRect.fill()
             } else if index > 1, index % 2 == 1 {
@@ -304,11 +375,14 @@ final class EditorTextView: NSTextView {
         path.lineWidth = 1
         path.stroke()
 
-        // Rule under the header.
-        if decoration.lineRanges.count > 1, let headerRect = rect(for: decoration.lineRanges[0]) {
+        // Rule under the header, drawn along the hidden delimiter row so it sits
+        // where the `| --- |` line would have been.
+        if decoration.headerRow != nil, decoration.lineRanges.count > 1,
+           let delimiter = rect(for: decoration.lineRanges[1]) {
             let rule = NSBezierPath()
-            rule.move(to: NSPoint(x: box.minX, y: headerRect.minY))
-            rule.line(to: NSPoint(x: box.maxX, y: headerRect.minY))
+            let y = delimiter.midY
+            rule.move(to: NSPoint(x: box.minX, y: y))
+            rule.line(to: NSPoint(x: box.maxX, y: y))
             rule.lineWidth = 1
             rule.stroke()
         }

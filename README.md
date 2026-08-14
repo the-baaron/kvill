@@ -43,10 +43,10 @@ Contrast (serif headings over a sans body), Typewriter (SF Mono) and Soft
 (SF Rounded). Four text sizes, three measures. All of it app-wide and
 remembered between launches, never per document.
 
-**Chrome that stays out of the way.** A glass button in the top-right corner
-springs open into a display-options bar when the pointer comes within 100px. A
-glass formatting bar appears over a selection. Content blurs and fades under the
-top and bottom window edges. A word count sits quietly in the corner.
+**Chrome that stays out of the way.** One small glass button in the top-right
+corner opens the display options: theme swatches and three dropdowns. A glass
+formatting bar appears over a selection. Content blurs and fades under the top
+and bottom window edges. A word count sits quietly in the corner.
 
 **Focus mode** dims everything but the block you are in. **Typewriter scrolling**
 keeps the caret centred.
@@ -84,7 +84,7 @@ Developer ID signature would be needed to distribute it.
 | `⌘1`–`⌘6`, `⌘0` | Heading level, body text |
 | `⇧⌘8` `⇧⌘7` `⇧⌘9` | Bulleted, numbered, task list |
 | `⌘'` `⇧⌘C` `⌃⌘T` `⇧⌘-` | Quote, code block, table, rule |
-| `⌘T` | Settings panel |
+| `⌘T` | Display options |
 | `⌃⌘]` `⌃⌘[` | Next theme, next typeface |
 | `⌘+` `⌘-` `⌥⌘0` | Text size |
 | `⇧⌘F` `⇧⌘Y` `⇧⌘M` | Focus mode, typewriter, always show markers |
@@ -135,6 +135,12 @@ This draws the page only. The floating glass chrome is not included: those views
 force the hierarchy to be layer-backed, and an off-screen layer-backed window
 never runs a display pass, so there is nothing to capture.
 
+## Roadmap
+
+- `⌘.` to hide and show every piece of chrome at once.
+- Opening a folder shows a file tree, while opening a file stays one window,
+  one file.
+
 ## Known limits
 
 - Re-parsing and restyling run over the whole document on each edit. That is
@@ -146,6 +152,9 @@ never runs a display pass, so there is nothing to capture.
   link opens only if the destination is written inline.
 - Code highlighting is language-agnostic: comments, strings, numbers and a
   shared keyword set. It is not a per-language grammar.
+- `--render` starts at the top of the document for a full-length file, but for a
+  document only a little taller than the canvas it can begin a line or two in.
+  It is a screenshot tool, so this has not been chased down.
 
 ## Licence
 

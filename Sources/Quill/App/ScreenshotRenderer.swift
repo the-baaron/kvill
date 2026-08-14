@@ -124,6 +124,17 @@ enum ScreenshotRenderer {
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
         controller.view.layoutSubtreeIfNeeded()
 
+        // Loading text leaves the caret at the end, and AppKit scrolls to it.
+        // Put both back to the top so `--offset` is measured from the start of
+        // the document rather than from wherever the view happened to land.
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+        controller.editor.scrollView.contentView.setBoundsOrigin(.zero)
+        controller.editor.scrollView.reflectScrolledClipView(
+            controller.editor.scrollView.contentView)
+        if let layoutManager = textView.layoutManager, let container = textView.textContainer {
+            layoutManager.ensureLayout(for: container)
+        }
+
         guard let representation = renderPage(
             controller.editor.textView,
             size: request.canvas,
@@ -190,7 +201,7 @@ enum ScreenshotRenderer {
         NSRect(origin: .zero, size: size).fill()
 
         cgContext.translateBy(x: 0, y: -offset)
-        textView.draw(NSRect(x: 0, y: offset, width: size.width, height: size.height))
+        textView.renderPage(NSRect(x: 0, y: offset, width: size.width, height: size.height))
         return representation
     }
 }

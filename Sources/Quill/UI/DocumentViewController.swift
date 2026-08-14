@@ -4,23 +4,18 @@ import AppKit
 /// chrome layered over it.
 ///
 /// Layering, back to front: editor, scroll edge effects, stats pill, selection
-/// formatting bar, display options bar, settings panel.
+/// formatting bar, display options button.
 final class DocumentViewController: NSViewController {
 
     let editor = EditorViewController()
-    private let panel = ThemePanelView()
     private let stats = StatsPillView()
-    private let optionsBar = DisplayOptionsBar()
+    private let optionsButton = DisplayOptionsButton()
     private let selectionToolbar = SelectionToolbarView()
     private var topEdge: ScrollEdgeEffectView!
     private var bottomEdge: ScrollEdgeEffectView!
 
-    private var panelBottom: NSLayoutConstraint!
     private var toolbarLeading: NSLayoutConstraint!
     private var toolbarTop: NSLayoutConstraint!
-    private var mouseMonitor: Any?
-
-    private(set) var isPanelVisible = false
 
     /// Fired after the editor's text changes, so the document can mark itself dirty.
     var onTextChange: (() -> Void)?
@@ -45,19 +40,11 @@ final class DocumentViewController: NSViewController {
         container.addSubview(bottomEdge)
         container.addSubview(stats)
         container.addSubview(selectionToolbar)
-        container.addSubview(optionsBar)
-        container.addSubview(panel)
-
-        panel.alphaValue = 0
-        panel.isHidden = true
-        panel.onClose = { [weak self] in self?.hidePanel() }
+        container.addSubview(optionsButton)
 
         selectionToolbar.alphaValue = 0
         selectionToolbar.isHidden = true
 
-        optionsBar.onShowFullPanel = { [weak self] in self?.showPanel() }
-
-        panelBottom = panel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -22)
         toolbarLeading = selectionToolbar.leadingAnchor.constraint(
             equalTo: container.leadingAnchor, constant: 0)
         toolbarTop = selectionToolbar.topAnchor.constraint(equalTo: container.topAnchor, constant: 0)
@@ -78,11 +65,8 @@ final class DocumentViewController: NSViewController {
             bottomEdge.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             bottomEdge.heightAnchor.constraint(equalToConstant: 68),
 
-            optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
-            optionsBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
-
-            panel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -22),
-            panelBottom,
+            optionsButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            optionsButton.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
 
             stats.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
             stats.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -22),
@@ -111,45 +95,15 @@ final class DocumentViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         view.window?.makeFirstResponder(editor.textView)
-        view.window?.acceptsMouseMovedEvents = true
-        startMouseTracking()
-    }
-
-    override func viewWillDisappear() {
-        super.viewWillDisappear()
-        stopMouseTracking()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        stopMouseTracking()
     }
 
     @objc private func themeChanged() {
         topEdge.theme = theme
         bottomEdge.theme = theme
-    }
-
-    // MARK: - Pointer proximity
-
-    /// The options bar opens when the pointer approaches, which needs mouse
-    /// positions even while the pointer is over the text view, so this watches
-    /// the event stream rather than using a tracking area.
-    private func startMouseTracking() {
-        guard mouseMonitor == nil else { return }
-        mouseMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged]
-        ) { [weak self] event in
-            guard let self, event.window === self.view.window else { return event }
-            let point = self.view.convert(event.locationInWindow, from: nil)
-            self.optionsBar.updateProximity(to: point)
-            return event
-        }
-    }
-
-    private func stopMouseTracking() {
-        if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
-        mouseMonitor = nil
     }
 
     // MARK: - Content
@@ -219,42 +173,15 @@ final class DocumentViewController: NSViewController {
         })
     }
 
-    // MARK: - Settings panel
+    // MARK: - Display options
 
     @objc func toggleThemePanel(_ sender: Any?) {
-        isPanelVisible ? hidePanel() : showPanel()
-    }
-
-    private func showPanel() {
-        guard !isPanelVisible else { return }
-        isPanelVisible = true
-        panel.sync()
-        panel.isHidden = false
-        panel.alphaValue = 0
-        view.layoutSubtreeIfNeeded()
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.22
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
-        }
-    }
-
-    private func hidePanel() {
-        guard isPanelVisible else { return }
-        isPanelVisible = false
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            self?.panel.isHidden = true
-        })
+        optionsButton.toggle()
     }
 
     override func cancelOperation(_ sender: Any?) {
-        if isPanelVisible {
-            hidePanel()
+        if optionsButton.isOpen {
+            optionsButton.close()
         } else {
             super.cancelOperation(sender)
         }

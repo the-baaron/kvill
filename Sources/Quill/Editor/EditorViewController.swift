@@ -13,6 +13,7 @@ final class EditorViewController: NSViewController {
     /// Line range covered by each block, so a block can be restyled on its own.
     private var blockLineRanges: [Int: Range<Int>] = [:]
     private var isStyling = false
+    private var isAutoScrolling = false
     private var lastContentWidth: CGFloat = -1
 
     private var theme: Theme { ThemeManager.shared.theme }
@@ -56,7 +57,9 @@ final class EditorViewController: NSViewController {
         textView.textStorage?.delegate = self
         textView.theme = theme
         textView.onToggleTask = { [weak self] range in self?.toggleTask(at: range) }
+        textView.typewriterScroll = { [weak self] _ in self?.centerCaret() ?? false }
 
+        scrollView.contentView = TypewriterClipView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -121,9 +124,10 @@ final class EditorViewController: NSViewController {
 
         // Typewriter mode needs half a screen of slack under the last line so the
         // caret can actually reach the middle of the window.
-        let bottom = ThemeManager.shared.typewriterScrolling ? scrollView.contentSize.height / 2 : 0
-        if scrollView.contentInsets.bottom != bottom {
-            scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0)
+        if let clip = scrollView.contentView as? TypewriterClipView {
+            clip.bottomSlack = ThemeManager.shared.typewriterScrolling
+                ? scrollView.frame.height / 2
+                : 0
         }
 
         if lastContentWidth != metrics.contentWidth {
@@ -147,6 +151,7 @@ final class EditorViewController: NSViewController {
         recomputeActiveBlocks()
 
         styler.update(theme: theme)
+        styler.prepareTables(parsed, text: text)
         let context = makeContext()
 
         styler.style(storage, document: parsed, lines: 0..<parsed.lines.count, context: context)
@@ -268,9 +273,13 @@ final class EditorViewController: NSViewController {
                         kind: .thematicBreak, lineRanges: [range], quoteDepth: 0, headerRow: nil))
                 }
             } else {
+                // A table whose header row is blank gets no header band: it is a
+                // two-column layout, not a titled table.
+                let hasHeader = kind == .table
+                    && !styler.emptyHeaderBlocks.contains(blockID)
                 result.append(BlockDecoration(
                     kind: kind, lineRanges: ranges, quoteDepth: maxDepth,
-                    headerRow: kind == .table ? 0 : nil))
+                    headerRow: hasHeader ? 0 : nil))
             }
             index = end
         }
@@ -350,14 +359,38 @@ final class EditorViewController: NSViewController {
         return textView.convert(rect, to: target)
     }
 
-    private func centerCaret() {
-        guard ThemeManager.shared.typewriterScrolling else { return }
-        let caret = textView.selectedRange()
-        guard let rect = textView.rect(for: NSRange(location: caret.location, length: 0)) else { return }
-        let visible = scrollView.contentView.bounds
-        let target = rect.midY - visible.height / 2
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(target, -scrollView.contentInsets.top)))
-        scrollView.reflectScrolledClipView(scrollView.contentView)
+    /// Keeps the caret's line in the middle of the window.
+    ///
+    /// Returns true when it has taken responsibility for scrolling, which stops
+    /// the text view doing its own scroll-to-caret on top. Two things keep this
+    /// from juddering: the target comes from the caret's *line fragment*, which
+    /// does not move while typing along a line, so no scroll happens at all
+    /// until the caret changes line; and the move is a direct, unanimated
+    /// `setBoundsOrigin`, so there is no animation to interrupt on the next
+    /// keystroke.
+    @discardableResult
+    private func centerCaret() -> Bool {
+        guard ThemeManager.shared.typewriterScrolling else { return false }
+        guard !isAutoScrolling else { return true }
+        // Recentring mid-drag would pull the text out from under the pointer.
+        guard !textView.isSelectingWithMouse else { return true }
+        guard let clip = scrollView.contentView as? TypewriterClipView else { return false }
+
+        let caret = textView.selectedRange().location
+        guard let fragment = textView.lineFragmentRect(atCharacterIndex: caret) else { return false }
+
+        let visibleHeight = clip.bounds.height
+        guard visibleHeight > 0 else { return false }
+
+        let maxY = max(0, textView.frame.height + clip.bottomSlack - visibleHeight)
+        let target = min(max(fragment.midY - visibleHeight / 2, 0), maxY)
+        guard abs(clip.bounds.origin.y - target) > 0.5 else { return true }
+
+        isAutoScrolling = true
+        clip.setBoundsOrigin(NSPoint(x: clip.bounds.origin.x, y: target))
+        scrollView.reflectScrolledClipView(clip)
+        isAutoScrolling = false
+        return true
     }
 
     // MARK: - Task toggling

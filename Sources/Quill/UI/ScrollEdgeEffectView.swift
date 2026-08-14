@@ -1,12 +1,16 @@
 import AppKit
-import CoreImage
 
-/// The soft edge where content slides under the top or bottom of the window:
-/// a backdrop blur that ramps up toward the edge, plus a fade to the page colour.
+/// The soft edge where content slides under the top or bottom of the window: a
+/// blur that ramps up toward the edge, plus a fade to the page colour.
 ///
-/// The blur is a `CALayer` background filter, which blurs the sibling content
-/// behind it inside the same window, and a gradient layer mask turns that flat
-/// blur into a progressive one.
+/// The blur is an `NSVisualEffectView` in `.withinWindow` blending mode, which
+/// samples the sibling content behind it rather than the desktop. Its
+/// `maskImage` is a vertical alpha gradient, which is what turns a flat blur
+/// into a progressive one.
+///
+/// `CALayer.backgroundFilters` looks like the natural fit for this and is what
+/// the first version used, but AppKit silently ignores it for layer-backed
+/// views on current macOS, so nothing was drawn.
 final class ScrollEdgeEffectView: NSView {
 
     enum Edge {
@@ -15,8 +19,8 @@ final class ScrollEdgeEffectView: NSView {
     }
 
     private let edge: Edge
-    private let blurLayer = CALayer()
-    private let blurMask = CAGradientLayer()
+    private let blur = NSVisualEffectView()
+    private let fade = NSView()
     private let fadeLayer = CAGradientLayer()
 
     var theme: Theme {
@@ -32,25 +36,31 @@ final class ScrollEdgeEffectView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
 
-        if let blur = CIFilter(name: "CIGaussianBlur") {
-            blur.setValue(11.0, forKey: kCIInputRadiusKey)
-            blurLayer.backgroundFilters = [blur]
-        }
-        blurLayer.masksToBounds = true
-        blurLayer.mask = blurMask
-        layer?.addSublayer(blurLayer)
-        layer?.addSublayer(fadeLayer)
+        blur.blendingMode = .withinWindow
+        blur.material = .headerView
+        blur.state = .active
+        blur.translatesAutoresizingMaskIntoConstraints = false
 
-        // The gradients run bottom-to-top; which end is "strong" depends on
-        // which edge of the window this view is pinned to.
-        let strongAtTop = edge == .top
-        blurMask.startPoint = CGPoint(x: 0.5, y: 0)
-        blurMask.endPoint = CGPoint(x: 0.5, y: 1)
-        blurMask.colors = strongAtTop
-            ? [NSColor.clear.cgColor, NSColor.black.cgColor]
-            : [NSColor.black.cgColor, NSColor.clear.cgColor]
-        blurMask.locations = strongAtTop ? [0.0, 0.85] : [0.15, 1.0]
+        fade.wantsLayer = true
+        fade.layer?.addSublayer(fadeLayer)
+        fade.translatesAutoresizingMaskIntoConstraints = false
 
+        addSubview(blur)
+        addSubview(fade)
+
+        NSLayoutConstraint.activate([
+            blur.leadingAnchor.constraint(equalTo: leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: trailingAnchor),
+            blur.topAnchor.constraint(equalTo: topAnchor),
+            blur.bottomAnchor.constraint(equalTo: bottomAnchor),
+            fade.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fade.trailingAnchor.constraint(equalTo: trailingAnchor),
+            fade.topAnchor.constraint(equalTo: topAnchor),
+            fade.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        // The gradients run bottom-to-top; which end is strong depends on which
+        // edge of the window this view is pinned to.
         fadeLayer.startPoint = CGPoint(x: 0.5, y: 0)
         fadeLayer.endPoint = CGPoint(x: 0.5, y: 1)
 
@@ -62,14 +72,32 @@ final class ScrollEdgeEffectView: NSView {
 
     override func layout() {
         super.layout()
-        // Layer frames are set without implicit animation so resizing the window
-        // does not leave the gradients lagging behind the view.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        blurLayer.frame = bounds
-        blurMask.frame = bounds
         fadeLayer.frame = bounds
         CATransaction.commit()
+        updateMask()
+    }
+
+    /// A vertical alpha ramp, opaque at the window edge and clear where the
+    /// effect should stop. `NSVisualEffectView` multiplies its blur by this.
+    private func updateMask() {
+        let size = bounds.size
+        guard size.width > 1, size.height > 1 else { return }
+
+        let strongAtTop = edge == .top
+        let image = NSImage(size: NSSize(width: 8, height: size.height), flipped: false) { rect in
+            let gradient = NSGradient(
+                colors: [NSColor.black.withAlphaComponent(0), NSColor.black],
+                atLocations: [0, 1],
+                colorSpace: .deviceGray)
+            // Angle 90 fills upward, so the top edge is the opaque end.
+            gradient?.draw(in: rect, angle: strongAtTop ? 90 : 270)
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: 0, left: 3, bottom: 0, right: 3)
+        image.resizingMode = .stretch
+        blur.maskImage = image
     }
 
     private func applyTheme() {
@@ -80,7 +108,7 @@ final class ScrollEdgeEffectView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fadeLayer.colors = edge == .top ? [clear, solid] : [solid, clear]
-        fadeLayer.locations = edge == .top ? [0.35, 1.0] : [0.0, 0.65]
+        fadeLayer.locations = edge == .top ? [0.45, 1.0] : [0.0, 0.55]
         CATransaction.commit()
     }
 
