@@ -96,6 +96,12 @@ enum SelfTest {
             let material = ThemeManager.shared.theme.colors.material
             check("glass: material is a translucent one",
                   !opaqueMaterials.contains(material), "material \(material.rawValue)")
+            let colors = ThemeManager.shared.theme.colors
+            check("glass: panels are translucent too",
+                  colors.codeBackground.alphaComponent < 0.5
+                    && colors.tableHeaderBackground.alphaComponent < 0.5
+                    && colors.backgroundElevated.alphaComponent < 0.5,
+                  "code panel alpha \(String(format: "%.2f", colors.codeBackground.alphaComponent))")
             check("glass: tint is light enough to see through",
                   ThemeManager.shared.theme.colors.pageAlpha < 0.4,
                   "tint \(String(format: "%.2f", ThemeManager.shared.theme.colors.pageAlpha))")

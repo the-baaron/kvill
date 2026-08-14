@@ -12,6 +12,10 @@ final class EditorViewController: NSViewController {
     private var activeBlockIDs: Set<Int> = []
     /// Line range covered by each block, so a block can be restyled on its own.
     private var blockLineRanges: [Int: Range<Int>] = [:]
+    /// The span of lines whose attributes are known to be current. Styling is
+    /// kept to what has been edited and what is on screen, so a keystroke does
+    /// not rewrite the whole document.
+    private var styledLines: Range<Int> = 0..<0
     private var isStyling = false
     private var isAutoScrolling = false
     private var lastContentWidth: CGFloat = -1
@@ -154,7 +158,12 @@ final class EditorViewController: NSViewController {
     // MARK: - Parse and style
 
     /// Reparses the document and restyles it.
-    func refresh(fullRestyle: Bool) {
+    ///
+    /// `editedRange` keeps the restyle to the lines that changed and the lines
+    /// on screen. Rewriting attributes across the whole document on every
+    /// keystroke made AppKit treat the entire text as edited and scroll to the
+    /// end of it, which is no way to type.
+    func refresh(fullRestyle: Bool, editedRange: NSRange? = nil) {
         guard let storage = textView.textStorage else { return }
         isStyling = true
         defer { isStyling = false }
@@ -169,16 +178,87 @@ final class EditorViewController: NSViewController {
         styler.prepareTables(parsed, text: text)
         let context = makeContext()
 
-        styler.style(storage, document: parsed, lines: 0..<parsed.lines.count, context: context)
+        let scope = styleScope(for: editedRange)
+        styler.style(storage, document: parsed, lines: scope, context: context)
+        styler.alignTables(storage, document: parsed, text: text, lines: scope)
+        styledLines = scope
 
         if ThemeManager.shared.focusMode {
             styler.applyFocusDimming(
-                storage, document: parsed, lines: 0..<parsed.lines.count,
+                storage, document: parsed, lines: scope,
                 activeParagraphID: context.activeParagraphID)
         }
 
         rebuildDecorations()
         rebuildOverlays(context: context)
+    }
+
+    /// Lines to restyle: everything on screen, plus whatever the edit touched.
+    private func styleScope(for editedRange: NSRange?) -> Range<Int> {
+        guard !parsed.lines.isEmpty else { return 0..<0 }
+        let whole = 0..<parsed.lines.count
+        guard let editedRange else { return whole }
+
+        let length = (textView.string as NSString).length
+        let clamped = NSRange(
+            location: min(editedRange.location, length),
+            length: min(editedRange.length, max(0, length - min(editedRange.location, length))))
+
+        let edited = parsed.lineIndices(in: clamped)
+        let visible = visibleLineRange()
+        // A fence or a table can change how everything after it reads, so the
+        // scope runs to the end of the block the edit landed in.
+        let lower = min(edited.lowerBound, visible.lowerBound)
+        let upper = max(blockEnd(after: edited.upperBound), visible.upperBound)
+        return max(0, lower)..<min(upper, parsed.lines.count)
+    }
+
+    private func blockEnd(after line: Int) -> Int {
+        guard line > 0, line - 1 < parsed.lines.count else { return line }
+        let id = parsed.lines[line - 1].blockID
+        var end = line
+        while end < parsed.lines.count, parsed.lines[end].blockID == id { end += 1 }
+        return end
+    }
+
+    /// Lines currently on screen, with a screenful of margin either side.
+    private func visibleLineRange() -> Range<Int> {
+        guard let layoutManager = textView.layoutManager,
+              let container = textView.textContainer,
+              !parsed.lines.isEmpty else { return 0..<0 }
+
+        let origin = textView.textContainerOrigin
+        let visible = textView.visibleRect
+            .insetBy(dx: 0, dy: -textView.visibleRect.height)
+            .offsetBy(dx: -origin.x, dy: -origin.y)
+        let glyphs = layoutManager.glyphRange(forBoundingRect: visible, in: container)
+        let characters = layoutManager.characterRange(
+            forGlyphRange: glyphs, actualGlyphRange: nil)
+        return parsed.lineIndices(in: characters)
+    }
+
+    /// Styles anything that has scrolled into view since the last pass.
+    private func styleNewlyVisible() {
+        guard let storage = textView.textStorage, !parsed.lines.isEmpty, !isStyling else { return }
+        let visible = visibleLineRange()
+        guard visible.lowerBound < styledLines.lowerBound
+                || visible.upperBound > styledLines.upperBound else { return }
+
+        isStyling = true
+        defer { isStyling = false }
+
+        let lower = min(visible.lowerBound, styledLines.lowerBound)
+        let upper = max(visible.upperBound, styledLines.upperBound)
+        let scope = lower..<upper
+        let context = makeContext()
+        styler.style(storage, document: parsed, lines: scope, context: context)
+        styler.alignTables(storage, document: parsed, text: storage.string as NSString, lines: scope)
+        if ThemeManager.shared.focusMode {
+            styler.applyFocusDimming(
+                storage, document: parsed, lines: scope,
+                activeParagraphID: context.activeParagraphID)
+        }
+        styledLines = scope
     }
 
     private func makeContext() -> MarkdownStyler.Context {
@@ -343,11 +423,14 @@ final class EditorViewController: NSViewController {
             styler.applyFocusDimming(
                 storage, document: parsed, lines: 0..<parsed.lines.count,
                 activeParagraphID: context.activeParagraphID)
+            styler.alignTables(storage, document: parsed, text: storage.string as NSString)
         } else {
             for id in current.symmetricDifference(previous) {
                 guard let range = blockLineRanges[id] else { continue }
                 styler.style(storage, document: parsed, lines: range, context: context)
             }
+            // Restyling a block clears its kerning, so the grid is re-applied.
+            styler.alignTables(storage, document: parsed, text: storage.string as NSString)
         }
 
         // Bullets and callout titles are drawn only where the raw marker is
@@ -367,6 +450,7 @@ final class EditorViewController: NSViewController {
     }
 
     @objc private func clipViewBoundsChanged() {
+        styleNewlyVisible()
         reportScrollEdges()
     }
 
@@ -472,7 +556,7 @@ extension EditorViewController: NSTextStorageDelegate {
         changeInLength delta: Int
     ) {
         guard editedMask.contains(.editedCharacters), !isStyling else { return }
-        refresh(fullRestyle: false)
+        refresh(fullRestyle: false, editedRange: editedRange)
         onTextChange?()
     }
 }

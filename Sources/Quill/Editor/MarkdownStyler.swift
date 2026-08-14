@@ -236,55 +236,114 @@ final class MarkdownStyler {
         return tableFont(line.kind, size: layout.fontSize)
     }
 
-    /// Pins every cell onto the column grid with two kerns: one that puts the
-    /// cell's first character exactly one padding past the column edge, and one
-    /// that fills the rest of the column.
-    private func alignTableRow(_ line: MDLine, text: NSString, storage: NSTextStorage) {
-        guard let layout = tableLayouts[line.blockID], layout.fits,
-              !layout.columns.isEmpty else { return }
+    /// Pins every cell onto the column grid, measuring the text as it is
+    /// actually styled.
+    ///
+    /// This runs after styling rather than during it. Measuring the raw text
+    /// against the table's own font is wrong the moment a cell contains inline
+    /// code, which is set in a different face: the column then lands in the
+    /// wrong place and every row holding code drifts out of line with the rest.
+    func alignTables(
+        _ storage: NSTextStorage, document: ParsedDocument, text: NSString,
+        lines scope: Range<Int>? = nil
+    ) {
+        guard !tableLayouts.isEmpty else { return }
+        let limit = scope ?? 0..<document.lines.count
 
-        let font = tableFont(line.kind, size: layout.fontSize)
-        let padding = cellPadding(layout.fontSize)
-        let pipeWidth = width(of: "|", font: font)
+        var index = limit.lowerBound
+        while index < min(limit.upperBound, document.lines.count) {
+            guard document.lines[index].kind.isTable,
+                  let layout = tableLayouts[document.lines[index].blockID], layout.fits else {
+                index += 1
+                continue
+            }
+            let blockID = document.lines[index].blockID
+            var end = index
+            while end < document.lines.count, document.lines[end].blockID == blockID,
+                  document.lines[end].kind.isTable {
+                end += 1
+            }
+
+            // Measuring an attributed string counts its kerning, so a second
+            // pass over an already-aligned table would read every cell as the
+            // width it was stretched to and cancel its own correction out. The
+            // old kerning goes first.
+            for row in index..<end where document.lines[row].range.length > 0 {
+                storage.removeAttribute(.kern, range: document.lines[row].range)
+            }
+
+            // Widths come from the styled text, so a code span counts at the
+            // width it will actually be drawn.
+            var widths: [CGFloat] = []
+            for row in index..<end where document.lines[row].kind != .tableDelimiter {
+                for (column, cell) in cells(text, in: document.lines[row].contentRange).enumerated() {
+                    let content = trimmed(cell, in: text)
+                    let value = content.length == 0 ? 0 : measure(content, in: storage)
+                    if column < widths.count {
+                        widths[column] = max(widths[column], value)
+                    } else {
+                        widths.append(value)
+                    }
+                }
+            }
+
+            let padding = cellPadding(layout.fontSize)
+            for row in index..<end where document.lines[row].kind != .tableDelimiter {
+                alignRow(document.lines[row], widths: widths, padding: padding,
+                         text: text, storage: storage)
+            }
+            index = end
+        }
+    }
+
+    private func trimmed(_ range: NSRange, in text: NSString) -> NSRange {
+        var start = range.location
+        var end = NSMaxRange(range)
+        while start < end, isSpace(text.character(at: start)) { start += 1 }
+        while end > start, isSpace(text.character(at: end - 1)) { end -= 1 }
+        return NSRange(location: start, length: end - start)
+    }
+
+    private func measure(_ range: NSRange, in storage: NSTextStorage) -> CGFloat {
+        guard range.length > 0, NSMaxRange(range) <= storage.length else { return 0 }
+        return storage.attributedSubstring(from: range).size().width
+    }
+
+    private func alignRow(
+        _ line: MDLine, widths: [CGFloat], padding: CGFloat,
+        text: NSString, storage: NSTextStorage
+    ) {
         let pipes = pipePositions(text, in: line.contentRange)
-        guard pipes.count >= 2 else { return }
+        guard pipes.count >= 2, !widths.isEmpty else { return }
 
         for column in 0..<(pipes.count - 1) {
-            guard column < layout.columns.count else { break }
+            guard column < widths.count else { break }
             let openPipe = pipes[column]
             let cellStart = openPipe + 1
             let cellEnd = pipes[column + 1]
+            let content = trimmed(NSRange(location: cellStart, length: cellEnd - cellStart), in: text)
 
-            var contentStart = cellStart
-            var contentEnd = cellEnd
-            while contentStart < contentEnd, isSpace(text.character(at: contentStart)) {
-                contentStart += 1
-            }
-            while contentEnd > contentStart, isSpace(text.character(at: contentEnd - 1)) {
-                contentEnd -= 1
-            }
+            let leadRange = NSRange(location: openPipe, length: content.location - openPipe)
+            let trailRange = NSRange(
+                location: NSMaxRange(content), length: cellEnd - NSMaxRange(content))
 
-            let leadWidth = span(text, cellStart, contentStart, font)
-            let contentWidth = span(text, contentStart, contentEnd, font)
-            let trailWidth = span(text, contentEnd, cellEnd, font)
-            let segmentTarget = padding * 2 + layout.columns[column]
+            let leadWidth = measure(leadRange, in: storage)
+            let contentWidth = measure(content, in: storage)
+            let trailWidth = measure(trailRange, in: storage)
+            let segmentTarget = padding * 2 + widths[column]
 
-            // Anchor for the leading run: the last space before the content, or
-            // the pipe itself when the cell starts flush against it.
-            let leadAnchor = contentStart > cellStart ? contentStart - 1 : openPipe
-            // Anchor for the trailing run, falling back inward the same way.
-            let tailAnchor = cellEnd > contentEnd
+            let leadAnchor = content.location > cellStart ? content.location - 1 : openPipe
+            let tailAnchor = cellEnd > NSMaxRange(content)
                 ? cellEnd - 1
-                : (contentEnd > contentStart ? contentEnd - 1 : leadAnchor)
+                : (content.length > 0 ? NSMaxRange(content) - 1 : leadAnchor)
 
             if tailAnchor == leadAnchor {
-                // Nothing in the cell: one kern does the whole column.
                 storage.addAttribute(
-                    .kern, value: segmentTarget - pipeWidth - leadWidth - trailWidth,
+                    .kern, value: segmentTarget - leadWidth - trailWidth,
                     range: NSRange(location: leadAnchor, length: 1))
             } else {
                 storage.addAttribute(
-                    .kern, value: padding - pipeWidth - leadWidth,
+                    .kern, value: padding - leadWidth,
                     range: NSRange(location: leadAnchor, length: 1))
                 storage.addAttribute(
                     .kern, value: segmentTarget - padding - contentWidth - trailWidth,
@@ -292,8 +351,8 @@ final class MarkdownStyler {
             }
         }
 
-        // The closing pipe adds nothing to the grid, so it takes no space.
         if let last = pipes.last, last >= line.contentRange.location {
+            let pipeWidth = measure(NSRange(location: last, length: 1), in: storage)
             storage.addAttribute(
                 .kern, value: -pipeWidth, range: NSRange(location: last, length: 1))
         }
@@ -416,8 +475,6 @@ final class MarkdownStyler {
                     storage.addAttribute(
                         .foregroundColor, value: NSColor.clear, range: line.range)
                 }
-            } else {
-                alignTableRow(line, text: text, storage: storage)
             }
         }
     }
@@ -608,11 +665,17 @@ final class MarkdownStyler {
             storage.addAttribute(.backgroundColor, value: colors.highlightBackground, range: range)
 
         case .code:
-            storage.addAttributes([
+            var attributes: [NSAttributedString.Key: Any] = [
                 .font: theme.mono,
                 .foregroundColor: colors.code,
-                .backgroundColor: colors.codeBackground,
-            ], range: range)
+            ]
+            // No panel inside a table cell. The row already has its own banding,
+            // and a background behind a cell that gets kerned onto the grid
+            // stretches with it into a box wider than its text.
+            if !line.kind.isTable {
+                attributes[.backgroundColor] = colors.codeBackground
+            }
+            storage.addAttributes(attributes, range: range)
 
         case .linkText:
             storage.addAttributes([
