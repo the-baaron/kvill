@@ -5,7 +5,7 @@ pushed rather than invented at the keyboard.
 
 - **Name**: Kvill
 - **Subtitle**: Markdown, open and shut
-- **Bundle ID**: design.baars.Kvill
+- **Bundle ID**: design.baars.Signet
 - **SKU**: Kvill_1
 - **Primary language**: English (U.S.)
 - **Category**: Productivity (secondary: Developer Tools)

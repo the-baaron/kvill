@@ -14,7 +14,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-APP="build/Kvill.app"
+# A distribution-signed app cannot be launched on this Mac: a Mac App Store
+# provisioning profile lists no devices, because the store is the only way in.
+# So it is built somewhere of its own rather than over the top of the app you
+# actually run, which is what `build.sh` leaves in build/.
+DIST="build/dist"
+APP="$DIST/Kvill.app"
 PKG="build/Kvill.pkg"
 APP_IDENTITY="3rd Party Mac Developer Application"
 INSTALLER_IDENTITY="3rd Party Mac Developer Installer"
@@ -30,6 +35,9 @@ done
 
 echo "==> Building"
 QUILL_SANDBOX=1 ./build.sh release > /dev/null
+rm -rf "$DIST"
+mkdir -p "$DIST"
+cp -R build/Kvill.app "$APP"
 
 # The App Store rejects an app without a provisioning profile inside it, which
 # is issued against a registered bundle identifier.
