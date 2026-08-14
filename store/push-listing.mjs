@@ -123,6 +123,16 @@ const words = await api('PATCH', `/v1/appStoreVersionLocalizations/${localizatio
 console.log('description, keywords, promotional text, URLs:',
   words.ok ? 'set' : `${words.status} ${problem(words)}`);
 
+// Copyright lives on the version itself, not on its localization.
+const rights = await api('PATCH', `/v1/appStoreVersions/${version.id}`, {
+  data: {
+    type: 'appStoreVersions',
+    id: version.id,
+    attributes: { copyright: field('Copyright') },
+  },
+});
+console.log('copyright:', rights.ok ? field('Copyright') : `${rights.status} ${problem(rights)}`);
+
 const infos = await api('GET', `/v1/apps/${app.id}/appInfos`);
 const info = infos.json.data[0];
 const infoLocalizations = await api('GET', `/v1/appInfos/${info.id}/appInfoLocalizations`);

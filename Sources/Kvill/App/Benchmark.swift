@@ -69,6 +69,21 @@ enum Benchmark {
         }
         let afterFullLayout = stamp()
 
+        // A second window in the same process, to separate the cost of starting
+        // AppKit from the cost of opening a document.
+        let secondStart = stamp()
+        let second = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled, .resizable, .fullSizeContentView],
+            backing: .buffered, defer: false)
+        let secondController = DocumentViewController()
+        second.contentViewController = secondController
+        second.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        second.orderFront(nil)
+        secondController.loadText(text)
+        secondController.view.layoutSubtreeIfNeeded()
+        let secondEnd = stamp()
+
         // What the machine actually spends its day doing: one keystroke, over
         // and over, in the middle of the document.
         let typingStart = stamp()
@@ -93,6 +108,7 @@ enum Benchmark {
             load + style  \(ms(afterParse, afterStyle))
             first screen  \(ms(afterStyle, afterFirstScreen))
             full layout   \(ms(afterFirstScreen, afterFullLayout))
+            second window \(ms(secondStart, secondEnd))
             per keystroke \(ms(typingStart, afterTyping)) over 50
             ---
             to first screen \(ms(processStart, afterFirstScreen))
