@@ -40,9 +40,11 @@ final class EditorViewController: NSViewController {
     init() {
         let storage = NSTextStorage()
         let layoutManager = NSLayoutManager()
-        // Decorations are positioned from glyph bounds, which are only reliable
-        // everywhere when layout is contiguous.
-        layoutManager.allowsNonContiguousLayout = false
+        // Lay out only what is being looked at. Asking for a glyph rect forces
+        // layout of that range, so decorations still measure correctly, and a
+        // large document no longer has to be laid out end to end before its
+        // window can appear.
+        layoutManager.allowsNonContiguousLayout = true
         storage.addLayoutManager(layoutManager)
 
         let container = NSTextContainer(size: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))

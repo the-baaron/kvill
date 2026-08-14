@@ -5,6 +5,20 @@ import AppKit
 // Apple Events Finder sends when a Markdown file is double-clicked.
 let application = NSApplication.shared
 
+if CommandLine.arguments.contains("--selftest") {
+    application.setActivationPolicy(.accessory)
+    application.finishLaunching()
+    let document = CommandLine.arguments.last.flatMap { $0.hasSuffix(".md") ? $0 : nil }
+    exit(SelfTest.run(document: document))
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "--benchmark"),
+   CommandLine.arguments.count > index + 1 {
+    application.setActivationPolicy(.accessory)
+    application.finishLaunching()
+    exit(Benchmark.run(path: CommandLine.arguments[index + 1]))
+}
+
 if let request = ScreenshotRenderer.parse(CommandLine.arguments) {
     // Headless PNG render: no document controller, no menu, no untitled window.
     application.setActivationPolicy(.accessory)

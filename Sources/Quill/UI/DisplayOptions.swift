@@ -76,6 +76,34 @@ final class DisplayOptionsBar: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    // MARK: - Opening
+
+    /// Hovering opens the bar too. Proximity gives it the feel of reaching for
+    /// something, but a tracking area is what guarantees it opens at all.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setExpanded(true)
+    }
+
+    /// Clicking the resting dot opens it. Without this the dot is inert whenever
+    /// the pointer arrives without a tracked move, which made the whole control
+    /// look broken.
+    override func mouseDown(with event: NSEvent) {
+        if !isExpanded {
+            setExpanded(true)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
     private func buildButtons() {
         buttons.orientation = .horizontal
         buttons.alignment = .centerY
@@ -231,7 +259,7 @@ final class OptionsPalette: NSViewController {
     }
 
     private let section: Section
-    private var dots: [PaletteDotButton] = []
+    private var swatches: [PaletteSwatchButton] = []
     private let followSystem = NSButton(checkboxWithTitle: "Match system", target: nil, action: nil)
     private let typeface = NSPopUpButton()
     private let textSize = NSPopUpButton()
@@ -274,17 +302,19 @@ final class OptionsPalette: NSViewController {
     private func content() -> [NSView] {
         switch section {
         case .theme:
-            // Swatches in a grid, four to a row, the way a colour palette reads.
+            // Miniature pages in a grid, three to a row, the way a colour
+            // palette reads.
             var rows: [NSView] = []
-            for chunk in Palettes.all.chunked(into: 4) {
+            for chunk in Palettes.all.chunked(into: 3) {
                 let row = NSStackView(views: chunk.map { palette in
-                    let dot = PaletteDotButton(
+                    let swatch = PaletteSwatchButton(
                         palette: palette, target: self, action: #selector(selectPalette(_:)))
-                    dots.append(dot)
-                    return dot
+                    swatches.append(swatch)
+                    return swatch
                 })
                 row.orientation = .horizontal
                 row.spacing = 8
+                row.alignment = .centerY
                 rows.append(row)
             }
             followSystem.target = self
@@ -333,7 +363,7 @@ final class OptionsPalette: NSViewController {
     @objc func sync() {
         let manager = ThemeManager.shared
         let active = manager.activePaletteID
-        for dot in dots { dot.isSelectedDot = dot.palette.id == active }
+        for swatch in swatches { swatch.isSelectedSwatch = swatch.palette.id == active }
         followSystem.state = manager.followsSystemAppearance ? .on : .off
         typeface.selectItem(at: TypographyPreset.all.firstIndex { $0.id == manager.presetID } ?? 0)
         textSize.selectItem(at: TextSize.allCases.firstIndex(of: manager.textSize) ?? 0)
@@ -343,7 +373,7 @@ final class OptionsPalette: NSViewController {
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
     }
 
-    @objc private func selectPalette(_ sender: PaletteDotButton) {
+    @objc private func selectPalette(_ sender: PaletteSwatchButton) {
         ThemeManager.shared.selectPalette(id: sender.palette.id)
         sync()
     }
@@ -377,54 +407,6 @@ final class OptionsPalette: NSViewController {
     }
     @objc private func toggleMarkers() {
         ThemeManager.shared.alwaysShowMarkers = markersToggle.state == .on
-    }
-}
-
-/// A palette shown as a filled circle: the theme's page colour with its accent
-/// as a small inner dot, so they read apart at a glance.
-final class PaletteDotButton: NSButton {
-
-    let palette: ColorTheme
-    var isSelectedDot = false {
-        didSet { needsDisplay = true }
-    }
-
-    init(palette: ColorTheme, target: AnyObject?, action: Selector) {
-        self.palette = palette
-        super.init(frame: .zero)
-        self.target = target
-        self.action = action
-        isBordered = false
-        title = ""
-        toolTip = palette.name
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 26),
-            heightAnchor.constraint(equalToConstant: 26),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let circle = bounds.insetBy(dx: 3, dy: 3)
-        let path = NSBezierPath(ovalIn: circle)
-        palette.background.setFill()
-        path.fill()
-
-        palette.accent.setFill()
-        NSBezierPath(ovalIn: circle.insetBy(dx: circle.width * 0.30, dy: circle.height * 0.30)).fill()
-
-        if isSelectedDot {
-            NSColor.controlAccentColor.setStroke()
-            let ring = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1))
-            ring.lineWidth = 2
-            ring.stroke()
-        } else {
-            palette.text.withAlpha(0.35).setStroke()
-            path.lineWidth = 1
-            path.stroke()
-        }
     }
 }
 

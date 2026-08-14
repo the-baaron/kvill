@@ -11,10 +11,12 @@ final class DocumentViewController: NSViewController {
     private let stats = StatsPillView()
     private let optionsBar = DisplayOptionsBar()
     private let dragArea = WindowDragArea()
-    private let toast = ToastView()
+    private var toast: ToastView?
     /// Window-level blur behind a translucent palette. Hidden for opaque ones.
     private let backdrop = NSVisualEffectView()
-    private let selectionToolbar = SelectionToolbarView()
+    /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
+    /// work, and none of it is needed until there is a selection to act on.
+    private var selectionToolbar: SelectionToolbarView?
     private var topEdge: ScrollEdgeEffectView!
     private var bottomEdge: ScrollEdgeEffectView!
 
@@ -51,16 +53,8 @@ final class DocumentViewController: NSViewController {
         container.addSubview(topEdge)
         container.addSubview(bottomEdge)
         container.addSubview(stats)
-        container.addSubview(selectionToolbar)
         container.addSubview(optionsBar)
-        container.addSubview(toast)
 
-        selectionToolbar.alphaValue = 0
-        selectionToolbar.isHidden = true
-
-        toolbarLeading = selectionToolbar.leadingAnchor.constraint(
-            equalTo: container.leadingAnchor, constant: 0)
-        toolbarTop = selectionToolbar.topAnchor.constraint(equalTo: container.topAnchor, constant: 0)
 
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -91,14 +85,8 @@ final class DocumentViewController: NSViewController {
             optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
             optionsBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
 
-            toast.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            toast.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -30),
-
             stats.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
             stats.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -22),
-
-            toolbarLeading,
-            toolbarTop,
         ])
 
         editor.onTextChange = { [weak self] in
@@ -231,7 +219,36 @@ final class DocumentViewController: NSViewController {
 
     /// Brief confirmation that a save happened, since saving is otherwise silent.
     func confirmSaved() {
-        toast.show("Saved", symbol: "checkmark.circle.fill")
+        makeToast().show("Saved", symbol: "checkmark.circle.fill")
+    }
+
+    private func makeToast() -> ToastView {
+        if let toast { return toast }
+        let created = ToastView()
+        view.addSubview(created)
+        NSLayoutConstraint.activate([
+            created.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            created.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -30),
+        ])
+        toast = created
+        return created
+    }
+
+    private func makeSelectionToolbar() -> SelectionToolbarView {
+        if let selectionToolbar { return selectionToolbar }
+        let created = SelectionToolbarView()
+        created.alphaValue = 0
+        created.isHidden = true
+        // Below the options bar so the two never fight over a click.
+        view.addSubview(created, positioned: .below, relativeTo: optionsBar)
+
+        toolbarLeading = created.leadingAnchor.constraint(
+            equalTo: view.leadingAnchor, constant: 0)
+        toolbarTop = created.topAnchor.constraint(equalTo: view.topAnchor, constant: 0)
+        NSLayoutConstraint.activate([toolbarLeading, toolbarTop])
+
+        selectionToolbar = created
+        return created
     }
 
     /// Where the file lives, for resolving and filing images.
@@ -249,7 +266,8 @@ final class DocumentViewController: NSViewController {
             return
         }
 
-        let size = selectionToolbar.fittingSize
+        let bar = makeSelectionToolbar()
+        let size = bar.fittingSize
         let bounds = view.bounds
         guard size.width > 0, bounds.width > size.width + 24 else {
             hideSelectionToolbar()
@@ -275,22 +293,24 @@ final class DocumentViewController: NSViewController {
     }
 
     private func showSelectionToolbar() {
-        guard selectionToolbar.isHidden || selectionToolbar.alphaValue < 1 else { return }
-        selectionToolbar.isHidden = false
+        let bar = makeSelectionToolbar()
+        guard bar.isHidden || bar.alphaValue < 1 else { return }
+        bar.isHidden = false
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.16
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            selectionToolbar.animator().alphaValue = 1
+            bar.animator().alphaValue = 1
         }
     }
 
     private func hideSelectionToolbar() {
-        guard !selectionToolbar.isHidden else { return }
+        // Never built means never shown, so there is nothing to hide.
+        guard let bar = selectionToolbar, !bar.isHidden else { return }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.12
-            selectionToolbar.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            self?.selectionToolbar.isHidden = true
+            bar.animator().alphaValue = 0
+        }, completionHandler: {
+            bar.isHidden = true
         })
     }
 

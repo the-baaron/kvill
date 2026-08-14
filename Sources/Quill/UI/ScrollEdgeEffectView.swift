@@ -117,19 +117,22 @@ final class ScrollEdgeEffectView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fadeLayer.colors = edge == .top ? [clear, solid] : [solid, clear]
-        fadeLayer.locations = edge == .top ? [0.45, 1.0] : [0.0, 0.55]
+        fadeLayer.locations = edge == .top ? [0.22, 1.0] : [0.0, 0.78]
         CATransaction.commit()
     }
 
     /// Strengthens the effect once content is actually sliding under the edge.
     func setActive(_ active: Bool) {
-        let target: CGFloat = active ? 1 : 0.55
+        let target: CGFloat = active ? 1 : 0.7
         guard abs(alphaValue - target) > 0.01 else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             animator().alphaValue = target
         }
     }
+
+    /// Whether the progressive blur's alpha ramp has been built.
+    var hasMask: Bool { blur.maskImage != nil }
 
     /// Chrome only: never swallow a click meant for the text underneath.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
