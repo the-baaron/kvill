@@ -59,11 +59,48 @@ echo
 echo "Built $PKG"
 ls -lh "$PKG" | awk '{print "     " $5}'
 
+# Uploading needs a tool that Apple ships with Xcode or with Transporter, and
+# the Command Line Tools alone do not include either. Which one is present
+# decides the command, so it is worked out rather than assumed.
+upload_tool() {
+  if xcrun --find altool > /dev/null 2>&1; then
+    echo "altool"
+  elif [ -x "/Applications/Transporter.app/Contents/itms/bin/iTMSTransporter" ]; then
+    echo "transporter"
+  else
+    echo "none"
+  fi
+}
+
+echo
+case "$(upload_tool)" in
+  altool)      echo "Upload with: ./package.sh --upload   (altool found)" ;;
+  transporter) echo "Upload with: ./package.sh --upload   (Transporter found)" ;;
+  none)
+    echo "No upload tool installed. The package is built and signed, but"
+    echo "sending it needs one of:"
+    echo "  - Transporter, free on the Mac App Store, the smaller of the two"
+    echo "  - Xcode, which brings altool with it"
+    ;;
+esac
+
 if [ "${1:-}" = "--upload" ]; then
   echo
   echo "==> Uploading to App Store Connect"
   # shellcheck disable=SC1090
   set -a; . "$HOME/.appstoreconnect/env"; set +a
-  xcrun altool --upload-app --type macos --file "$PKG" \
-    --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+  case "$(upload_tool)" in
+    altool)
+      xcrun altool --upload-app --type macos --file "$PKG" \
+        --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+      ;;
+    transporter)
+      "/Applications/Transporter.app/Contents/itms/bin/iTMSTransporter" \
+        -m upload -assetFile "$PKG" -apiKey "$ASC_KEY_ID" -apiIssuer "$ASC_ISSUER_ID"
+      ;;
+    none)
+      echo "Nothing to upload with. Install Transporter or Xcode first." >&2
+      exit 1
+      ;;
+  esac
 fi
