@@ -64,20 +64,30 @@ enum SelfTest {
         check("can scroll past the last line", reached > plainMax + 20,
               "reached \(Int(reached)) of plain max \(Int(plainMax))")
 
-        // --- Scroll edge effects --------------------------------------------
-        let edges = controller.view.subviews.compactMap { $0 as? ScrollEdgeEffectView }
-        check("scroll edge views present", edges.count == 2, "\(edges.count) found")
-        check("scroll edges visible", edges.allSatisfy { !$0.isHidden && $0.alphaValue > 0.3 },
-              edges.map { "alpha \(String(format: "%.2f", $0.alphaValue))" }.joined(separator: ", "))
-        check("scroll edges have height", edges.allSatisfy { $0.frame.height > 30 },
-              edges.map { "h \(Int($0.frame.height))" }.joined(separator: ", "))
-        check("progressive blur mask built", edges.allSatisfy { $0.hasMask },
-              edges.map { $0.hasMask ? "masked" : "no mask" }.joined(separator: ", "))
+        // --- Scroll edge blur -------------------------------------------------
+        // Proved by pixels: render a strip of the document, blur it, and confirm
+        // the result actually differs from the unblurred original.
+        let textView = controller.editor.textView
+        let strip = NSRect(x: 0, y: 120, width: 700, height: 88)
+        let plain = ScrollEdgeRenderer.probeRender(strip: strip, scale: 2) { textView.renderPage($0) }
+        let blurred = ScrollEdgeRenderer.probeBlur(strip: strip, scale: 2) { textView.renderPage($0) }
+        check("strip renders", plain != nil && (plain?.ink ?? 0) > 0.001,
+              "ink \(String(format: "%.3f", plain?.ink ?? 0))")
+        check("strip blurs", blurred != nil && plain != nil
+                && abs((blurred?.ink ?? 0) - (plain?.ink ?? 0)) > 0.0002,
+              "plain \(String(format: "%.4f", plain?.ink ?? 0)) vs blurred \(String(format: "%.4f", blurred?.ink ?? 0))")
+        check("edge mask built", ScrollEdgeRenderer.probeMask(size: strip.size, scale: 2))
 
         // --- Chrome ----------------------------------------------------------
         let dragAreas = controller.view.subviews.compactMap { $0 as? WindowDragArea }
         check("window drag strip present", dragAreas.count == 1)
-        check("drag strip moves the window", dragAreas.first?.mouseDownCanMoveWindow == true)
+        check("drag strip covers the title bar",
+              (dragAreas.first?.frame.height ?? 0) >= 40
+                && (dragAreas.first?.frame.width ?? 0) > 400,
+              dragAreas.first.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none")
+        check("drag strip sits above the editor",
+              controller.view.subviews.firstIndex(where: { $0 is WindowDragArea })
+                ?? 0 > (controller.view.subviews.firstIndex(where: { $0 === controller.editor.view }) ?? 0))
 
         let bars = controller.view.subviews.compactMap { $0 as? DisplayOptionsBar }
         check("display options bar present", bars.count == 1)

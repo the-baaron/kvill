@@ -17,8 +17,6 @@ final class DocumentViewController: NSViewController {
     /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
     /// work, and none of it is needed until there is a selection to act on.
     private var selectionToolbar: SelectionToolbarView?
-    private var topEdge: ScrollEdgeEffectView!
-    private var bottomEdge: ScrollEdgeEffectView!
 
     private var toolbarLeading: NSLayoutConstraint!
     private var toolbarTop: NSLayoutConstraint!
@@ -37,9 +35,6 @@ final class DocumentViewController: NSViewController {
         view = container
         dragArea.translatesAutoresizingMaskIntoConstraints = false
 
-        topEdge = ScrollEdgeEffectView(edge: .top, theme: theme)
-        bottomEdge = ScrollEdgeEffectView(edge: .bottom, theme: theme)
-
         backdrop.blendingMode = .behindWindow
         backdrop.state = .active
         backdrop.translatesAutoresizingMaskIntoConstraints = false
@@ -50,8 +45,6 @@ final class DocumentViewController: NSViewController {
         editorView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(editorView)
         container.addSubview(dragArea)
-        container.addSubview(topEdge)
-        container.addSubview(bottomEdge)
         container.addSubview(stats)
         container.addSubview(optionsBar)
 
@@ -72,16 +65,6 @@ final class DocumentViewController: NSViewController {
             dragArea.topAnchor.constraint(equalTo: container.topAnchor),
             dragArea.heightAnchor.constraint(equalToConstant: WindowDragArea.height),
 
-            topEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            topEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            topEdge.topAnchor.constraint(equalTo: container.topAnchor),
-            topEdge.heightAnchor.constraint(equalToConstant: 84),
-
-            bottomEdge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            bottomEdge.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            bottomEdge.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            bottomEdge.heightAnchor.constraint(equalToConstant: 68),
-
             optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
             optionsBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
 
@@ -94,9 +77,7 @@ final class DocumentViewController: NSViewController {
             self?.onTextChange?()
         }
         editor.onSelectionChange = { [weak self] in self?.updateSelectionToolbar() }
-        editor.onScroll = { [weak self] underTop, underBottom in
-            self?.topEdge.setActive(underTop)
-            self?.bottomEdge.setActive(underBottom)
+        editor.onScroll = { [weak self] _, _ in
         }
         editor.textView.onSelectionGestureEnded = { [weak self] in self?.updateSelectionToolbar() }
 
@@ -172,8 +153,6 @@ final class DocumentViewController: NSViewController {
     }
 
     @objc private func themeChanged() {
-        topEdge.theme = theme
-        bottomEdge.theme = theme
         applyBackdrop()
     }
 

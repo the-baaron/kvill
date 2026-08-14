@@ -82,6 +82,9 @@ final class EditorViewController: NSViewController {
         scrollView.drawsBackground = !theme.colors.isTranslucent
         scrollView.backgroundColor = theme.colors.page
         scrollView.automaticallyAdjustsContentInsets = false
+        // The soft edges are drawn from the content underneath them, so a
+        // scrolled region that is merely copied would leave a stale blur.
+        scrollView.contentView.copiesOnScroll = false
         scrollView.scrollerStyle = .overlay
 
         view = scrollView
