@@ -268,6 +268,8 @@ final class OptionsPalette: NSViewController {
     private let typewriterToggle = NSButton(checkboxWithTitle: "Typewriter scrolling", target: nil, action: nil)
     private let pastEndToggle = NSButton(checkboxWithTitle: "Scroll past end", target: nil, action: nil)
     private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
+    private let backgroundToggle = NSButton(
+        checkboxWithTitle: "Keep running in the background", target: nil, action: nil)
 
     init(section: Section) {
         self.section = section
@@ -333,7 +335,7 @@ final class OptionsPalette: NSViewController {
             return [label("Typeface"), typeface, label("Size"), textSize, label("Width"), measure]
 
         case .reading:
-            for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle] {
+            for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle, backgroundToggle] {
                 toggle.target = self
                 toggle.font = .systemFont(ofSize: 11)
             }
@@ -342,7 +344,10 @@ final class OptionsPalette: NSViewController {
             pastEndToggle.target = self
             pastEndToggle.action = #selector(togglePastEnd)
             markersToggle.action = #selector(toggleMarkers)
-            return [focusToggle, typewriterToggle, pastEndToggle, markersToggle]
+            backgroundToggle.target = self
+            backgroundToggle.action = #selector(toggleBackground)
+            backgroundToggle.toolTip = "Starts Kvill at login and keeps it running with no windows open, so opening a file costs a window rather than a whole process."
+            return [focusToggle, typewriterToggle, pastEndToggle, markersToggle, backgroundToggle]
         }
     }
 
@@ -375,6 +380,7 @@ final class OptionsPalette: NSViewController {
         typewriterToggle.state = manager.typewriterScrolling ? .on : .off
         pastEndToggle.state = manager.scrollPastEnd ? .on : .off
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
+        backgroundToggle.state = BackgroundService.isEnabled ? .on : .off
     }
 
     @objc private func selectPalette(_ sender: PaletteSwatchButton) {
@@ -406,6 +412,10 @@ final class OptionsPalette: NSViewController {
     }
 
     @objc private func toggleFocus() { ThemeManager.shared.focusMode = focusToggle.state == .on }
+    @objc private func toggleBackground() {
+        BackgroundService.isEnabled = backgroundToggle.state == .on
+    }
+
     @objc private func togglePastEnd() {
         ThemeManager.shared.scrollPastEnd = pastEndToggle.state == .on
     }

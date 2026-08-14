@@ -158,6 +158,29 @@ enum SelfTest {
                   "difference \(((checkbox?.midY ?? 0) - (bullet?.midY ?? 0)))pt")
         }
 
+        // --- Staying resident -------------------------------------------------
+        do {
+            let was = BackgroundService.isEnabled
+            let delegate = AppDelegate()
+
+            BackgroundService.isEnabled = false
+            check("background: off means the app quits with its last window",
+                  delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp), "")
+            check("background: off still opens a blank document on its own",
+                  delegate.applicationShouldOpenUntitledFile(NSApp), "")
+
+            BackgroundService.isEnabled = true
+            check("background: on keeps the app alive with no windows",
+                  !delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp), "")
+            check("background: on does not put a blank window in your face at login",
+                  !delegate.applicationShouldOpenUntitledFile(NSApp), "")
+
+            BackgroundService.isEnabled = was
+            check("background: off by default",
+                  !UserDefaults.standard.bool(forKey: "kvill.staysRunning")
+                    || was, "")
+        }
+
         // --- Slash menu -------------------------------------------------------
         do {
             check("slash menu: lists every block",

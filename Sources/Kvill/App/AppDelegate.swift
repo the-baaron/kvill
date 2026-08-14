@@ -6,8 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kvill is one file per window and nothing else. With the last window shut
     /// there is no document, no palette and no state to come back to, so leaving
     /// the process running would only be an icon in the Dock that does nothing.
+    /// Normally the app is its windows, so the last one closing ends it. With
+    /// the background setting on it stays up instead, which is the whole point
+    /// of that setting: the next document then costs a window rather than a
+    /// process.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        !BackgroundService.isEnabled
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -16,10 +20,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: false)
+        BackgroundService.apply()
+
+        // With the background setting on, closing the last window leaves the app
+        // running. It steps out of the Dock rather than sitting there empty, and
+        // comes back the moment a document appears.
+        for name in [NSWindow.willCloseNotification, NSWindow.didBecomeKeyNotification] {
+            NotificationCenter.default.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { _ in
+                DispatchQueue.main.async { BackgroundService.updateActivationPolicy() }
+            }
+        }
     }
 
     /// Launching Kvill on its own opens a blank document, the same as TextEdit.
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { true }
+    /// Except at login, where nobody asked for one: an app that starts itself
+    /// and puts an empty window in your face has misread the instruction.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        !BackgroundService.isEnabled || !NSDocumentController.shared.documents.isEmpty
+    }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 
