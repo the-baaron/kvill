@@ -3,6 +3,13 @@ import UniformTypeIdentifiers
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
+    /// Quill is one file per window and nothing else. With the last window shut
+    /// there is no document, no palette and no state to come back to, so leaving
+    /// the process running would only be an icon in the Dock that does nothing.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build(appDelegate: self)
     }

@@ -69,6 +69,18 @@ enum Benchmark {
         }
         let afterFullLayout = stamp()
 
+        // What the machine actually spends its day doing: one keystroke, over
+        // and over, in the middle of the document.
+        let typingStart = stamp()
+        let caret = nsText.length / 2
+        controller.editor.textView.setSelectedRange(NSRange(location: caret, length: 0))
+        for _ in 0..<50 {
+            let at = controller.editor.textView.selectedRange()
+            controller.editor.textView.insertText("x", replacementRange: at)
+        }
+        controller.view.layoutSubtreeIfNeeded()
+        let afterTyping = stamp()
+
         print("""
             document      \(nsText.length) characters, \(parsed.lines.count) lines
             read          \(ms(processStart, afterRead))   (includes process start)
@@ -81,6 +93,7 @@ enum Benchmark {
             load + style  \(ms(afterParse, afterStyle))
             first screen  \(ms(afterStyle, afterFirstScreen))
             full layout   \(ms(afterFirstScreen, afterFullLayout))
+            per keystroke \(ms(typingStart, afterTyping)) over 50
             ---
             to first screen \(ms(processStart, afterFirstScreen))
             total           \(ms(processStart, afterFullLayout))

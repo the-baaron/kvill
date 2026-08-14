@@ -42,10 +42,11 @@ final class MarkdownDocument: NSDocument {
         viewController.documentURL = fileURL
         viewController.documentTitle = displayName
         viewController.loadText(content)
-        viewController.onTextChange = { [weak self, weak viewController] in
-            guard let self, let viewController else { return }
-            self.content = viewController.text
-            self.updateChangeCount(.changeDone)
+        viewController.onTextChange = { [weak self] in
+            // Only the dirty flag. Copying the text into `content` here meant
+            // copying the whole file on every keystroke; it is read from the
+            // editor when it is actually needed, which is when saving.
+            self?.updateChangeCount(.changeDone)
         }
     }
 

@@ -24,6 +24,8 @@ final class EditorViewController: NSViewController {
     /// The cached answer is a hint about how much to style, so being a keystroke
     /// out of date costs nothing.
     private var lastVisibleLines: Range<Int> = 0..<0
+    /// Pending height measurement, cancelled and rescheduled as you type.
+    private var slackWork: DispatchWorkItem?
     private var isStyling = false
     /// Set while a table is being padded, so the edit does not trigger another.
     private var isFormatting = false
@@ -61,11 +63,14 @@ final class EditorViewController: NSViewController {
     init() {
         let storage = NSTextStorage()
         let layoutManager = NSLayoutManager()
-        // Contiguous layout. The lazy kind is faster to first paint on a large
-        // file, but it leaves the document's height provisional and its layout
-        // full of holes, so how far you could scroll past the end changed as you
-        // went and parts of the page came up empty. Predictable beats quick.
-        layoutManager.allowsNonContiguousLayout = false
+        // Lay out only what is being looked at. Laying the whole document out
+        // after every keystroke costs about 70ms once a file passes half a
+        // megabyte, which is most of what typing in one used to cost.
+        //
+        // The height that scrolling past the end depends on is measured
+        // explicitly instead, once typing stops, so it is exact without being
+        // paid for on every key.
+        layoutManager.allowsNonContiguousLayout = true
         storage.addLayoutManager(layoutManager)
 
         let container = NSTextContainer(size: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
@@ -139,6 +144,10 @@ final class EditorViewController: NSViewController {
         storage.endEditing()
         textView.undoManager?.removeAllActions()
         refresh(fullRestyle: true)
+        // Measuring lays the whole document out, which on a large file is most
+        // of the time between opening it and seeing it. A turn of the run loop
+        // later the window is already on screen and nobody has scrolled yet.
+        DispatchQueue.main.async { [weak self] in self?.applySlack() }
     }
 
     var text: String {
@@ -167,6 +176,8 @@ final class EditorViewController: NSViewController {
 
         refresh(fullRestyle: true)
 
+        applySlack()
+
         let length = (textView.string as NSString).length
         textView.setSelectedRange(NSRange(location: min(caret, length), length: 0))
         scrollView.contentView.setBoundsOrigin(scroll)
@@ -191,7 +202,7 @@ final class EditorViewController: NSViewController {
         // the limit a rule rather than a number someone picked: max scroll works
         // out to the document's height less one line. It also clears the half a
         // screen typewriter mode needs to bring the caret to the middle.
-        applySlack()
+        scheduleSlack()
 
         visibleLineRange()
 
@@ -199,6 +210,19 @@ final class EditorViewController: NSViewController {
             lastContentWidth = metrics.contentWidth
             textView.needsDisplay = true
         }
+    }
+
+    /// Asks for the height to be worked out shortly, and coalesces the asking.
+    ///
+    /// Measuring means laying the document out, which on a large file is the
+    /// most expensive thing in the editor. It does not have to happen on every
+    /// keystroke: the view's height only decides how far past the end you can
+    /// scroll, and being a moment out of date there is invisible.
+    private func scheduleSlack() {
+        slackWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.applySlack() }
+        slackWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
     }
 
     /// Makes the text view taller than its text, so there is somewhere to

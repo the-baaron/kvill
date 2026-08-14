@@ -82,9 +82,10 @@ final class SlashMenuPanel: NSPanel {
     private let scrollView = NSScrollView()
     private var commands: [SlashCommand] = []
 
-    private static let rowHeight: CGFloat = 28
+    private static let rowHeight: CGFloat = 30
     private static let visibleRows = 7
-    private static let width: CGFloat = 240
+    private static let width: CGFloat = 248
+    private static let padding: CGFloat = 8
 
     init() {
         super.init(
@@ -100,14 +101,17 @@ final class SlashMenuPanel: NSPanel {
         hasShadow = true
 
         let column = NSTableColumn(identifier: .init("command"))
-        column.width = Self.width - 24
+        column.width = Self.width - Self.padding * 2 - 8
         tableView.addTableColumn(column)
         tableView.headerView = nil
         tableView.rowHeight = Self.rowHeight
         tableView.backgroundColor = .clear
-        tableView.style = .inset
+        tableView.style = .plain
+        tableView.intercellSpacing = NSSize(width: 0, height: 2)
         tableView.gridStyleMask = []
-        tableView.selectionHighlightStyle = .regular
+        // The stock highlight is a square wash the width of the table. A menu
+        // wants a rounded pill inside the padding, so the row draws its own.
+        tableView.selectionHighlightStyle = .none
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
@@ -123,7 +127,8 @@ final class SlashMenuPanel: NSPanel {
         // GlassContainerView turns its own autoresizing off for Auto Layout, so
         // it cannot be the content view directly: it would be given no size at
         // all and the panel would come up empty. It goes inside a plain one.
-        let glass = GlassContainerView(content: scrollView, cornerRadius: 12, padding: 6)
+        let glass = GlassContainerView(
+            content: scrollView, cornerRadius: 16, padding: Self.padding)
         let host = NSView(frame: NSRect(x: 0, y: 0, width: Self.width, height: 200))
         host.addSubview(glass)
         NSLayoutConstraint.activate([
@@ -137,6 +142,17 @@ final class SlashMenuPanel: NSPanel {
 
     /// Panels that take key focus would pull the caret out of the document.
     override var canBecomeKey: Bool { false }
+
+    var rowHeightForTest: CGFloat { tableView.rowHeight }
+
+    /// The highlight is drawn by the row and the colours are set by the cell, so
+    /// "is it highlighted" means both agree, which is what this reports.
+    var selectedRowIsHighlightedForTest: Bool {
+        guard tableView.selectedRow >= 0 else { return false }
+        let row = tableView.rowView(atRow: tableView.selectedRow, makeIfNecessary: true)
+        let cell = tableView.view(atColumn: 0, row: tableView.selectedRow, makeIfNecessary: true)
+        return row is SlashRowView && (cell as? NSTableCellView)?.textField?.textColor == .white
+    }
 
     // MARK: - Contents
 
@@ -154,7 +170,7 @@ final class SlashMenuPanel: NSPanel {
 
     private func resize() {
         let rows = min(Self.visibleRows, commands.count)
-        let height = CGFloat(rows) * Self.rowHeight + 12
+        let height = CGFloat(rows) * (Self.rowHeight + 2) + Self.padding * 2
         setContentSize(NSSize(width: Self.width, height: height))
     }
 
@@ -216,30 +232,71 @@ extension SlashMenuPanel: NSTableViewDataSource, NSTableViewDelegate {
 
             let image = NSImageView()
             image.translatesAutoresizingMaskIntoConstraints = false
-            image.contentTintColor = .secondaryLabelColor
+            // The same weight the floating formatting bar uses, so the two read
+            // as parts of one interface.
+            image.symbolConfiguration = NSImage.SymbolConfiguration(
+                pointSize: 12.5, weight: .medium)
             cell.addSubview(image)
             cell.imageView = image
 
             let label = NSTextField(labelWithString: "")
             label.translatesAutoresizingMaskIntoConstraints = false
-            label.font = .systemFont(ofSize: NSFont.systemFontSize)
+            label.font = .systemFont(ofSize: 13)
             label.lineBreakMode = .byTruncatingTail
             cell.addSubview(label)
             cell.textField = label
 
             NSLayoutConstraint.activate([
-                image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
+                image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 10),
                 image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                image.widthAnchor.constraint(equalToConstant: 18),
-                label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
+                image.widthAnchor.constraint(equalToConstant: 17),
+                label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 9),
+                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
         }
 
+        let chosen = row == tableView.selectedRow
         cell.imageView?.image = NSImage(
             systemSymbolName: command.symbol, accessibilityDescription: nil)
+        cell.imageView?.contentTintColor = chosen ? .white : .secondaryLabelColor
         cell.textField?.stringValue = command.title
+        cell.textField?.textColor = chosen ? .white : .labelColor
         return cell
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        SlashRowView()
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        // The label and symbol change colour with the highlight, so the rows on
+        // either side of a move both have to be redrawn.
+        tableView.enumerateAvailableRowViews { view, index in
+            view.needsDisplay = true
+            (tableView.view(atColumn: 0, row: index, makeIfNecessary: false) as? NSTableCellView)
+                .map { cell in
+                    let chosen = index == tableView.selectedRow
+                    cell.textField?.textColor = chosen ? .white : .labelColor
+                    cell.imageView?.contentTintColor = chosen ? .white : .secondaryLabelColor
+                }
+        }
+    }
+}
+
+/// A menu row: a rounded pill in the accent colour, drawn whether or not the
+/// panel is the key window, because this panel never becomes key.
+final class SlashRowView: NSTableRowView {
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        let box = bounds.insetBy(dx: 2, dy: 0)
+        NSColor.controlAccentColor.setFill()
+        NSBezierPath(roundedRect: box, xRadius: 7, yRadius: 7).fill()
+    }
+
+    override var isEmphasized: Bool {
+        get { true }
+        set { _ = newValue }
     }
 }

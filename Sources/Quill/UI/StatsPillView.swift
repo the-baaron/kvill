@@ -25,16 +25,40 @@ final class StatsPillView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func update(text: String) {
-        let words = text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }).count
-        // 220 wpm is a common average for prose read on screen.
-        let minutes = max(1, Int((Double(words) / 220.0).rounded(.up)))
+    /// Built once. Making one per update showed up in a profile of typing.
+    private static let formatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        let formatted = formatter.string(from: NSNumber(value: words)) ?? "\(words)"
+        return formatter
+    }()
+
+    func update(text: String) {
+        let words = Self.wordCount(text)
+        // 220 wpm is a common average for prose read on screen.
+        let minutes = max(1, Int((Double(words) / 220.0).rounded(.up)))
+        let formatted = Self.formatter.string(from: NSNumber(value: words)) ?? "\(words)"
         label.stringValue = words == 0
             ? "Empty"
             : "\(formatted) word\(words == 1 ? "" : "s") · \(minutes) min read"
+    }
+
+    /// One pass over the bytes, counting the starts of words.
+    ///
+    /// `split` allocates a substring for every word, which on a large file is
+    /// hundreds of thousands of allocations to produce a single number.
+    private static func wordCount(_ text: String) -> Int {
+        var count = 0
+        var inWord = false
+        for byte in text.utf8 {
+            let space = byte == 32 || byte == 10 || byte == 9 || byte == 13
+            if space {
+                inWord = false
+            } else if !inWord {
+                inWord = true
+                count += 1
+            }
+        }
+        return count
     }
 
     override func updateTrackingAreas() {

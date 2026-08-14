@@ -8,7 +8,11 @@ import Foundation
 /// re-parsing cheap enough to run on every keystroke.
 enum MarkdownParser {
 
-    static func parse(_ text: NSString) -> ParsedDocument {
+    static func parse(_ string: NSString) -> ParsedDocument {
+        parse(scan: Scan(string))
+    }
+
+    static func parse(scan text: Scan) -> ParsedDocument {
         var lines = splitLines(text)
         guard !lines.isEmpty else { return ParsedDocument(lines: []) }
 
@@ -26,49 +30,44 @@ enum MarkdownParser {
 
     // MARK: - Line splitting
 
-    private static func splitLines(_ text: NSString) -> [MDLine] {
+    private static func splitLines(_ text: Scan) -> [MDLine] {
         var result: [MDLine] = []
         let length = text.length
-        var location = 0
+        result.reserveCapacity(length / 40 + 8)
+
+        var start = 0
+        var index = 0
         var number = 0
-
-        while location <= length {
-            var start = 0
-            var end = 0
-            var contentsEnd = 0
-            text.getLineStart(&start, end: &end, contentsEnd: &contentsEnd,
-                              for: NSRange(location: location, length: 0))
-
+        while index < length {
+            let character = text.chr(index)
+            guard isNewline(character) else {
+                index += 1
+                continue
+            }
+            // CRLF is one line break, not two.
+            var end = index + 1
+            if character == 13, end < length, text.chr(end) == 10 { end += 1 }
             result.append(MDLine(
                 number: number,
-                range: NSRange(location: start, length: contentsEnd - start),
-                fullRange: NSRange(location: start, length: end - start)
-            ))
+                range: NSRange(location: start, length: index - start),
+                fullRange: NSRange(location: start, length: end - start)))
             number += 1
-
-            if end == location {
-                // getLineStart made no progress: we are past the final newline.
-                break
-            }
-            location = end
-            if location == length {
-                // A trailing newline means there is one more, empty, line.
-                if length > 0, isNewline(text.character(at: length - 1)) {
-                    result.append(MDLine(
-                        number: number,
-                        range: NSRange(location: length, length: 0),
-                        fullRange: NSRange(location: length, length: 0)
-                    ))
-                }
-                break
-            }
+            start = end
+            index = end
         }
+
+        // Whatever follows the last break, including the empty line a trailing
+        // one leaves behind.
+        result.append(MDLine(
+            number: number,
+            range: NSRange(location: start, length: length - start),
+            fullRange: NSRange(location: start, length: length - start)))
         return result
     }
 
     // MARK: - Structural classification
 
-    private static func classify(_ lines: inout [MDLine], text: NSString) {
+    private static func classify(_ lines: inout [MDLine], text: Scan) {
         var fenceOpen = false
         var fenceChar: unichar = 0
         var fenceLength = 0
@@ -111,7 +110,7 @@ enum MarkdownParser {
             if fenceOpen {
                 var cursor = start
                 var indent = 0
-                while cursor < end, isSpace(text.character(at: cursor)), indent < 3 {
+                while cursor < end, isSpace(text.chr(cursor)), indent < 3 {
                     cursor += 1
                     indent += 1
                 }
@@ -143,7 +142,7 @@ enum MarkdownParser {
             var cursor = start
             var indentColumns = 0
             while cursor < end {
-                let c = text.character(at: cursor)
+                let c = text.chr(cursor)
                 if c == 32 { indentColumns += 1 } else if c == 9 { indentColumns += 4 } else { break }
                 cursor += 1
             }
@@ -152,11 +151,11 @@ enum MarkdownParser {
             // --- Blockquote markers ----------------------------------------------
             var quoteDepth = 0
             var markerEnd = firstNonSpace
-            while cursor < end, text.character(at: cursor) == 62 {  // '>'
+            while cursor < end, text.chr(cursor) == 62 {  // '>'
                 quoteDepth += 1
                 cursor += 1
                 markerEnd = cursor
-                while cursor < end, isSpace(text.character(at: cursor)) { cursor += 1 }
+                while cursor < end, isSpace(text.chr(cursor)) { cursor += 1 }
             }
             line.quoteDepth = quoteDepth
 
@@ -272,8 +271,8 @@ enum MarkdownParser {
             }
 
             // --- Definition list item ---------------------------------------------------------------
-            if quoteDepth == 0, innerStart < end, text.character(at: innerStart) == 58,  // ':'
-                innerStart + 1 < end, isSpace(text.character(at: innerStart + 1)) {
+            if quoteDepth == 0, innerStart < end, text.chr(innerStart) == 58,  // ':'
+                innerStart + 1 < end, isSpace(text.chr(innerStart + 1)) {
                 line.kind = .definition
                 line.markerRange = NSRange(location: innerStart, length: 1)
                 let gapEnd = skipSpaces(text, innerStart + 1, end)
@@ -285,7 +284,7 @@ enum MarkdownParser {
             }
 
             // --- Raw HTML -----------------------------------------------------------------------------
-            if innerStart < end, text.character(at: innerStart) == 60, isHTMLBlockStart(text, innerStart, end) {
+            if innerStart < end, text.chr(innerStart) == 60, isHTMLBlockStart(text, innerStart, end) {
                 line.kind = .htmlLine
                 line.contentRange = NSRange(location: innerStart, length: end - innerStart)
                 lines[index] = line
@@ -316,7 +315,7 @@ enum MarkdownParser {
     /// line that is not a row. Nothing is measured here: the table is shown as
     /// aligned monospace source, and `TableFormatter` is what keeps the columns
     /// lined up in the file.
-    private static func detectTables(_ lines: inout [MDLine], text: NSString) {
+    private static func detectTables(_ lines: inout [MDLine], text: Scan) {
         var index = 0
         while index + 1 < lines.count {
             guard isRowCandidate(lines[index], text: text),
@@ -355,13 +354,13 @@ enum MarkdownParser {
 
     /// A plain paragraph line, outside any quote, holding at least one unescaped
     /// pipe.
-    private static func isRowCandidate(_ line: MDLine, text: NSString) -> Bool {
+    private static func isRowCandidate(_ line: MDLine, text: Scan) -> Bool {
         guard line.kind == .paragraph, line.quoteDepth == 0 else { return false }
         let start = line.range.location
         let end = NSMaxRange(line.range)
         var index = start
         while index < end {
-            if text.character(at: index) == 124, !isEscaped(text, index, from: start) { return true }
+            if text.chr(index) == 124, !isEscaped(text, index, from: start) { return true }
             index += 1
         }
         return false
@@ -369,7 +368,7 @@ enum MarkdownParser {
 
     /// `| --- | :-: |`: pipes, dashes, colons and spaces, with at least one pipe,
     /// and every cell a run of dashes with optional colons around it.
-    private static func isDelimiterRow(_ line: MDLine, text: NSString) -> Bool {
+    private static func isDelimiterRow(_ line: MDLine, text: Scan) -> Bool {
         let start = line.range.location
         let end = NSMaxRange(line.range)
         guard end > start else { return false }
@@ -382,7 +381,7 @@ enum MarkdownParser {
 
         var index = start
         while index < end {
-            let character = text.character(at: index)
+            let character = text.chr(index)
             switch character {
             case 124:                       // |
                 if sawCell, cellDashes == 0 { cellValid = false }
@@ -411,7 +410,7 @@ enum MarkdownParser {
     // MARK: - Setext headings
 
     /// Turns the paragraph lines directly above a `===` / `---` underline into a heading.
-    private static func detectSetextHeadings(_ lines: inout [MDLine], text: NSString) {
+    private static func detectSetextHeadings(_ lines: inout [MDLine], text: Scan) {
         for index in lines.indices {
             guard case .setextUnderline(let level) = lines[index].kind else { continue }
             var above = index - 1
@@ -502,7 +501,7 @@ enum MarkdownParser {
 
     /// Marks lines that consist of nothing but an image, so they can be drawn
     /// rather than written out.
-    private static func detectBlockImages(_ lines: inout [MDLine], text: NSString) {
+    private static func detectBlockImages(_ lines: inout [MDLine], text: Scan) {
         for index in lines.indices {
             switch lines[index].kind {
             case .paragraph, .blockquote, .listItem:
@@ -514,7 +513,7 @@ enum MarkdownParser {
     }
 
     /// Builds the reference link table, keyed by lowercased label.
-    private static func collectDefinitions(_ lines: [MDLine], text: NSString) -> [String: String] {
+    private static func collectDefinitions(_ lines: [MDLine], text: Scan) -> [String: String] {
         var result: [String: String] = [:]
         for line in lines where line.kind == .linkDefinition {
             guard line.markerRange.length > 2 else { continue }
@@ -531,7 +530,7 @@ enum MarkdownParser {
 
     // MARK: - Inline pass
 
-    private static func scanInlines(_ lines: inout [MDLine], text: NSString) {
+    private static func scanInlines(_ lines: inout [MDLine], text: Scan) {
         for index in lines.indices {
             let line = lines[index]
             switch line.kind {
@@ -576,16 +575,16 @@ enum MarkdownParser {
     static func isNewline(_ c: unichar) -> Bool { c == 10 || c == 13 }
     static func isDigit(_ c: unichar) -> Bool { c >= 48 && c <= 57 }
 
-    private static func skipSpaces(_ text: NSString, _ start: Int, _ end: Int) -> Int {
+    private static func skipSpaces(_ text: Scan, _ start: Int, _ end: Int) -> Int {
         var i = start
-        while i < end, isSpace(text.character(at: i)) { i += 1 }
+        while i < end, isSpace(text.chr(i)) { i += 1 }
         return i
     }
 
-    private static func isBlank(_ text: NSString, _ start: Int, _ end: Int) -> Bool {
+    private static func isBlank(_ text: Scan, _ start: Int, _ end: Int) -> Bool {
         var i = start
         while i < end {
-            if !isSpace(text.character(at: i)) { return false }
+            if !isSpace(text.chr(i)) { return false }
             i += 1
         }
         return true
@@ -593,10 +592,10 @@ enum MarkdownParser {
 
     /// True when the run starting at `start` is at least `minimum` repeats of `char`
     /// followed only by spaces.
-    private static func isFence(_ text: NSString, _ start: Int, _ end: Int, char: unichar, minimum: Int) -> Bool {
+    private static func isFence(_ text: Scan, _ start: Int, _ end: Int, char: unichar, minimum: Int) -> Bool {
         var i = start
         var count = 0
-        while i < end, text.character(at: i) == char { count += 1; i += 1 }
+        while i < end, text.chr(i) == char { count += 1; i += 1 }
         guard count >= minimum else { return false }
         return isBlank(text, i, end)
     }
@@ -608,30 +607,30 @@ enum MarkdownParser {
         let language: String?
     }
 
-    private static func fenceOpener(_ text: NSString, _ start: Int, _ end: Int) -> Fence? {
+    private static func fenceOpener(_ text: Scan, _ start: Int, _ end: Int) -> Fence? {
         guard start < end else { return nil }
-        let c = text.character(at: start)
+        let c = text.chr(start)
         guard c == 96 || c == 126 else { return nil }  // ` or ~
         var i = start
         var count = 0
-        while i < end, text.character(at: i) == c { count += 1; i += 1 }
+        while i < end, text.chr(i) == c { count += 1; i += 1 }
         guard count >= 3 else { return nil }
         let infoStart = skipSpaces(text, i, end)
         var infoEnd = infoStart
-        while infoEnd < end, !isSpace(text.character(at: infoEnd)) { infoEnd += 1 }
+        while infoEnd < end, !isSpace(text.chr(infoEnd)) { infoEnd += 1 }
         let language = infoEnd > infoStart
             ? text.substring(with: NSRange(location: infoStart, length: infoEnd - infoStart))
             : nil
         return Fence(char: c, length: count, markerEnd: i, language: language)
     }
 
-    private static func setextLevel(_ text: NSString, _ start: Int, _ end: Int) -> Int? {
+    private static func setextLevel(_ text: Scan, _ start: Int, _ end: Int) -> Int? {
         guard start < end else { return nil }
-        let c = text.character(at: start)
+        let c = text.chr(start)
         guard c == 61 || c == 45 else { return nil }  // = or -
         var i = start
         var count = 0
-        while i < end, text.character(at: i) == c { count += 1; i += 1 }
+        while i < end, text.chr(i) == c { count += 1; i += 1 }
         guard isBlank(text, i, end) else { return nil }
         // Only `===` makes a heading. `---` under a paragraph is a setext H2 in
         // CommonMark, but in a live editor that means typing a horizontal rule
@@ -641,14 +640,14 @@ enum MarkdownParser {
         return c == 61 && count >= 1 ? 1 : nil
     }
 
-    private static func isThematicBreak(_ text: NSString, _ start: Int, _ end: Int) -> Bool {
+    private static func isThematicBreak(_ text: Scan, _ start: Int, _ end: Int) -> Bool {
         guard start < end else { return false }
-        let c = text.character(at: start)
+        let c = text.chr(start)
         guard c == 45 || c == 42 || c == 95 else { return false }  // - * _
         var i = start
         var count = 0
         while i < end {
-            let ch = text.character(at: i)
+            let ch = text.chr(i)
             if ch == c { count += 1 } else if !isSpace(ch) { return false }
             i += 1
         }
@@ -661,15 +660,15 @@ enum MarkdownParser {
         let contentStart: Int
     }
 
-    private static func atxHeading(_ text: NSString, _ start: Int, _ end: Int) -> Heading? {
+    private static func atxHeading(_ text: Scan, _ start: Int, _ end: Int) -> Heading? {
         var i = start
         var level = 0
-        while i < end, text.character(at: i) == 35, level < 7 {  // '#'
+        while i < end, text.chr(i) == 35, level < 7 {  // '#'
             level += 1
             i += 1
         }
         guard level >= 1, level <= 6 else { return nil }
-        guard i == end || isSpace(text.character(at: i)) else { return nil }
+        guard i == end || isSpace(text.chr(i)) else { return nil }
         let contentStart = skipSpaces(text, i, end)
         return Heading(level: level, markerEnd: i, contentStart: contentStart)
     }
@@ -680,13 +679,13 @@ enum MarkdownParser {
         let contentStart: Int
     }
 
-    private static func listMarker(_ text: NSString, _ start: Int, _ end: Int) -> ListMarker? {
+    private static func listMarker(_ text: Scan, _ start: Int, _ end: Int) -> ListMarker? {
         guard start < end else { return nil }
-        let c = text.character(at: start)
+        let c = text.chr(start)
 
         if c == 45 || c == 43 || c == 42 {  // - + *
             let next = start + 1
-            guard next == end || isSpace(text.character(at: next)) else { return nil }
+            guard next == end || isSpace(text.chr(next)) else { return nil }
             let contentStart = skipSpaces(text, next, end)
             return ListMarker(ordered: false, markerEnd: next, contentStart: contentStart)
         }
@@ -694,12 +693,12 @@ enum MarkdownParser {
         if isDigit(c) {
             var i = start
             var digits = 0
-            while i < end, isDigit(text.character(at: i)), digits < 9 { i += 1; digits += 1 }
+            while i < end, isDigit(text.chr(i)), digits < 9 { i += 1; digits += 1 }
             guard i < end else { return nil }
-            let delimiter = text.character(at: i)
+            let delimiter = text.chr(i)
             guard delimiter == 46 || delimiter == 41 else { return nil }  // . or )
             i += 1
-            guard i == end || isSpace(text.character(at: i)) else { return nil }
+            guard i == end || isSpace(text.chr(i)) else { return nil }
             let contentStart = skipSpaces(text, i, end)
             return ListMarker(ordered: true, markerEnd: i, contentStart: contentStart)
         }
@@ -712,11 +711,11 @@ enum MarkdownParser {
         let end: Int
     }
 
-    private static func taskCheckbox(_ text: NSString, _ start: Int, _ end: Int) -> Checkbox? {
+    private static func taskCheckbox(_ text: Scan, _ start: Int, _ end: Int) -> Checkbox? {
         guard start + 2 < end else { return nil }
-        guard text.character(at: start) == 91 else { return nil }  // '['
-        let inner = text.character(at: start + 1)
-        guard text.character(at: start + 2) == 93 else { return nil }  // ']'
+        guard text.chr(start) == 91 else { return nil }  // '['
+        let inner = text.chr(start + 1)
+        guard text.chr(start + 2) == 93 else { return nil }  // ']'
         let state: TaskState
         switch inner {
         case 32: state = .open
@@ -724,7 +723,7 @@ enum MarkdownParser {
         default: return nil
         }
         var after = start + 3
-        guard after == end || isSpace(text.character(at: after)) else { return nil }
+        guard after == end || isSpace(text.chr(after)) else { return nil }
         after = skipSpaces(text, after, end)
         return Checkbox(state: state, end: after)
     }
@@ -735,11 +734,11 @@ enum MarkdownParser {
     }
 
     /// Matches `[!NOTE]` at `start`, returning the index just past the closing bracket.
-    private static func calloutLabel(_ text: NSString, _ start: Int, _ end: Int) -> Callout? {
+    private static func calloutLabel(_ text: Scan, _ start: Int, _ end: Int) -> Callout? {
         guard start + 2 < end else { return nil }
-        guard text.character(at: start) == 91, text.character(at: start + 1) == 33 else { return nil }  // '[!'
+        guard text.chr(start) == 91, text.chr(start + 1) == 33 else { return nil }  // '[!'
         var i = start + 2
-        while i < end, text.character(at: i) != 93 { i += 1 }
+        while i < end, text.chr(i) != 93 { i += 1 }
         guard i < end else { return nil }
         let label = text.substring(with: NSRange(location: start + 2, length: i - start - 2)).uppercased()
         return Callout(kind: CalloutKind(rawValue: label), end: i + 1)
@@ -749,12 +748,12 @@ enum MarkdownParser {
         let markerEnd: Int
     }
 
-    private static func footnoteDefinition(_ text: NSString, _ start: Int, _ end: Int) -> Footnote? {
+    private static func footnoteDefinition(_ text: Scan, _ start: Int, _ end: Int) -> Footnote? {
         guard start + 3 < end else { return nil }
-        guard text.character(at: start) == 91, text.character(at: start + 1) == 94 else { return nil }  // '[^'
+        guard text.chr(start) == 91, text.chr(start + 1) == 94 else { return nil }  // '[^'
         var i = start + 2
-        while i < end, text.character(at: i) != 93 { i += 1 }
-        guard i + 1 < end, text.character(at: i + 1) == 58 else { return nil }  // ']:'
+        while i < end, text.chr(i) != 93 { i += 1 }
+        guard i + 1 < end, text.chr(i + 1) == 58 else { return nil }  // ']:'
         return Footnote(markerEnd: i + 2)
     }
 
@@ -765,15 +764,15 @@ enum MarkdownParser {
 
     /// Matches `[label]:` at the start of a line. Footnote definitions start
     /// `[^`, and are matched before this, so they are not swallowed here.
-    private static func linkDefinition(_ text: NSString, _ start: Int, _ end: Int) -> LinkDefinition? {
-        guard start + 2 < end, text.character(at: start) == 91 else { return nil }  // '['
-        guard text.character(at: start + 1) != 94 else { return nil }               // not '[^'
+    private static func linkDefinition(_ text: Scan, _ start: Int, _ end: Int) -> LinkDefinition? {
+        guard start + 2 < end, text.chr(start) == 91 else { return nil }  // '['
+        guard text.chr(start + 1) != 94 else { return nil }               // not '[^'
         var i = start + 1
-        while i < end, text.character(at: i) != 93 {
-            if text.character(at: i) == 91 { return nil }
+        while i < end, text.chr(i) != 93 {
+            if text.chr(i) == 91 { return nil }
             i += 1
         }
-        guard i < end, i > start + 1, i + 1 < end, text.character(at: i + 1) == 58 else { return nil }
+        guard i < end, i > start + 1, i + 1 < end, text.chr(i + 1) == 58 else { return nil }
         let label = text.substring(with: NSRange(location: start + 1, length: i - start - 1))
         // A destination has to follow, otherwise this is ordinary prose.
         guard skipSpaces(text, i + 2, end) < end else { return nil }
@@ -781,18 +780,18 @@ enum MarkdownParser {
     }
 
     /// Matches a line whose entire content is one image.
-    private static func blockImage(_ text: NSString, _ range: NSRange) -> BlockImage? {
+    private static func blockImage(_ text: Scan, _ range: NSRange) -> BlockImage? {
         var start = range.location
         var end = NSMaxRange(range)
-        while start < end, isSpace(text.character(at: start)) { start += 1 }
-        while end > start, isSpace(text.character(at: end - 1)) { end -= 1 }
+        while start < end, isSpace(text.chr(start)) { start += 1 }
+        while end > start, isSpace(text.chr(end - 1)) { end -= 1 }
         guard end - start > 4 else { return nil }
-        guard text.character(at: start) == 33, text.character(at: start + 1) == 91 else { return nil }  // '!['
+        guard text.chr(start) == 33, text.chr(start + 1) == 91 else { return nil }  // '!['
 
         var i = start + 2
         var depth = 1
         while i < end, depth > 0 {
-            let c = text.character(at: i)
+            let c = text.chr(i)
             if c == 91 { depth += 1 }
             if c == 93 { depth -= 1; if depth == 0 { break } }
             i += 1
@@ -800,11 +799,11 @@ enum MarkdownParser {
         guard i < end, depth == 0 else { return nil }
         let altRange = NSRange(location: start + 2, length: i - start - 2)
 
-        guard i + 1 < end, text.character(at: i + 1) == 40 else { return nil }  // '('
+        guard i + 1 < end, text.chr(i + 1) == 40 else { return nil }  // '('
         var j = i + 2
         var parens = 1
         while j < end, parens > 0 {
-            let c = text.character(at: j)
+            let c = text.chr(j)
             if c == 40 { parens += 1 }
             if c == 41 { parens -= 1; if parens == 0 { break } }
             j += 1
@@ -821,17 +820,17 @@ enum MarkdownParser {
             range: NSRange(location: start, length: end - start))
     }
 
-    private static func isHTMLBlockStart(_ text: NSString, _ start: Int, _ end: Int) -> Bool {
+    private static func isHTMLBlockStart(_ text: Scan, _ start: Int, _ end: Int) -> Bool {
         guard start + 1 < end else { return false }
-        let next = text.character(at: start + 1)
+        let next = text.chr(start + 1)
         // <tag, </tag, <!-- and <!DOCTYPE all count.
         return (next >= 97 && next <= 122) || (next >= 65 && next <= 90) || next == 47 || next == 33
     }
 
-    static func isEscaped(_ text: NSString, _ index: Int, from start: Int) -> Bool {
+    static func isEscaped(_ text: Scan, _ index: Int, from start: Int) -> Bool {
         var backslashes = 0
         var i = index - 1
-        while i >= start, text.character(at: i) == 92 {  // '\'
+        while i >= start, text.chr(i) == 92 {  // '\'
             backslashes += 1
             i -= 1
         }

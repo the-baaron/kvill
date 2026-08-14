@@ -136,6 +136,10 @@ enum SelfTest {
             let panel = SlashMenuPanel()
             check("slash menu: builds", panel.update(query: ""), "")
             check("slash menu: never takes the keyboard", !panel.canBecomeKey, "")
+            check("slash menu: rows are menu height",
+                  panel.rowHeightForTest == 30, "\(Int(panel.rowHeightForTest))pt")
+            check("slash menu: the chosen row reads as chosen",
+                  panel.selectedRowIsHighlightedForTest, "")
             // A content view with autoresizing turned off gets no size, and the
             // panel comes up empty. This is the check that catches that.
             panel.orderFront(nil)
@@ -177,6 +181,9 @@ enum SelfTest {
         // --- Scrolling past the end -----------------------------------------
         check("clip view is the typewriter clip view",
               clip is TypewriterClipView, String(describing: type(of: clip)))
+
+        // The height is measured a moment after a document loads, not during.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
 
         // Scrolling past the end, checked through a route that actually
         // constrains. `NSClipView.scroll(to:)` does not: it sets the bounds
@@ -220,7 +227,7 @@ enum SelfTest {
         // A document that fits has nowhere to go.
         controller.loadText("")
         controller.view.layoutSubtreeIfNeeded()
-        controller.view.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         check("an empty document does not scroll",
               controller.editor.textView.frame.height <= viewport + 1,
               "view \(Int(controller.editor.textView.frame.height))pt, window \(Int(viewport))pt")
@@ -235,12 +242,16 @@ enum SelfTest {
             manager.typewriterScrolling = false
             manager.scrollPastEnd = false
             controller.view.layoutSubtreeIfNeeded()
+            // The height is measured a moment after a change rather than on
+            // every keystroke, so the check waits the same moment.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
             let flat = controller.editor.textView.frame.height - content
             check("scroll past end: off leaves no room below the text",
                   flat < line + 3, "taller by \(Int(flat))pt")
 
             manager.scrollPastEnd = true
             controller.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
             check("scroll past end: on leaves a window of room",
                   controller.editor.textView.frame.height - content > 100, "")
 
@@ -248,6 +259,7 @@ enum SelfTest {
             manager.scrollPastEnd = false
             manager.typewriterScrolling = true
             controller.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
             check("scroll past end: typewriter keeps half a window anyway",
                   controller.editor.textView.frame.height - content > 100,
                   "taller by \(Int(controller.editor.textView.frame.height - content))pt")

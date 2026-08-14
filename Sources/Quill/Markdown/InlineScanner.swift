@@ -28,7 +28,7 @@ enum InlineScanner {
         static let tab: unichar = 9
     }
 
-    static func scan(_ text: NSString, range: NSRange) -> [InlineToken] {
+    static func scan(_ text: Scan, range: NSRange) -> [InlineToken] {
         var tokens: [InlineToken] = []
         scan(text, from: range.location, to: NSMaxRange(range), depth: 0, into: &tokens)
         appendHardBreak(text, range: range, into: &tokens)
@@ -38,16 +38,16 @@ enum InlineScanner {
     // MARK: - Main loop
 
     private static func scan(
-        _ text: NSString, from start: Int, to end: Int, depth: Int, into tokens: inout [InlineToken]
+        _ text: Scan, from start: Int, to end: Int, depth: Int, into tokens: inout [InlineToken]
     ) {
         guard depth < 6 else { return }  // guards against pathological nesting
         var i = start
 
         while i < end {
-            let c = text.character(at: i)
+            let c = text.chr(i)
 
             // Backslash escape: the backslash dims, the escaped character stays.
-            if c == Char.backslash, i + 1 < end, isPunctuation(text.character(at: i + 1)) {
+            if c == Char.backslash, i + 1 < end, isPunctuation(text.chr(i + 1)) {
                 tokens.append(InlineToken(range: NSRange(location: i, length: 1), kind: .syntax))
                 tokens.append(InlineToken(range: NSRange(location: i + 1, length: 1), kind: .escape))
                 i += 2
@@ -62,7 +62,7 @@ enum InlineScanner {
                 if let consumed = scanAngle(text, i, end, into: &tokens) { i = consumed; continue }
 
             case Char.bang:
-                if i + 1 < end, text.character(at: i + 1) == Char.bracketOpen,
+                if i + 1 < end, text.chr(i + 1) == Char.bracketOpen,
                    let consumed = scanLink(text, i, end, isImage: true, depth: depth, into: &tokens) {
                     i = consumed
                     continue
@@ -111,17 +111,17 @@ enum InlineScanner {
     // MARK: - Code spans
 
     private static func scanCodeSpan(
-        _ text: NSString, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
+        _ text: Scan, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
     ) -> Int? {
         var open = start
-        while open < end, text.character(at: open) == Char.backtick { open += 1 }
+        while open < end, text.chr(open) == Char.backtick { open += 1 }
         let ticks = open - start
         var i = open
 
         while i < end {
-            if text.character(at: i) == Char.backtick {
+            if text.chr(i) == Char.backtick {
                 var close = i
-                while close < end, text.character(at: close) == Char.backtick { close += 1 }
+                while close < end, text.chr(close) == Char.backtick { close += 1 }
                 if close - i == ticks {
                     tokens.append(InlineToken(range: NSRange(location: start, length: ticks), kind: .syntax))
                     if i > open {
@@ -141,12 +141,12 @@ enum InlineScanner {
     // MARK: - Autolinks and raw HTML
 
     private static func scanAngle(
-        _ text: NSString, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
+        _ text: Scan, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
     ) -> Int? {
         var i = start + 1
         var sawColonOrAt = false
         while i < end {
-            let c = text.character(at: i)
+            let c = text.chr(i)
             if c == Char.space || c == Char.tab { break }
             if c == 58 || c == 64 { sawColonOrAt = true }  // ':' or '@'
             if c == Char.angleClose {
@@ -164,8 +164,8 @@ enum InlineScanner {
 
         // Not an autolink; treat a well-formed `<tag …>` as raw HTML.
         var j = start + 1
-        while j < end, text.character(at: j) != Char.angleClose {
-            if text.character(at: j) == Char.angleOpen { return nil }
+        while j < end, text.chr(j) != Char.angleClose {
+            if text.chr(j) == Char.angleOpen { return nil }
             j += 1
         }
         guard j < end else { return nil }
@@ -176,7 +176,7 @@ enum InlineScanner {
     // MARK: - Links and images
 
     private static func scanLink(
-        _ text: NSString, _ start: Int, _ end: Int, isImage: Bool, depth: Int,
+        _ text: Scan, _ start: Int, _ end: Int, isImage: Bool, depth: Int,
         into tokens: inout [InlineToken]
     ) -> Int? {
         let bracketStart = isImage ? start + 1 : start
@@ -188,7 +188,7 @@ enum InlineScanner {
         var cursor = bracketEnd + 1
         var tailTokens: [InlineToken] = []
 
-        if cursor < end, text.character(at: cursor) == Char.parenOpen {
+        if cursor < end, text.chr(cursor) == Char.parenOpen {
             // Inline destination: [text](url "title")
             guard let parenEnd = matchingParen(text, cursor, end) else { return nil }
             tailTokens.append(InlineToken(range: NSRange(location: bracketEnd, length: 2), kind: .syntax))
@@ -198,7 +198,7 @@ enum InlineScanner {
             }
             tailTokens.append(InlineToken(range: NSRange(location: parenEnd, length: 1), kind: .syntax))
             cursor = parenEnd + 1
-        } else if cursor < end, text.character(at: cursor) == Char.bracketOpen {
+        } else if cursor < end, text.chr(cursor) == Char.bracketOpen {
             // Reference: [text][ref]
             guard let refEnd = matchingBracket(text, cursor, end) else { return nil }
             tailTokens.append(InlineToken(range: NSRange(location: bracketEnd, length: 2), kind: .syntax))
@@ -227,17 +227,17 @@ enum InlineScanner {
     }
 
     private static func scanFootnoteRef(
-        _ text: NSString, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
+        _ text: Scan, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
     ) -> Int? {
-        guard start + 2 < end, text.character(at: start + 1) == Char.caret else { return nil }
+        guard start + 2 < end, text.chr(start + 1) == Char.caret else { return nil }
         var i = start + 2
-        while i < end, text.character(at: i) != Char.bracketClose {
-            if text.character(at: i) == Char.bracketOpen { return nil }
+        while i < end, text.chr(i) != Char.bracketClose {
+            if text.chr(i) == Char.bracketOpen { return nil }
             i += 1
         }
         guard i < end else { return nil }
         // A definition (`[^1]: …`) is a block, handled by the line parser.
-        if i + 1 < end, text.character(at: i + 1) == 58 { return nil }
+        if i + 1 < end, text.chr(i + 1) == 58 { return nil }
         tokens.append(InlineToken(range: NSRange(location: start, length: i - start + 1), kind: .footnoteRef))
         return i + 1
     }
@@ -245,20 +245,20 @@ enum InlineScanner {
     // MARK: - Math
 
     private static func scanMath(
-        _ text: NSString, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
+        _ text: Scan, _ start: Int, _ end: Int, into tokens: inout [InlineToken]
     ) -> Int? {
         var open = start
-        while open < end, text.character(at: open) == Char.dollar, open - start < 2 { open += 1 }
+        while open < end, text.chr(open) == Char.dollar, open - start < 2 { open += 1 }
         let count = open - start
-        guard open < end, !isSpaceChar(text.character(at: open)) else { return nil }
+        guard open < end, !isSpaceChar(text.chr(open)) else { return nil }
 
         var i = open
         while i < end {
-            if text.character(at: i) == Char.dollar,
+            if text.chr(i) == Char.dollar,
                !MarkdownParser.isEscaped(text, i, from: start),
-               !isSpaceChar(text.character(at: i - 1)) {
+               !isSpaceChar(text.chr(i - 1)) {
                 var close = i
-                while close < end, text.character(at: close) == Char.dollar, close - i < count { close += 1 }
+                while close < end, text.chr(close) == Char.dollar, close - i < count { close += 1 }
                 guard close - i == count else { i = close; continue }
                 tokens.append(InlineToken(range: NSRange(location: start, length: count), kind: .syntax))
                 tokens.append(InlineToken(range: NSRange(location: open, length: i - open), kind: .math))
@@ -273,11 +273,11 @@ enum InlineScanner {
     // MARK: - Emphasis
 
     private static func scanEmphasis(
-        _ text: NSString, _ start: Int, _ end: Int, char: unichar, depth: Int,
+        _ text: Scan, _ start: Int, _ end: Int, char: unichar, depth: Int,
         into tokens: inout [InlineToken]
     ) -> Int? {
         var open = start
-        while open < end, text.character(at: open) == char { open += 1 }
+        while open < end, text.chr(open) == char { open += 1 }
         let runLength = min(open - start, 3)
 
         let kind: InlineKind
@@ -288,7 +288,7 @@ enum InlineScanner {
         }
 
         // `_` inside a word is an identifier, not emphasis.
-        if char == Char.underscore, start > 0, isWordCharacter(text.character(at: start - 1)) {
+        if char == Char.underscore, start > 0, isWordCharacter(text.chr(start - 1)) {
             return nil
         }
 
@@ -299,25 +299,25 @@ enum InlineScanner {
     /// Matches a delimiter run of `count` copies of `char` with its closer, then
     /// recurses into the enclosed text.
     private static func scanPaired(
-        _ text: NSString, _ start: Int, _ end: Int, char: unichar, count: Int,
+        _ text: Scan, _ start: Int, _ end: Int, char: unichar, count: Int,
         kind: InlineKind, depth: Int, into tokens: inout [InlineToken]
     ) -> Int? {
         var run = start
-        while run < end, text.character(at: run) == char { run += 1 }
+        while run < end, text.chr(run) == char { run += 1 }
         guard run - start >= count else { return nil }
 
         let contentStart = start + count
-        guard contentStart < end, !isSpaceChar(text.character(at: contentStart)) else { return nil }
+        guard contentStart < end, !isSpaceChar(text.chr(contentStart)) else { return nil }
 
         var i = contentStart
         while i < end {
-            guard text.character(at: i) == char,
+            guard text.chr(i) == char,
                   !MarkdownParser.isEscaped(text, i, from: start) else { i += 1; continue }
 
             var close = i
-            while close < end, text.character(at: close) == char { close += 1 }
+            while close < end, text.chr(close) == char { close += 1 }
             guard close - i >= count, i > contentStart,
-                  !isSpaceChar(text.character(at: i - 1)) else {
+                  !isSpaceChar(text.chr(i - 1)) else {
                 i = close
                 continue
             }
@@ -338,13 +338,13 @@ enum InlineScanner {
     // MARK: - Hard break
 
     private static func appendHardBreak(
-        _ text: NSString, range: NSRange, into tokens: inout [InlineToken]
+        _ text: Scan, range: NSRange, into tokens: inout [InlineToken]
     ) {
         let end = NSMaxRange(range)
         guard end - range.location >= 2 else { return }
         var i = end
         var spaces = 0
-        while i > range.location, text.character(at: i - 1) == Char.space {
+        while i > range.location, text.chr(i - 1) == Char.space {
             spaces += 1
             i -= 1
         }
@@ -354,11 +354,11 @@ enum InlineScanner {
 
     // MARK: - Bracket matching
 
-    private static func matchingBracket(_ text: NSString, _ open: Int, _ end: Int) -> Int? {
+    private static func matchingBracket(_ text: Scan, _ open: Int, _ end: Int) -> Int? {
         var level = 0
         var i = open
         while i < end {
-            let c = text.character(at: i)
+            let c = text.chr(i)
             if !MarkdownParser.isEscaped(text, i, from: open) {
                 if c == Char.bracketOpen { level += 1 }
                 if c == Char.bracketClose {
@@ -371,11 +371,11 @@ enum InlineScanner {
         return nil
     }
 
-    private static func matchingParen(_ text: NSString, _ open: Int, _ end: Int) -> Int? {
+    private static func matchingParen(_ text: Scan, _ open: Int, _ end: Int) -> Int? {
         var level = 0
         var i = open
         while i < end {
-            let c = text.character(at: i)
+            let c = text.chr(i)
             if !MarkdownParser.isEscaped(text, i, from: open) {
                 if c == Char.parenOpen { level += 1 }
                 if c == Char.parenClose {

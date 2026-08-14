@@ -216,6 +216,10 @@ final class DocumentViewController: NSViewController {
     private func applyBackdrop() {
         let glass = theme.colors.isTranslucent
         backdrop.isHidden = !glass
+        // A hidden visual effect view still keeps its blur going unless it is
+        // told to stop, and most palettes are opaque, so most of the time this
+        // is a blur nobody can see.
+        backdrop.state = glass ? .active : .inactive
         backdrop.material = theme.colors.material
         backdrop.appearance = theme.colors.appearance
 
@@ -248,8 +252,18 @@ final class DocumentViewController: NSViewController {
 
     // MARK: - Content
 
+    /// Pending word count. Nobody reads the pill mid-word, so it is worked out
+    /// once typing stops rather than on every key.
+    private var statsWork: DispatchWorkItem?
+
     private func updateStats() {
-        stats.update(text: editor.text)
+        statsWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.stats.update(text: self.editor.text)
+        }
+        statsWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     func loadText(_ text: String) {
