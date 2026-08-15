@@ -25,6 +25,20 @@ enum BackgroundService {
         }
     }
 
+    /// Whether macOS is actually holding a login item for this app.
+    ///
+    /// Both `.notRegistered` and `.notFound` mean there is no login item. They
+    /// differ only in whether macOS has heard of the bundle at all, which for a
+    /// copy running out of `build/` rather than `/Applications` it often has
+    /// not. Anything asking "did we leave a login item behind" wants this, not
+    /// a comparison against one particular clean value.
+    static var hasLoginItem: Bool {
+        switch SMAppService.mainApp.status {
+        case .enabled, .requiresApproval: return true
+        default: return false
+        }
+    }
+
     /// Whether the app stays running with no windows and starts at login.
     static var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: "kvill.staysRunning") }

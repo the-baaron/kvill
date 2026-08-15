@@ -182,7 +182,7 @@ enum SelfTest {
 
             UserDefaults.standard.set(was, forKey: key)
             check("background: the test left no login item behind",
-                  BackgroundService.loginItemStatus == "not registered" || was,
+                  !BackgroundService.hasLoginItem || was,
                   BackgroundService.loginItemStatus)
         }
 
