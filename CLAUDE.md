@@ -15,7 +15,6 @@ main claim, not just in a benchmark.
 | | |
 |---|---|
 | `./build.sh` | Sandboxed ad-hoc build into `build/Kvill.app`, then restarts a running copy onto it |
-| `KVILL_UNIVERSAL=1 ./build.sh` | Adds the Intel slice. Off by default because it doubles the build; `package.sh` sets it |
 | `QUILL_SANDBOX=0 ./build.sh` | Same without the sandbox. **Needed for every CLI tool below**, because the sandbox refuses to read a path handed to the app on the command line |
 | `./package.sh` | Distribution build into `build/dist/`, signed, wrapped in `build/Kvill.pkg` |
 | `./package.sh --upload` | The same, then sends it to App Store Connect |
@@ -52,20 +51,6 @@ the record was made under an earlier name and Apple will not repoint it, which
 does not matter because users never see it. Team `496Y48L8AX`. Certificates are
 `3rd Party Mac Developer Application` and `... Installer`, both issued from the
 API against a local CSR and chaining through **WWDR G3**, not G5.
-
-**The app is universal, and it is built the long way round.** `swift build
---arch arm64 --arch x86_64` needs xcbuild, which only comes with full Xcode, and
-this machine has the Command Line Tools. So the slices are built separately and
-joined with `lipo`. Two traps: the scratch directory is named after the *host*
-triple whatever `-target` says, so the path claims arm64 while holding an Intel
-binary, and the deployment target comes from `LSMinimumSystemVersion` in the
-Info.plist rather than being written out twice. `package.sh` refuses to package
-anything that is not `x86_64 arm64`.
-
-Running the Intel slice on this Mac (`arch -x86_64`) makes macOS 26 post an
-"Intel app support is ending" notice. That is Rosetta being deprecated, not a
-problem with the build: launched normally, `lsappinfo` reports
-`LSArchitecture=arm64`, so nobody on Apple Silicon ever runs the Intel half.
 
 **Fill in App Review Information before submitting.** 1.0 was rejected under
 2.1 "Information Needed" with that whole section empty: no contact name, email,

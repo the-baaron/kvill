@@ -34,17 +34,7 @@ for identity in "$APP_IDENTITY" "$INSTALLER_IDENTITY"; do
 done
 
 echo "==> Building"
-# Universal. An arm64-only build installs on Apple Silicon and simply is not
-# offered to anyone on an Intel Mac, which is a quiet way to lose every user
-# who has one.
-QUILL_SANDBOX=1 KVILL_UNIVERSAL=1 ./build.sh release > /dev/null
-
-archs="$(lipo -archs build/Kvill.app/Contents/MacOS/Kvill)"
-if [ "$archs" != "x86_64 arm64" ] && [ "$archs" != "arm64 x86_64" ]; then
-  echo "The binary is '$archs', not universal. Refusing to package it." >&2
-  exit 1
-fi
-echo "    $archs"
+QUILL_SANDBOX=1 ./build.sh release > /dev/null
 rm -rf "$DIST"
 mkdir -p "$DIST"
 cp -R build/Kvill.app "$APP"
