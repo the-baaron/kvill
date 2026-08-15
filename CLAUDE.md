@@ -63,11 +63,28 @@ Resolution Center, which is web only; `appStoreVersions` gives you the state
 (`REJECTED`) and nothing else, and the notification email is boilerplate. Ask
 for the text rather than guessing at the guideline number.
 
-**Recording the screen needs two grants a script cannot give itself.** Screen
-Recording for the capture, Accessibility to drive the app. Probe them
-honestly: `screencapture -x` to a temp file for the first, and reading a
-window's *name* for the second, because `count processes` succeeds without the
-grant and makes the check a lie.
+**The app records its own demo.** `--demo` runs `DemoDriver`, which calls the
+same methods the keyboard reaches, so no Accessibility permission is involved.
+Only Screen Recording is, and `screencapture -x` to a temp file is the honest
+probe for it. Four things ate an afternoon and are all handled in
+`store/record-demo.sh`:
+
+- **The other display.** `screencapture` records the primary display. The app
+  opened on the external monitor and the first take was 75 seconds of an empty
+  desktop, so `placeWindow` puts the window on the screen whose frame starts at
+  the origin.
+- **The Desktop is protected.** Opening a document there raises a macOS folder
+  prompt that blocks the window until a human clicks it, every launch. The demo
+  folder lives in the home folder instead.
+- **The display going to sleep** produces a recording of solid black that looks
+  exactly like a recording that failed to start. `caffeinate -u -d` for the
+  length of the take.
+- **`osascript -e 'quit app "X"'` launches X when it is not running**, and
+  asking to control another app raises its own permission dialogue in the middle
+  of the take. `pkill -x` instead.
+
+Also: `defaults write` can wedge. `cfprefsd` hung every write for a stretch,
+which is why the demo is triggered by a launch argument and not a preference.
 
 **Nothing sensitive is in this repository and nothing ever has been**, checked
 across the full history. Signing material stays in the keychain, the App Store

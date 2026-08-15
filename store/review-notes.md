@@ -29,8 +29,8 @@ shared between users, and it requests no location, contacts, camera, microphone
 or tracking permission. It declares no usage description strings at all. The one
 prompt you may see is macOS's own, asking whether the app may read the folder
 the document is in when that folder is the Desktop, Documents or Downloads. The
-system raises that for any app, and the app cannot avoid or suppress it; it is
-in the recording where it appears. None of the other flows listed in point 1
+system raises that for any app and the app can neither trigger nor suppress it,
+so whether you see it depends on where the document you open happens to live. None of the other flows listed in point 1
 exist here, so the recording covers all of it: launching, opening a document,
 editing, switching files, and saving.
 

@@ -4,15 +4,14 @@
 #
 #   ./store/demo-setup.sh
 #
-# It does not record for you. Recording needs Screen Recording permission for
-# whichever app runs the recorder, and driving the editor from a script needs
-# Accessibility permission on top of that. Both are per-app grants a human has
-# to make in System Settings, so the recording step is yours.
+# Recording itself is ./store/record-demo.sh. That needs Screen Recording
+# permission, which only a human can grant, so this checks for it and says so
+# rather than failing in the middle of a take.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="build/Kvill.app"
-DEMO="$HOME/Desktop/Kvill Demo"
+DEMO="$HOME/Kvill Demo"
 OUT="$HOME/Desktop/kvill-demo.mov"
 
 bold=$'\033[1m'; off=$'\033[0m'; red=$'\033[1;31m'; green=$'\033[1;32m'
@@ -41,6 +40,10 @@ else
 fi
 
 # --- The folder the video opens ---------------------------------------------
+# In the home folder rather than on the Desktop. The Desktop is one of the
+# folders macOS protects, so opening a document there raises a permission
+# dialogue that blocks the window until a human clicks it, every launch, which
+# makes an unattended recording impossible.
 rm -rf "$DEMO"
 mkdir -p "$DEMO/Drafts" "$DEMO/Reference"
 
@@ -107,62 +110,24 @@ echo
 echo "${bold}Demo folder:${off} $DEMO"
 ls -1 "$DEMO"
 
-# --- The shot list ------------------------------------------------------------
+# --- What to do with it ------------------------------------------------------
 cat <<EOF
-
-${bold}Shot list${off}  (aim for 60 to 90 seconds, no narration needed)
-
-  0. Quit Kvill first. Apple asked for a recording that ${bold}begins with
-     launching the app${off}, so it must not already be running.
-
-  1. Finder, showing the demo folder. Double-click ${bold}Read me first.md${off}.
-     That is the launch and the first real content in one move.
-
-  2. Click into a heading. The Markdown appears in the margin. Click away.
-     Do this twice, slowly. It is the thing the app is for.
-
-  3. Click a checkbox in the task list. It ticks.
-
-  4. Put the cursor on an empty line, press ${bold}/${off}, type "tab",
-     press Return. A table is inserted. Type in two cells.
-
-  5. Press ${bold}Ctrl Cmd ]${off} two or three times to change colour scheme,
-     then ${bold}Cmd +${off} once to change text size.
-
-  6. ${bold}File › Open Folder…${off}, choose the demo folder, click
-     ${bold}Release notes${off} in the sidebar, then click back.
-
-  7. Scroll to the bottom so the image is on screen and loads.
-
-  8. Press ${bold}Cmd S${off}. The toast says the file is already saved.
-
-  9. Move the pointer to the top right corner so the chrome springs open,
-     and open one of the panels. Then press ${bold}Cmd .${off} to hide all
-     interface and again to bring it back.
 
 ${bold}Recording${off}
-EOF
 
-if [ "$recording_ok" = yes ]; then
-  cat <<EOF
-  screencapture -v -V 95 "$OUT"
+  ./store/record-demo.sh
 
-  Stops on its own after 95 seconds, or press Ctrl-C. Writes $OUT
-EOF
-else
-  cat <<EOF
-  Grant Screen Recording first (above), or use QuickTime Player:
-  File › New Screen Recording, record the screen, then File › Save.
-EOF
-fi
+The app drives itself: it opens the document, walks the caret down the
+opening lines so each reveals its syntax in the margin, types a heading and
+a sentence, opens the insert menu and inserts a table, changes the colour
+scheme and the text size, saves, and hides and restores the interface. See
+Sources/Kvill/App/DemoDriver.swift.
 
-cat <<EOF
+${bold}Samples${off}, which Apple also asked for
 
-Zip the demo folder and attach that too. Apple asked for sample files.
+  cd "\$HOME" && zip -r ~/Desktop/kvill-samples.zip "Kvill Demo" -x "*/.pristine.md" >/dev/null
 
-  cd ~/Desktop && zip -r kvill-samples.zip "Kvill Demo" >/dev/null
-
-Then attach both to your reply in App Store Connect › App Review ›
-Resolution Center, and send the App Review Information first with
-  node store/push-review-notes.mjs --apply
+Then attach the recording and the zip to your reply in App Store Connect ›
+App Review › Resolution Center. The written answers are already in App
+Review Information.
 EOF

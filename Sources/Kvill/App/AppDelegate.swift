@@ -25,6 +25,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // its images straight away rather than after the sidebar is opened.
         FolderAccess.restore()
 
+        // Only when this launch asked for it, and it clears the request as it
+        // starts. Used to record the App Review demonstration.
+        DemoDriver.runIfRequested()
+
         // With the background setting on, closing the last window leaves the app
         // running. It steps out of the Dock rather than sitting there empty, and
         // comes back the moment a document appears.
