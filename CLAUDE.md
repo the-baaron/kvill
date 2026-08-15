@@ -31,6 +31,7 @@ main claim, not just in a benchmark.
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
 | `node store/submit.mjs` | Submits the current version for review |
 | `./store/demo-setup.sh` | Builds the demo folder and prints the shot list for a review video |
+| `node store/push-review-notes.mjs` | Fills App Review Information from `store/review-notes.md`; add `--apply` to send |
 
 ## Releasing
 
@@ -50,6 +51,11 @@ the record was made under an earlier name and Apple will not repoint it, which
 does not matter because users never see it. Team `496Y48L8AX`. Certificates are
 `3rd Party Mac Developer Application` and `... Installer`, both issued from the
 API against a local CSR and chaining through **WWDR G3**, not G5.
+
+**Fill in App Review Information before submitting.** 1.0 was rejected under
+2.1 "Information Needed" with that whole section empty: no contact name, email,
+phone or notes. Apple's own message says to put the answers in the Notes field.
+`store/review-notes.md` holds the text and `push-review-notes.mjs` sends it.
 
 **App Review's actual words are not in the API.** Rejection reasons live in the
 Resolution Center, which is web only; `appStoreVersions` gives you the state

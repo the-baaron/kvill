@@ -112,9 +112,11 @@ cat <<EOF
 
 ${bold}Shot list${off}  (aim for 60 to 90 seconds, no narration needed)
 
+  0. Quit Kvill first. Apple asked for a recording that ${bold}begins with
+     launching the app${off}, so it must not already be running.
+
   1. Finder, showing the demo folder. Double-click ${bold}Read me first.md${off}.
-     This answers the usual complaint first: the app opens a real document
-     with real content, immediately.
+     That is the launch and the first real content in one move.
 
   2. Click into a heading. The Markdown appears in the margin. Click away.
      Do this twice, slowly. It is the thing the app is for.
@@ -156,6 +158,11 @@ fi
 
 cat <<EOF
 
-Then attach the file to your reply in App Store Connect ›
-App Review › Resolution Center.
+Zip the demo folder and attach that too. Apple asked for sample files.
+
+  cd ~/Desktop && zip -r kvill-samples.zip "Kvill Demo" >/dev/null
+
+Then attach both to your reply in App Store Connect › App Review ›
+Resolution Center, and send the App Review Information first with
+  node store/push-review-notes.mjs --apply
 EOF
