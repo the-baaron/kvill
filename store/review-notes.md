@@ -25,10 +25,14 @@ Contact to set alongside it:
 
 Kvill is an offline Markdown text editor for macOS. It has no accounts, no
 in-app purchases or subscriptions, no advertising, no user-generated content
-shared between users, and it asks for no sensitive data or device capabilities.
-None of the flows listed in point 1 of your message exist in the app, so the
-attached recording covers all of it: launching, opening a document, editing,
-switching files, and saving.
+shared between users, and it requests no location, contacts, camera, microphone
+or tracking permission. It declares no usage description strings at all. The one
+prompt you may see is macOS's own, asking whether the app may read the folder
+the document is in when that folder is the Desktop, Documents or Downloads. The
+system raises that for any app, and the app cannot avoid or suppress it; it is
+in the recording where it appears. None of the other flows listed in point 1
+exist here, so the recording covers all of it: launching, opening a document,
+editing, switching files, and saving.
 
 DEVICES AND OPERATING SYSTEMS TESTED
 Tested on a physical Mac before submission: MacBook Pro (Mac17,8), Apple M5 Pro,
