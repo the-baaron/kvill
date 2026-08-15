@@ -31,6 +31,7 @@ main claim, not just in a benchmark.
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
 | `node store/submit.mjs` | Submits the current version for review |
 | `./store/demo-setup.sh` | Builds the demo folder and prints the shot list for a review video |
+| `./store/record-demo.sh` | Records the demo unattended. Needs Screen Recording and Accessibility |
 | `node store/push-review-notes.mjs` | Fills App Review Information from `store/review-notes.md`; add `--apply` to send |
 
 ## Releasing
