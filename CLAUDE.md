@@ -30,6 +30,7 @@ main claim, not just in a benchmark.
 | `scripts/make-logo.swift` | Writes the wordmark as SVG outlines |
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
 | `node store/submit.mjs` | Submits the current version for review |
+| `./store/demo-setup.sh` | Builds the demo folder and prints the shot list for a review video |
 
 ## Releasing
 
@@ -49,6 +50,17 @@ the record was made under an earlier name and Apple will not repoint it, which
 does not matter because users never see it. Team `496Y48L8AX`. Certificates are
 `3rd Party Mac Developer Application` and `... Installer`, both issued from the
 API against a local CSR and chaining through **WWDR G3**, not G5.
+
+**App Review's actual words are not in the API.** Rejection reasons live in the
+Resolution Center, which is web only; `appStoreVersions` gives you the state
+(`REJECTED`) and nothing else, and the notification email is boilerplate. Ask
+for the text rather than guessing at the guideline number.
+
+**Recording the screen needs two grants a script cannot give itself.** Screen
+Recording for the capture, Accessibility to drive the app. Probe them
+honestly: `screencapture -x` to a temp file for the first, and reading a
+window's *name* for the second, because `count processes` succeeds without the
+grant and makes the check a lie.
 
 **Nothing sensitive is in this repository and nothing ever has been**, checked
 across the full history. Signing material stays in the keychain, the App Store
