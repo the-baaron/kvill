@@ -113,7 +113,27 @@ ls -1 "$DEMO"
 # --- What to do with it ------------------------------------------------------
 cat <<EOF
 
-${bold}Recording${off}
+${bold}Recording it yourself${off}, which is worth doing: an automated take has no
+pointer moving and no clicks, and reads as synthetic.
+
+  0. Quit Kvill. Apple asked for a recording that begins at launch.
+  1. Double-click ${bold}Read me first.md${off} in the demo folder.
+  2. Click into a heading, then away. The Markdown appears in the margin
+     and fades. Do it twice, slowly. It is what the app is for.
+  3. Click a checkbox in the task list.
+  4. On an empty line press ${bold}/${off}, type "table", press Return, type in
+     two cells.
+  5. ${bold}Ctrl Cmd ]${off} twice for colour schemes, ${bold}Cmd +${off} once for size.
+  6. ${bold}File › Open Folder…${off}, pick this folder, click ${bold}Release notes${off}
+     in the sidebar, then click back. This is the only way the sidebar
+     gets shown, and it is a real feature worth showing.
+  7. Scroll to the image at the bottom.
+  8. ${bold}Cmd S${off} for the toast, then ${bold}Cmd .${off} to hide the interface and
+     again to bring it back.
+
+  screencapture -v -V 95 ~/Desktop/kvill-demo.mov
+
+${bold}Or automated${off}, with no pointer and no clicks:
 
   ./store/record-demo.sh
 

@@ -121,6 +121,10 @@ enum DemoDriver {
             display: true, animate: false)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        // Everything else off screen. A strip of somebody's terminal down the
+        // edge of a recording sent to App Review is not a good look, and no
+        // amount of window sizing reliably hides it.
+        NSApp.hideOtherApplications(nil)
     }
 
     private static func insert(_ text: String) {
