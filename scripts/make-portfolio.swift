@@ -12,6 +12,14 @@ import AppKit
 //                             A1 at END. END defaults to 0.92
 //     --drop F                how far the window hangs off the bottom, as a
 //                             fraction of the height. Default 0.12
+//     --margin F              how far the window is inset each side, as a
+//                             fraction of the width. Default 0.115
+//
+// The body images sit in a 940 wide column and the prose in that column is
+// inset 90px each side (`DynamicParagraph`, margin 32px 90px), so the window
+// is drawn at --margin 0.095745 to put its edges on the same two verticals as
+// the paragraphs above and below it. The header is full viewport width with the
+// title on a grid, so it keeps the wider default.
 //
 // The page comes from the app itself, so what is shown is what the app draws.
 // The window around it is composed here for the same reason the App Store shots
@@ -78,25 +86,40 @@ NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 NSGradient(starting: top, ending: bottom)?
     .draw(in: NSRect(origin: .zero, size: size), angle: -90)
 
-// The window runs off the bottom edge: a page that continues past the frame
-// reads as a document, where a neatly centred rectangle reads as a picture.
-let drop: CGFloat = {
-    guard let at = arguments.firstIndex(of: "--drop"), arguments.count > at + 1,
-          let value = Double(arguments[at + 1]) else { return 0.12 }
+func option(_ name: String, _ fallback: CGFloat) -> CGFloat {
+    guard let at = arguments.firstIndex(of: name), arguments.count > at + 1,
+          let value = Double(arguments[at + 1]) else { return fallback }
     return CGFloat(value)
-}()
-let margin = (size.width * 0.115).rounded()
+}
+
+// --bleed fills the canvas with the page and draws no frame at all.
+//
+// The header used to be a window floating on the ground colour, and in the
+// template that read as three vertical bands: cream, white page, cream, with a
+// hard seam down each side where the card ended. A photograph does not do that,
+// which is why the other case studies look calm. Edge to edge, the aqua fade is
+// the only thing happening.
+let bleed = arguments.contains("--bleed")
+
+// Otherwise the window runs off the bottom edge: a page that continues past the
+// frame reads as a document, where a neatly centred rectangle reads as a picture.
+let drop = bleed ? 0 : option("--drop", 0.12)
+let margin = bleed ? 0 : (size.width * option("--margin", 0.115)).rounded()
 let card = NSRect(
     x: margin, y: -(size.height * drop).rounded(),
     width: size.width - margin * 2, height: size.height)
-let radius: CGFloat = 16
+let radius: CGFloat = bleed ? 0 : 16
 let frame = NSBezierPath(roundedRect: card, xRadius: radius, yRadius: radius)
 
 if let context = NSGraphicsContext.current?.cgContext {
     context.saveGState()
-    context.setShadow(
-        offset: CGSize(width: 0, height: -22), blur: 54,
-        color: NSColor.black.withAlphaComponent(dark ? 0.6 : 0.22).cgColor)
+    // A shadow needs something to fall on. Edge to edge there is no ground left
+    // to see it, and it only darkens the outermost pixels into a false border.
+    if !bleed {
+        context.setShadow(
+            offset: CGSize(width: 0, height: -22), blur: 54,
+            color: NSColor.black.withAlphaComponent(dark ? 0.6 : 0.22).cgColor)
+    }
     (dark ? colour("#17191D") : NSColor.white).setFill()
     frame.fill()
     context.restoreGState()
@@ -117,6 +140,23 @@ if abs(drawn.width / drawn.height - pageBox.width / pageBox.height) > 0.01 {
     exit(1)
 }
 
+// The sidebar gets the same treatment as the page, and for the same reason.
+// It used to be drawn straight into its slot at whatever shape it arrived in,
+// so a tree rendered at the 240x300 default went into a 159x492 slot and came
+// out stretched two and a half times vertically. It looked like the app had a
+// bug in its sidebar. Render it with `--tree ... --size 159x492`.
+if let sidebar {
+    let box = NSSize(width: sidebarWidth, height: card.height)
+    let drawnSidebar = sidebar.size
+    if abs(drawnSidebar.width / drawnSidebar.height - box.width / box.height) > 0.01 {
+        let wanted = "\(Int(box.width))x\(Int(box.height))"
+        let complaint = "sidebar is \(Int(drawnSidebar.width))x\(Int(drawnSidebar.height)), "
+            + "the slot is \(wanted). Re-render with --tree ... --size \(wanted).\n"
+        FileHandle.standardError.write(Data(complaint.utf8))
+        exit(1)
+    }
+}
+
 NSGraphicsContext.saveGraphicsState()
 frame.addClip()
 if let sidebar {
@@ -133,19 +173,24 @@ page.draw(
 NSGraphicsContext.restoreGraphicsState()
 
 // Traffic lights sit in the margin the page already leaves. There is no title
-// bar to draw: the app does not have one.
-for (index, light) in [colour("#FF5F57"), colour("#FEBC2E"), colour("#28C840")].enumerated() {
-    light.setFill()
-    NSBezierPath(ovalIn: NSRect(
-        x: card.minX + 22 + CGFloat(index) * 20,
-        y: card.maxY - 27, width: 12, height: 12)).fill()
-}
+// bar to draw: the app does not have one. Edge to edge there is no window to
+// belong to, so they are left off rather than stuck in the canvas corner.
+if !bleed {
+    for (index, light) in [colour("#FF5F57"), colour("#FEBC2E"), colour("#28C840")].enumerated() {
+        light.setFill()
+        NSBezierPath(ovalIn: NSRect(
+            x: card.minX + 22 + CGFloat(index) * 20,
+            y: card.maxY - 27, width: 12, height: 12)).fill()
+    }
 
-(dark ? NSColor.white.withAlphaComponent(0.11) : NSColor.black.withAlphaComponent(0.08)).setStroke()
-let edge = NSBezierPath(roundedRect: card.insetBy(dx: 0.5, dy: 0.5),
-                        xRadius: radius, yRadius: radius)
-edge.lineWidth = 1
-edge.stroke()
+    // A hairline, so the window reads as an object rather than a hole. Edge to
+    // edge it would just be a box drawn round the whole picture.
+    (dark ? NSColor.white.withAlphaComponent(0.11) : NSColor.black.withAlphaComponent(0.08)).setStroke()
+    let edge = NSBezierPath(roundedRect: card.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: radius, yRadius: radius)
+    edge.lineWidth = 1
+    edge.stroke()
+}
 
 // A wash, for an image that has to sit behind text. The portfolio uses its
 // header as a section background with the title set over it, so the image is

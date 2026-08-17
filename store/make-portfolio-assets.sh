@@ -45,17 +45,41 @@ fi
 # make-portfolio.swift insets the card by 11.5% of the width each side and gives
 # a sidebar 22% of what is left. A page rendered at any other shape is refused
 # rather than squashed, so the numbers are derived here once.
-geometry() {          # geometry WIDTH HEIGHT [sidebar]
-  awk -v w="$1" -v h="$2" -v side="${3:-0}" 'BEGIN {
-    margin = int(w * 0.115 + 0.5)
+# The prose in a case study sits in a 940 wide column inset 90px each side
+# (DynamicParagraph, margin 32px 90px), and the body images fill that same 940.
+# Drawing the window at this margin puts its edges on the same two verticals as
+# the paragraphs above and below it.
+BODY_MARGIN=0.095745
+
+geometry() {          # geometry WIDTH HEIGHT MARGIN [sidebar]
+  awk -v w="$1" -v h="$2" -v m="$3" -v side="${4:-0}" 'BEGIN {
+    margin = int(w * m + 0.5)
     card = w - margin * 2
     bar = side ? int(card * 0.22 + 0.5) : 0
     printf "%dx%d\n", card - bar, h
   }'
 }
 
-render() {            # render out.md-body out.png theme geometry [typography]
-  "$APP" --render "$1" "$2" --theme "$3" --geometry "$4" --scale 2 >/dev/null
+# The sidebar slot, which `--tree --size` has to match. Leaving it off means
+# the tree renders at its 240x300 default and is then stretched two and a half
+# times to fill a tall thin slot; the composer refuses that outright now, but
+# the number still has to come from somewhere.
+sidebar_geometry() {  # sidebar_geometry WIDTH HEIGHT MARGIN
+  awk -v w="$1" -v h="$2" -v m="$3" 'BEGIN {
+    margin = int(w * m + 0.5)
+    card = w - margin * 2
+    printf "%dx%d\n", int(card * 0.22 + 0.5), h
+  }'
+}
+
+# A negative --offset pushes the document down the canvas and leaves clean paper
+# above it. That is how the header gets clear air between the site's intro
+# paragraph and the document's own headline. Padding the Markdown with a lead-in
+# line instead does not work: it wraps, and its last line pokes out of the aqua
+# on its own, reading as a mistake.
+render() {            # render in.md out.png theme geometry [offset]
+  "$APP" --render "$1" "$2" --theme "$3" --geometry "$4" --scale 2 \
+    ${5:+--offset "$5"} >/dev/null
 }
 
 # --- The pages ---------------------------------------------------------------
@@ -130,33 +154,40 @@ cp "$WORK/thumbnail.png" "$OUT/thumbnail@2x.png"
 sips -Z 724 "$WORK/thumbnail.png" --out "$OUT/thumbnail@1x.png" >/dev/null
 
 # --- The header --------------------------------------------------------------
+# Edge to edge. Drawn as a window it read as three vertical bands in the
+# template, cream and white page and cream, with a hard seam where the card
+# stopped. The other case studies use a photograph that fills the frame, so the
+# only thing happening is the fade.
+#
 # At a 1440 viewport the section is 848 tall and the image is the bottom 600 of
 # it, so the title clears the image entirely and the intro paragraph reaches
 # 18% down it. Measured in the browser, not guessed: the first attempt held the
 # aqua solid to 46% on an estimate and buried the headline. Solid to 20%, full
 # strength from 42%, which puts the H1 in the reveal.
-HEADER_PAGE="$(geometry 1440 600)"
-render "$WORK/header.md" "$WORK/page-header.png" paper "$HEADER_PAGE"
+render "$WORK/header.md" "$WORK/page-header.png" paper "1440x600" -70
 swift scripts/make-portfolio.swift "$WORK/header.png" 1440x600 light "$WORK/page-header.png" \
-  --drop 0.06 --fade D7FCF6 1.0 0.12 0.20 0.42
+  --bleed --fade D7FCF6 1.0 0.12 0.26 0.50
 cp "$WORK/header.png" "$OUT/header@2x.png"
 sips -Z 1440 "$WORK/header.png" --out "$OUT/header@1x.png" >/dev/null
 
 # --- The three in the body ---------------------------------------------------
 # 940x492, shown by the page as a 490px-tall band at full section width.
-BODY_PAGE="$(geometry 940 492)"
-BODY_PAGE_SIDEBAR="$(geometry 940 492 sidebar)"
+BODY_PAGE="$(geometry 940 492 $BODY_MARGIN)"
+BODY_PAGE_SIDEBAR="$(geometry 940 492 $BODY_MARGIN sidebar)"
 
-"$APP" --tree "$DEMO" "$WORK/sidebar.png" --theme paper >/dev/null
+"$APP" --tree "$DEMO" "$WORK/sidebar.png" --theme paper \
+  --size "$(sidebar_geometry 940 492 $BODY_MARGIN)" >/dev/null
 render "$WORK/tree.md" "$WORK/page-tree.png" paper "$BODY_PAGE_SIDEBAR"
 swift scripts/make-portfolio.swift "$WORK/full1.png" 940x492 light \
-  "$WORK/page-tree.png" "$WORK/sidebar.png"
+  "$WORK/page-tree.png" "$WORK/sidebar.png" --margin $BODY_MARGIN
 
 render "$WORK/dark.md" "$WORK/page-dark.png" onyx "$BODY_PAGE"
-swift scripts/make-portfolio.swift "$WORK/full2.png" 940x492 dark "$WORK/page-dark.png"
+swift scripts/make-portfolio.swift "$WORK/full2.png" 940x492 dark "$WORK/page-dark.png" \
+  --margin $BODY_MARGIN
 
 render "$WORK/keys.md" "$WORK/page-keys.png" sepia "$BODY_PAGE"
-swift scripts/make-portfolio.swift "$WORK/full3.png" 940x492 light "$WORK/page-keys.png"
+swift scripts/make-portfolio.swift "$WORK/full3.png" 940x492 light "$WORK/page-keys.png" \
+  --margin $BODY_MARGIN
 
 for n in 1 2 3; do
   cp "$WORK/full$n.png" "$OUT/image_full_$n@2x.png"

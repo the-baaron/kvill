@@ -34,6 +34,7 @@ main claim, not just in a benchmark.
 | `./store/demo-setup.sh` | Builds the demo folder and prints the shot list for a review video |
 | `./store/record-demo.sh` | Records the demo unattended. Needs Screen Recording and Accessibility |
 | `node store/push-review-notes.mjs` | Fills App Review Information from `store/review-notes.md`; add `--apply` to send |
+| `node store/push-testflight.mjs` | Sets up TestFlight **internal** testing from `store/testflight.md`; add `--apply` to send |
 
 ## Releasing
 
@@ -65,6 +66,20 @@ table in `review-notes.md` holds `$ASC_CONTACT_EMAIL` and `$ASC_CONTACT_PHONE`,
 which the pusher expands from `~/.appstoreconnect/env`. An unset variable stops
 the script rather than sending an empty string, since a blank contact section is
 the thing that caused the rejection in the first place.
+
+**TestFlight internal testing is entirely scriptable, including the tester.**
+`push-testflight.mjs` makes the internal group, attaches a build and adds the
+account holder, and `POST /v1/betaTesters` accepted him without a browser. Two
+things to know. A build can sit at `processingState` `VALID` while its
+`buildBetaDetail` says `internalBuildState: PROCESSING_EXCEPTION`, which is what
+builds 1 did, so the build state is the one to check and it is on a different
+endpoint. And the **What to Test** text a tester sees is not the beta app
+localization at all: it is `betaBuildLocalizations.whatsNew` on the build, which
+build 3 still carries from the reply written to App Review.
+
+Everything external is off limits to that script by design. A public link, an
+external group and a `betaAppReviewSubmission` all reach people outside the
+company, so they are a decision rather than a script.
 
 **App Review's actual words are not in the API.** Rejection reasons live in the
 Resolution Center, which is web only; `appStoreVersions` gives you the state
