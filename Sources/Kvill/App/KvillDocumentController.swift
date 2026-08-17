@@ -71,13 +71,33 @@ final class KvillDocumentController: NSDocumentController {
     /// dirty state and autosave.
     @discardableResult
     func openInPlace(_ url: URL, replacing current: NSDocument) -> Bool {
-        if current.fileURL == url { return true }
+        // Compared by resolved path, not by URL. The sidebar and NSDocument can
+        // hold the same file as /tmp/x and /private/tmp/x, and two spellings of
+        // one path would defeat every check below.
+        let wanted = url.standardizedFileURL.resolvingSymlinksInPath()
+        func isWanted(_ other: URL?) -> Bool {
+            other?.standardizedFileURL.resolvingSymlinksInPath() == wanted
+        }
 
-        // Already open in its own window: raise that instead of opening a
+        if isWanted(current.fileURL) { return true }
+
+        // Already open with a window of its own: raise that instead of opening a
         // second copy, which AppKit would otherwise refuse in a confusing way.
-        if let already = document(for: url) {
-            already.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
-            return true
+        //
+        // "With a window" is the whole point. The document being replaced is
+        // closed only once its autosave finishes, so for a moment it is still on
+        // this controller's list with no window controller left on it. Switching
+        // back to a file just left found that one, had nothing to raise, and
+        // reported success, so the click did nothing and the window went on
+        // showing the previous file. It looked like the sidebar was ignoring
+        // every other click. Anything window-less here is on its way out and is
+        // closed now rather than being handed back as if it were on screen.
+        if let already = documents.first(where: { isWanted($0.fileURL) }) {
+            if let window = already.windowControllers.first?.window, window.isVisible {
+                window.makeKeyAndOrderFront(nil)
+                return true
+            }
+            already.close()
         }
 
         // An untitled document with unsaved work has nowhere to autosave to, so
@@ -89,6 +109,10 @@ final class KvillDocumentController: NSDocumentController {
 
         addDocument(fresh)
         current.removeWindowController(windowController)
+        // Before the new one takes it. The outgoing document keeps a reference
+        // to the view controller otherwise, and writes its own file back into it
+        // as it closes.
+        (current as? MarkdownDocument)?.releaseController()
         fresh.addWindowController(windowController)
         (fresh as? MarkdownDocument)?.bind(to: windowController)
         // Autosave is in place and on a delay, so the outgoing document is asked

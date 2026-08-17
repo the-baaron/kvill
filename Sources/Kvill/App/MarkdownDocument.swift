@@ -35,6 +35,18 @@ final class MarkdownDocument: NSDocument {
         bind(to: windowController)
     }
 
+    /// Lets go of the window's view controller without closing the document.
+    ///
+    /// Handing a window to another document leaves this one still holding the
+    /// view controller it used to drive, and `fileURL`'s observer writes into
+    /// that controller. Closing a document sets `fileURL`, so one on its way out
+    /// reached into a window it no longer owned and put its own name back: every
+    /// switch in the sidebar left the window showing the file before last.
+    func releaseController() {
+        controller = nil
+        watcher = nil
+    }
+
     /// Points a window controller at this document.
     ///
     /// Separate from `makeWindowControllers` because a window is not always new.
