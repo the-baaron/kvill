@@ -5,9 +5,24 @@ import AppKit
 //
 //   swift scripts/make-portfolio.swift out.png WxH light|dark page.png [sidebar.png]
 //
+//     --wash HEX A            flat colour over everything, A from 0 to 1
+//     --fade HEX A0 A1 HOLD [END]
+//                             the same colour vertically, A0 down to A1, held
+//                             at A0 for the top HOLD of the height and reaching
+//                             A1 at END. END defaults to 0.92
+//     --drop F                how far the window hangs off the bottom, as a
+//                             fraction of the height. Default 0.12
+//
 // The page comes from the app itself, so what is shown is what the app draws.
 // The window around it is composed here for the same reason the App Store shots
 // are: the real chrome is glass, and glass renders as nothing off screen.
+//
+// --fade exists because a header on the portfolio has the project title and the
+// intro paragraph set over it. A flat --wash strong enough to keep that text
+// readable flattens the whole picture with it, and the first Kvill header went
+// out that way: the window was a ghost and the traffic lights sat behind the
+// intro. The other case studies fade top to bottom instead, so the words sit on
+// clean ground and the image is at full strength below them.
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 5 else {
@@ -65,9 +80,14 @@ NSGradient(starting: top, ending: bottom)?
 
 // The window runs off the bottom edge: a page that continues past the frame
 // reads as a document, where a neatly centred rectangle reads as a picture.
+let drop: CGFloat = {
+    guard let at = arguments.firstIndex(of: "--drop"), arguments.count > at + 1,
+          let value = Double(arguments[at + 1]) else { return 0.12 }
+    return CGFloat(value)
+}()
 let margin = (size.width * 0.115).rounded()
 let card = NSRect(
-    x: margin, y: -(size.height * 0.12).rounded(),
+    x: margin, y: -(size.height * drop).rounded(),
     width: size.width - margin * 2, height: size.height)
 let radius: CGFloat = 16
 let frame = NSBezierPath(roundedRect: card, xRadius: radius, yRadius: radius)
@@ -134,6 +154,24 @@ if let at = arguments.firstIndex(of: "--wash"), arguments.count > at + 2,
    let strength = Double(arguments[at + 2]) {
     colour(arguments[at + 1]).withAlphaComponent(CGFloat(strength)).setFill()
     NSRect(origin: .zero, size: size).fill()
+}
+
+// The same thing graded down the height: solid where the words are, thinning
+// to almost nothing below them.
+if let at = arguments.firstIndex(of: "--fade"), arguments.count > at + 4,
+   let topAlpha = Double(arguments[at + 2]),
+   let bottomAlpha = Double(arguments[at + 3]),
+   let hold = Double(arguments[at + 4]) {
+    let veil = colour(arguments[at + 1])
+    let end = arguments.count > at + 5 ? (Double(arguments[at + 5]) ?? 0.92) : 0.92
+    // Locations run along the drawing direction, and -90 draws downwards, so 0
+    // is the top of the canvas.
+    NSGradient(colorsAndLocations:
+        (veil.withAlphaComponent(CGFloat(topAlpha)), 0),
+        (veil.withAlphaComponent(CGFloat(topAlpha)), CGFloat(hold)),
+        (veil.withAlphaComponent(CGFloat(bottomAlpha)), CGFloat(end)),
+        (veil.withAlphaComponent(CGFloat(bottomAlpha)), 1))?
+        .draw(in: NSRect(origin: .zero, size: size), angle: -90)
 }
 
 NSGraphicsContext.restoreGraphicsState()
