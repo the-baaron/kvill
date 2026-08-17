@@ -72,7 +72,7 @@ the thing that caused the rejection in the first place.
 account holder, and `POST /v1/betaTesters` accepted him without a browser. Two
 things to know. A build can sit at `processingState` `VALID` while its
 `buildBetaDetail` says `internalBuildState: PROCESSING_EXCEPTION`, which is what
-builds 1 did, so the build state is the one to check and it is on a different
+build 1 does, so the build state is the one to check and it is on a different
 endpoint. And the **What to Test** text a tester sees is not the beta app
 localization at all: it is `betaBuildLocalizations.whatsNew` on the build, which
 build 3 still carries from the reply written to App Review.
