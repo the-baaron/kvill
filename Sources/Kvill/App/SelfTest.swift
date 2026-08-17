@@ -604,6 +604,71 @@ enum SelfTest {
             }
 
             opened.values.forEach { $0.close() }
+
+            // --- and the same again, switching inside one window --------------
+            // The way the corruption actually happened. Type into a file, switch
+            // the window to another file, type into that, and both files must
+            // still hold only their own text.
+            let gamma = folder.appendingPathComponent("Gamma.md")
+            let delta = folder.appendingPathComponent("Delta.md")
+            try? "# Gamma\n\nGamma body.\n".write(to: gamma, atomically: true, encoding: .utf8)
+            try? "# Delta\n\nDelta body.\n".write(to: delta, atomically: true, encoding: .utf8)
+
+            var first: NSDocument?
+            documentController.openDocument(withContentsOf: gamma, display: true) { d, _, _ in
+                first = d
+            }
+            settled()
+
+            if let one = first, let window = one.windowControllers.first?.window {
+                let editorOne = window.contentViewController as? DocumentViewController
+                editorOne?.editor.textView.insertText(
+                    "GAMMA-ONLY\n", replacementRange: NSRange(location: 0, length: 0))
+                one.updateChangeCount(.changeDone)
+
+                let switched = documentController.openInPlace(delta, replacing: one)
+                check("switch: the window took the second file", switched)
+                settled()
+
+                let editorTwo = window.contentViewController as? DocumentViewController
+                check("switch: it is showing the file that was clicked",
+                      editorTwo?.documentURL?.lastPathComponent == "Delta.md",
+                      editorTwo?.documentURL?.lastPathComponent ?? "nothing")
+                check("switch: the incoming file brought its own editor",
+                      editorTwo !== editorOne)
+                // Counted from the documents, not from NSApp.windows: this test
+                // harness opens a bare editor window of its own at the top, and
+                // counting every window with an editor in it counted that too.
+                let documentWindows = documentController.documents
+                    .compactMap { $0.windowControllers.first?.window }
+                    .filter { $0.isVisible }
+                check("switch: no second window appeared",
+                      documentWindows.count <= 1, "\(documentWindows.count)")
+
+                editorTwo?.editor.textView.insertText(
+                    "DELTA-ONLY\n", replacementRange: NSRange(location: 0, length: 0))
+                documentController.document(for: window)?.updateChangeCount(.changeDone)
+                settled()
+                documentController.documents.forEach {
+                    $0.save(withDelegate: nil, didSave: nil, contextInfo: nil)
+                }
+                settled(); settled()
+
+                let g = (try? String(contentsOf: gamma, encoding: .utf8)) ?? ""
+                let d = (try? String(contentsOf: delta, encoding: .utf8)) ?? ""
+                check("switch: Gamma.md kept the text typed into it",
+                      g.contains("GAMMA-ONLY"), "\(g.count) bytes")
+                check("switch: Gamma.md did not take Delta's text",
+                      !g.contains("DELTA-ONLY") && !g.contains("# Delta"), "\(g.count) bytes")
+                check("switch: Delta.md kept the text typed into it",
+                      d.contains("DELTA-ONLY"), "\(d.count) bytes")
+                check("switch: Delta.md did not take Gamma's text",
+                      !d.contains("GAMMA-ONLY") && !d.contains("# Gamma"), "\(d.count) bytes")
+            } else {
+                check("switch: a document opened to switch away from", false)
+            }
+
+            documentController.documents.forEach { $0.close() }
             try? FileManager.default.removeItem(at: folder)
         }
 

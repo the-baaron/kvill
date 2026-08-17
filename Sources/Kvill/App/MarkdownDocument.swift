@@ -32,25 +32,36 @@ final class MarkdownDocument: NSDocument {
     override func makeWindowControllers() {
         let windowController = DocumentWindowController.create()
         addWindowController(windowController)
-        bind(to: windowController)
+        if let viewController = windowController.contentViewController as? DocumentViewController {
+            adopt(viewController)
+        }
     }
 
-    /// Points a window controller at this document.
+    /// Copies what is on screen into this document's own store.
     ///
-    /// A window belongs to exactly one document for its whole life, and this is
-    /// called once, from `makeWindowControllers`. It is a separate method only
-    /// so the wiring reads in one piece.
+    /// Called before the document gives up the window it is showing in. After
+    /// this the document can write itself correctly with no editor at all, which
+    /// matters because `controller` is weak and the view it points at is about
+    /// to be taken out of the window.
+    func captureText() {
+        guard let text = controller?.text else { return }
+        content = text
+    }
+
+    /// Takes ownership of an editor. The editor is this document's and no other
+    /// document's, ever.
     ///
-    /// Handing a live window from one document to another is not a thing that
-    /// can be done here, however much it would make switching files feel like
-    /// tabs. `data(ofType:)` reads the text out of the view controller, so a view
-    /// controller shared by two documents means the one being replaced autosaves
-    /// the other one's text into its own file. That shipped, and it silently
+    /// `data(ofType:)` reads the text out of `controller`, which makes the editor
+    /// the document's source of truth. Two documents sharing one editor is
+    /// therefore data loss waiting for a timer: the one being replaced autosaves
+    /// half a second later, reads the editor, finds the text of the file that
+    /// replaced it, and writes that into its own path. That shipped, and it
     /// rewrote four of someone's notes with each other's contents.
-    func bind(to windowController: NSWindowController) {
-        guard let viewController = windowController.contentViewController as? DocumentViewController else {
-            return
-        }
+    ///
+    /// A window may move between documents, because switching files in the
+    /// sidebar reuses it. An editor may not. Each document builds its own and
+    /// the window is told which one to show.
+    func adopt(_ viewController: DocumentViewController) {
         controller = viewController
         normalizeSource()
         startWatching()

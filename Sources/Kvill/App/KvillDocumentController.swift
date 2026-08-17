@@ -57,6 +57,77 @@ final class KvillDocumentController: NSDocumentController {
             withContentsOf: url, display: displayDocument, completionHandler: completionHandler)
     }
 
+    /// Shows `url` in the window `current` is using, instead of opening another
+    /// window, so reading through a folder does not leave one window per file.
+    ///
+    /// The window moves between documents. The editor never does. Each document
+    /// builds its own `DocumentViewController` and the window is told which one
+    /// to show, because a document reads its text out of its editor when it
+    /// saves: two documents sharing one editor means the outgoing document
+    /// autosaves the incoming file's text into its own path. That is not a bug
+    /// that can be patched around, it is what sharing an editor means, and it
+    /// rewrote four of someone's notes with each other's contents before this
+    /// was understood.
+    ///
+    /// The outgoing document keeps its own editor, still holding its own text,
+    /// and is asked to capture that text before it lets go of the window, so its
+    /// final autosave writes what was actually typed into it.
+    @discardableResult
+    func openInPlace(_ url: URL, replacing current: NSDocument) -> Bool {
+        // Compared by resolved path. The sidebar and NSDocument can hold one file
+        // as /tmp/x and /private/tmp/x, and two spellings would defeat every
+        // check below.
+        let wanted = url.standardizedFileURL.resolvingSymlinksInPath()
+        func isWanted(_ other: URL?) -> Bool {
+            other?.standardizedFileURL.resolvingSymlinksInPath() == wanted
+        }
+        if isWanted(current.fileURL) { return true }
+
+        // Already open in a window of its own: raise that rather than showing the
+        // same file twice. "In a window" matters, because a document on its way
+        // out sits here briefly with none, and treating that one as on screen
+        // made every other click in the sidebar do nothing at all.
+        if let already = documents.first(where: { isWanted($0.fileURL) }) {
+            if let window = already.windowControllers.first?.window, window.isVisible {
+                window.makeKeyAndOrderFront(nil)
+                return true
+            }
+            already.close()
+        }
+
+        // An untitled document with unsaved work has nowhere to autosave to, so
+        // it keeps its window and the new file gets one of its own.
+        guard current.fileURL != nil || !current.isDocumentEdited,
+              let windowController = current.windowControllers.first,
+              let window = windowController.window,
+              let fresh = try? makeDocument(withContentsOf: url, ofType: typeName(for: url))
+        else { return false }
+
+        // Before anything is detached, so it cannot be reading a stale editor.
+        (current as? MarkdownDocument)?.captureText()
+
+        addDocument(fresh)
+        let editor = DocumentViewController()
+        (fresh as? MarkdownDocument)?.adopt(editor)
+
+        current.removeWindowController(windowController)
+        fresh.addWindowController(windowController)
+
+        // Setting a content view controller resizes the window to that view's
+        // fitting size, and the editor has no intrinsic one, so the frame is put
+        // back afterwards.
+        let frame = window.frame
+        window.contentViewController = editor
+        window.setFrame(frame, display: true)
+
+        current.autosave(withImplicitCancellability: false) { _ in current.close() }
+        return true
+    }
+
+    private func typeName(for url: URL) -> String {
+        (try? typeForContents(of: url)) ?? "net.daringfireball.markdown"
+    }
+
     /// Opens a folder: remember it, then show its tree beside whichever document
     /// is already open, or beside the first one in the folder.
     func openFolder(_ folder: URL) {
