@@ -521,17 +521,30 @@ enum SelfTest {
         check("drawing survives stale decorations", true)
 
         // --- Chrome ----------------------------------------------------------
-        let dragAreas = controller.view.subviews.compactMap { $0 as? WindowDragArea }
+        // Looked for wherever it lives rather than as a direct child of the
+        // pane: on a translucent palette the page is a card inset inside its
+        // pane, and everything moved a level down with it.
+        func chrome(of controller: DocumentViewController) -> [NSView] {
+            var found: [NSView] = []
+            func walk(_ view: NSView) {
+                found.append(view)
+                view.subviews.forEach(walk)
+            }
+            controller.view.subviews.forEach(walk)
+            return found
+        }
+        let pageChrome = chrome(of: controller)
+        let dragAreas = pageChrome.compactMap { $0 as? WindowDragArea }
         check("window drag strip present", dragAreas.count == 1)
         check("drag strip covers the title bar",
               (dragAreas.first?.frame.height ?? 0) >= 40
                 && (dragAreas.first?.frame.width ?? 0) > 400,
               dragAreas.first.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none")
         check("drag strip sits above the editor",
-              controller.view.subviews.firstIndex(where: { $0 is WindowDragArea })
-                ?? 0 > (controller.view.subviews.firstIndex(where: { $0 === controller.editor.view }) ?? 0))
+              (pageChrome.firstIndex(where: { $0 is WindowDragArea }) ?? 0)
+                > (pageChrome.firstIndex(where: { $0 === controller.editor.view }) ?? 0))
 
-        let bars = controller.view.subviews.compactMap { $0 as? DisplayOptionsBar }
+        let bars = pageChrome.compactMap { $0 as? DisplayOptionsBar }
         check("display options bar present", bars.count == 1)
 
         // --- Palette popover contents ----------------------------------------

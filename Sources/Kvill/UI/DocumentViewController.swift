@@ -21,6 +21,10 @@ final class DocumentViewController: NSViewController {
     /// The palette's own colour, laid over the material so a glass page still
     /// reads as Frost or Onyx rather than as bare system blur.
     private let tint = NSView()
+    /// Everything the page is, held together so it can be inset and rounded into
+    /// a card. macOS draws a sidebar as a panel inset inside its own pane; the
+    /// page did not, so the two met along a hard straight line down the window.
+    private let card = NSView()
     /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
     /// work, and none of it is needed until there is a selection to act on.
     private var selectionToolbar: SelectionToolbarView?
@@ -33,6 +37,10 @@ final class DocumentViewController: NSViewController {
     /// Distance from the top of the page to the floating buttons, set so their
     /// centre lands on the traffic lights' centre.
     private var chromeTop: NSLayoutConstraint!
+    private var cardLeading: NSLayoutConstraint!
+    private var cardTrailing: NSLayoutConstraint!
+    private var cardTop: NSLayoutConstraint!
+    private var cardBottom: NSLayoutConstraint!
 
     private var toolbarLeading: NSLayoutConstraint!
     private var toolbarTop: NSLayoutConstraint!
@@ -49,72 +57,84 @@ final class DocumentViewController: NSViewController {
         let container = NSView()
         container.wantsLayer = true
         view = container
+
+        card.wantsLayer = true
+        card.layer?.cornerCurve = .continuous
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
+
         dragArea.translatesAutoresizingMaskIntoConstraints = false
 
         backdrop.blendingMode = .behindWindow
         backdrop.state = .active
         backdrop.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(backdrop)
+        card.addSubview(backdrop)
 
         tint.wantsLayer = true
         tint.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(tint)
+        card.addSubview(tint)
 
         addChild(editor)
         let editorView = editor.view
         editorView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(editorView)
+        card.addSubview(editorView)
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(titleLabel)
+        card.addSubview(titleLabel)
 
-        container.addSubview(dragArea)
-        container.addSubview(stats)
-        container.addSubview(optionsBar)
-        container.addSubview(sidebarToggle)
+        card.addSubview(dragArea)
+        card.addSubview(stats)
+        card.addSubview(optionsBar)
+        card.addSubview(sidebarToggle)
 
 
-        editorLeading = editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
+        editorLeading = editorView.leadingAnchor.constraint(equalTo: card.leadingAnchor)
+        cardLeading = card.leadingAnchor.constraint(equalTo: container.leadingAnchor)
+        cardTrailing = card.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+        cardTop = card.topAnchor.constraint(equalTo: container.topAnchor)
+        cardBottom = card.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         sidebarToggleLeading = sidebarToggle.leadingAnchor.constraint(
             equalTo: container.leadingAnchor, constant: Self.toggleClearOfLights)
         chromeTop = optionsBar.topAnchor.constraint(
             equalTo: container.topAnchor, constant: Self.chromeTopFallback)
 
         NSLayoutConstraint.activate([
-            backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            backdrop.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            backdrop.topAnchor.constraint(equalTo: container.topAnchor),
-            backdrop.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            cardLeading, cardTrailing, cardTop, cardBottom,
 
-            tint.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            tint.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            tint.topAnchor.constraint(equalTo: container.topAnchor),
-            tint.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            backdrop.topAnchor.constraint(equalTo: card.topAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+
+            tint.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            tint.topAnchor.constraint(equalTo: card.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: card.bottomAnchor),
 
             editorLeading,
-            editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            editorView.topAnchor.constraint(equalTo: container.topAnchor),
-            editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            editorView.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            editorView.topAnchor.constraint(equalTo: card.topAnchor),
+            editorView.bottomAnchor.constraint(equalTo: card.bottomAnchor),
 
-            titleLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 13),
-            titleLabel.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, constant: -260),
+            titleLabel.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+            titleLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 13),
+            titleLabel.widthAnchor.constraint(lessThanOrEqualTo: card.widthAnchor, constant: -260),
 
-            dragArea.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            dragArea.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            dragArea.topAnchor.constraint(equalTo: container.topAnchor),
+            dragArea.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            dragArea.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            dragArea.topAnchor.constraint(equalTo: card.topAnchor),
             dragArea.heightAnchor.constraint(equalToConstant: WindowDragArea.height),
 
-            optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            optionsBar.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
             chromeTop,
 
             sidebarToggleLeading,
             sidebarToggle.topAnchor.constraint(equalTo: optionsBar.topAnchor),
 
-            stats.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
-            stats.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -22),
+            stats.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
+            stats.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -22),
         ])
 
         editor.onTextChange = { [weak self] in
@@ -295,8 +315,29 @@ final class DocumentViewController: NSViewController {
     /// Whether the palette's colour is laid over that material.
     var hasVisibleTint: Bool { !tint.isHidden && tint.layer?.backgroundColor != nil }
 
+    /// Radius of the page's leading corners on a translucent palette, chosen to
+    /// match the rounded panel macOS draws a sidebar as.
+    private static let pageCornerRadius: CGFloat = 12
+    /// How far the card sits inside its pane, matching the sidebar's.
+    private static let pageInset: CGFloat = 10
+
     private func applyBackdrop() {
         let glass = theme.colors.isTranslucent
+
+        // The sidebar arrives as an inset rounded panel, and the page did not,
+        // so the two met along a hard straight line the full height of the
+        // window. Rounding the page's leading corners makes it a card beside a
+        // card. Only the leading pair: the other three sides run to the window's
+        // own edges, which are already rounded.
+        let inset: CGFloat = glass ? Self.pageInset : 0
+        // The same air on the left as on the right, so the card is centred in
+        // its pane rather than pressed against the divider.
+        cardLeading.constant = inset
+        cardTrailing.constant = -inset
+        cardTop.constant = inset
+        cardBottom.constant = -inset
+        card.layer?.cornerRadius = glass ? Self.pageCornerRadius : 0
+        card.layer?.masksToBounds = glass
         backdrop.isHidden = !glass
         // A hidden visual effect view still keeps its blur going unless it is
         // told to stop, and most palettes are opaque, so most of the time this
