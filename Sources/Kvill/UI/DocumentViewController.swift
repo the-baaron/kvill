@@ -110,6 +110,12 @@ final class DocumentViewController: NSViewController {
         editor.onScroll = { [weak self] _, _ in
         }
         editor.textView.onSelectionGestureEnded = { [weak self] in self?.updateSelectionToolbar() }
+        // Dropping a folder on the page shows its Markdown down the side, and
+        // grants access to what is in it, exactly as File > Open Folder does.
+        editor.textView.onFolderDrop = { folder in
+            FolderAccess.remember(folder)
+            (NSDocumentController.shared as? KvillDocumentController)?.openFolder(folder)
+        }
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(themeChanged), name: .kvillThemeChanged, object: nil)

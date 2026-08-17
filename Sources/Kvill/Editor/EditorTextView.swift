@@ -50,6 +50,9 @@ final class EditorTextView: NSTextView {
     /// Returning true means the drop was handled here.
     var onImageDrop: ((NSDraggingInfo, Int) -> Bool)?
 
+    /// A folder was dropped on the page, which asks for the sidebar.
+    var onFolderDrop: ((URL) -> Void)?
+
     /// Called when a click-drag selection finishes, so the formatting bar can
     /// appear once rather than following the pointer during the drag.
     var onSelectionGestureEnded: (() -> Void)?
@@ -136,20 +139,44 @@ final class EditorTextView: NSTextView {
     // MARK: - Dropping images
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        ImageDrop.canAccept(sender) ? .copy : super.draggingEntered(sender)
+        if ImageDrop.canAccept(sender) || Self.folder(in: sender) != nil { return .copy }
+        return super.draggingEntered(sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        ImageDrop.canAccept(sender) ? .copy : super.draggingUpdated(sender)
+        if ImageDrop.canAccept(sender) || Self.folder(in: sender) != nil { return .copy }
+        return super.draggingUpdated(sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        // A folder dropped on the page is a request for the sidebar, not for its
+        // path to be typed into the document. Without this the drop fell through
+        // to NSTextView, which inserted the path as text, and the only route to
+        // the tree was File > Open Folder.
+        if let folder = Self.folder(in: sender) {
+            onFolderDrop?(folder)
+            return true
+        }
         if ImageDrop.canAccept(sender) {
             let point = convert(sender.draggingLocation, from: nil)
             let index = characterIndexForInsertion(at: point)
             if onImageDrop?(sender, index) == true { return true }
         }
         return super.performDragOperation(sender)
+    }
+
+    /// The one folder being dragged, if that is what this is.
+    ///
+    /// A drop of several things, or of a folder alongside a file, is left to the
+    /// existing paths rather than guessed at.
+    private static func folder(in info: NSDraggingInfo) -> URL? {
+        let urls = info.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard urls.count == 1, let url = urls.first,
+              (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+        else { return nil }
+        return url
     }
 
     private func applyTheme() {
