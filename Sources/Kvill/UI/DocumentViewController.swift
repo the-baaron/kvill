@@ -27,6 +27,12 @@ final class DocumentViewController: NSViewController {
     /// The folder sidebar. Built only when a folder is opened, which most
     /// documents never do.
     private var editorLeading: NSLayoutConstraint!
+    /// How far the sidebar button sits from the page's leading edge. It has
+    /// to clear the traffic lights when the page starts at the window edge.
+    private var sidebarToggleLeading: NSLayoutConstraint!
+    /// Distance from the top of the page to the floating buttons, set so their
+    /// centre lands on the traffic lights' centre.
+    private var chromeTop: NSLayoutConstraint!
 
     private var toolbarLeading: NSLayoutConstraint!
     private var toolbarTop: NSLayoutConstraint!
@@ -71,6 +77,10 @@ final class DocumentViewController: NSViewController {
 
 
         editorLeading = editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
+        sidebarToggleLeading = sidebarToggle.leadingAnchor.constraint(
+            equalTo: container.leadingAnchor, constant: Self.toggleClearOfLights)
+        chromeTop = optionsBar.topAnchor.constraint(
+            equalTo: container.topAnchor, constant: Self.chromeTopFallback)
 
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -98,9 +108,9 @@ final class DocumentViewController: NSViewController {
             dragArea.heightAnchor.constraint(equalToConstant: WindowDragArea.height),
 
             optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
-            optionsBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+            chromeTop,
 
-            sidebarToggle.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
+            sidebarToggleLeading,
             sidebarToggle.topAnchor.constraint(equalTo: optionsBar.topAnchor),
 
             stats.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
@@ -153,6 +163,52 @@ final class DocumentViewController: NSViewController {
         updateStats()
     }
 
+    /// Beside the traffic lights, or clear of them.
+    ///
+    /// With the sidebar open the page starts where the sidebar ends, so the
+    /// button can sit at the page's own margin. With it collapsed the page fills
+    /// the window and that margin is exactly where the traffic lights are: the
+    /// button landed on top of them.
+    private static let toggleBesideText: CGFloat = 18
+    private static let toggleClearOfLights: CGFloat = 88
+    /// Until the window exists and the real buttons can be measured.
+    private static let chromeTopFallback: CGFloat = 16
+
+    override func viewWillLayout() {
+        super.viewWillLayout()
+        // Before the pass, never after it. A constraint changed from
+        // viewDidLayout asks a window that is laying out to lay out again, and
+        // that is an abort.
+        let split = view.window?.contentViewController as? DocumentSplitViewController
+        // No sidebar worth opening means no button offering to open it.
+        sidebarToggle.isHidden = ThemeManager.shared.chromeHidden
+            || !(split?.hasSomethingToSwitchBetween ?? false)
+        let sidebarOpen = split?.isShowingFileTree ?? false
+        let wanted = sidebarOpen ? Self.toggleBesideText : Self.toggleClearOfLights
+        if sidebarToggleLeading.constant != wanted {
+            sidebarToggleLeading.constant = wanted
+        }
+        alignChromeWithTrafficLights()
+    }
+
+    /// Puts the floating buttons on the same centre line as the traffic lights.
+    ///
+    /// Measured off the real buttons rather than written as a number, because
+    /// the title bar's height is the system's to decide and changes with the
+    /// toolbar style and the OS version. `standardWindowButton` is where they
+    /// actually are.
+    private func alignChromeWithTrafficLights() {
+        guard let window = view.window,
+              let close = window.standardWindowButton(.closeButton) else { return }
+        let inWindow = close.convert(close.bounds, to: nil)
+        let inContainer = view.convert(inWindow, from: nil)
+        // The container is not flipped, so the top edge is maxY.
+        let fromTop = view.bounds.maxY - inContainer.midY
+        let wanted = (fromTop - SidebarToggleButton.size / 2).rounded()
+        guard wanted > 0, abs(chromeTop.constant - wanted) > 0.5 else { return }
+        chromeTop.constant = wanted
+    }
+
     override func viewDidAppear() {
         super.viewDidAppear()
         view.window?.makeFirstResponder(editor.textView)
@@ -181,7 +237,6 @@ final class DocumentViewController: NSViewController {
     private func applyChromeVisibility() {
         let hidden = ThemeManager.shared.chromeHidden
         optionsBar.isHidden = hidden
-        sidebarToggle.isHidden = hidden
         stats.isHidden = hidden
         updateTitleVisibility()
         if hidden {

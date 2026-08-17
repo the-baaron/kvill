@@ -35,6 +35,9 @@ final class DocumentSplitViewController: NSSplitViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        applyTheme()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(applyTheme), name: .kvillThemeChanged, object: nil)
 
         sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
         sidebarItem.minimumThickness = 180
@@ -72,11 +75,24 @@ final class DocumentSplitViewController: NSSplitViewController {
         }
         sidebar.tree.show(url)
         sidebar.tree.select(page.documentURL)
+        // A sidebar listing one file is a list of the thing you are already
+        // looking at. Nothing to move between, so nothing to show, and the
+        // button that opens it goes too.
+        guard hasSomethingToSwitchBetween else {
+            if !sidebarItem.isCollapsed { sidebarItem.animator().isCollapsed = true }
+            return
+        }
         if sidebarItem.isCollapsed {
             // Through the animator, so it slides the way every other sidebar on
             // the system does.
             sidebarItem.animator().isCollapsed = false
         }
+    }
+
+    /// Whether the open folder holds more than one file worth listing.
+    var hasSomethingToSwitchBetween: Bool {
+        guard folder != nil else { return false }
+        return sidebar.tree.documentCount > 1
     }
 
     /// Called when a file is chosen in the sidebar.
@@ -109,6 +125,26 @@ final class DocumentSplitViewController: NSSplitViewController {
         if let folder { sidebar.tree.show(folder) }
         sidebar.tree.select(next.documentURL)
     }
+
+    /// Paints the ground the two panes sit on.
+    ///
+    /// macOS 26 draws a sidebar as a rounded panel inset from the window, and
+    /// nothing was painting the gap that leaves, so on a translucent palette the
+    /// window's clear background showed through as a black frame around it.
+    ///
+    /// Done on the split view's own layer rather than by putting a backdrop
+    /// behind it. This controller's view *is* the `NSSplitView`; replacing it in
+    /// `loadView` with a container of my own stopped the panes laying out
+    /// altogether, and three checks caught it.
+    @objc private func applyTheme() {
+        let colors = ThemeManager.shared.theme.colors
+        splitView.wantsLayer = true
+        splitView.layer?.backgroundColor = colors.isTranslucent
+            ? colors.background.withAlphaComponent(colors.pageAlpha).cgColor
+            : colors.background.cgColor
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     /// Whether the sidebar is showing, for the self test.
     var isShowingFileTree: Bool { sidebarItem != nil && !sidebarItem.isCollapsed }

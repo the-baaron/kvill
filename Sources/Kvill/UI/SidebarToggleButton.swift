@@ -14,7 +14,7 @@ import AppKit
 /// corners of the same window did not line up or match.
 final class SidebarToggleButton: NSView {
 
-    private let size: CGFloat = 34
+    static let size: CGFloat = 34
     private let button = NSButton()
 
     override init(frame frameRect: NSRect) {
@@ -42,7 +42,7 @@ final class SidebarToggleButton: NSView {
         let clip = NSView()
         clip.wantsLayer = true
         clip.layer?.masksToBounds = true
-        clip.layer?.cornerRadius = size / 2
+        clip.layer?.cornerRadius = Self.size / 2
         clip.layer?.cornerCurve = .continuous
         clip.translatesAutoresizingMaskIntoConstraints = false
         clip.addSubview(button)
@@ -51,8 +51,8 @@ final class SidebarToggleButton: NSView {
         addSubview(backdrop)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: size),
-            heightAnchor.constraint(equalToConstant: size),
+            widthAnchor.constraint(equalToConstant: Self.size),
+            heightAnchor.constraint(equalToConstant: Self.size),
             backdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
             backdrop.topAnchor.constraint(equalTo: topAnchor),
@@ -79,7 +79,7 @@ final class SidebarToggleButton: NSView {
         let backdrop: NSView
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
-            glass.cornerRadius = size / 2
+            glass.cornerRadius = Self.size / 2
             glass.style = .regular
             glass.contentView = content
             backdrop = glass
@@ -89,7 +89,7 @@ final class SidebarToggleButton: NSView {
             effect.blendingMode = .withinWindow
             effect.state = .active
             effect.wantsLayer = true
-            effect.layer?.cornerRadius = size / 2
+            effect.layer?.cornerRadius = Self.size / 2
             effect.layer?.cornerCurve = .continuous
             effect.layer?.masksToBounds = true
             effect.addSubview(content)

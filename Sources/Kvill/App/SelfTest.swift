@@ -707,6 +707,19 @@ enum SelfTest {
             try? "# One\n".write(to: folder.appendingPathComponent("One.md"),
                                  atomically: true, encoding: .utf8)
 
+            // One file first: a sidebar listing the document already on screen
+            // is a list of one thing, so there is nothing to open and no button
+            // offering to.
+            split.showFolder(folder)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            check("sidebar: a folder holding one file gets no sidebar",
+                  !split.isShowingFileTree)
+            check("sidebar: and nothing to switch between",
+                  !split.hasSomethingToSwitchBetween)
+
+            try? "# Two\n".write(to: folder.appendingPathComponent("Two.md"),
+                                 atomically: true, encoding: .utf8)
+
             let items = split.splitViewItems
             check("sidebar: it is a real NSSplitViewItem sidebar",
                   items.first?.behavior == .sidebar, "\(items.count) items")
@@ -716,9 +729,20 @@ enum SelfTest {
                   items.first?.isCollapsed == true)
 
             split.showFolder(folder)
-            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            // Uncollapsing is animated, so the pane has no width until it has
+            // run. Reading the frames straight away measured a sidebar of zero.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+            split.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
             split.view.layoutSubtreeIfNeeded()
             check("sidebar: opening a folder opens it", split.isShowingFileTree)
+
+            // Geometry is measured with the collapse set directly rather than
+            // through the animator. An off-screen window runs no animation, so
+            // the pane stayed at zero width and the frames said the sidebar was
+            // nowhere: a measurement of the test rig, not of the app.
+            split.splitViewItems.first?.isCollapsed = false
+            split.view.layoutSubtreeIfNeeded()
 
             // The reported bug, in the terms the split view makes available: the
             // page's frame must begin after the sidebar's, never inside it.

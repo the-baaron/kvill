@@ -163,6 +163,19 @@ final class FileTreeView: NSView {
     /// How many rows the outline is actually showing, for the self test.
     var rowCountForTest: Int { outline.numberOfRows }
 
+    /// How many documents the tree is listing, folders not counted. One file is
+    /// not worth a sidebar: it is a list of the thing already on screen.
+    var documentCount: Int {
+        var total = 0
+        func walk(_ nodes: [Node]) {
+            for node in nodes {
+                if node.isFolder { walk(node.children) } else { total += 1 }
+            }
+        }
+        walk(root?.children ?? [])
+        return total
+    }
+
     /// Builds the row views up front. An outline view makes them lazily during a
     /// display pass, which an off-screen window never runs, so without this there
     /// is nothing to draw.

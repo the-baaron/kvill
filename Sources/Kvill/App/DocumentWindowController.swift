@@ -39,6 +39,18 @@ final class DocumentWindowController: NSWindowController {
         controller.shouldCascadeWindows = true
         controller.start()
 
+        // An empty toolbar, purely for the taller unified title bar it brings.
+        // The traffic lights are laid out by the system against that height;
+        // without it they sit hard against the top edge with the sidebar's first
+        // row close underneath. It carries no items: the sidebar button floats
+        // in the page so it can line up with the display options button on the
+        // other side, which a toolbar item cannot.
+        let toolbar = NSToolbar(identifier: "KvillToolbar")
+        toolbar.showsBaselineSeparator = false
+        toolbar.allowsUserCustomization = false
+        window.toolbar = toolbar
+        window.toolbarStyle = .unified
+
         return controller
     }
 
