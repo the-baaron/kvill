@@ -45,11 +45,16 @@ final class DocumentSplitViewController: NSSplitViewController {
         // Remembered per window across launches, which is the standard
         // behaviour and one more thing not worth writing.
         sidebarItem.automaticMaximumThickness = 320
+        // No separator lines. The window has a transparent title bar and, on a
+        // translucent palette, no opaque ground for a hairline to sit on, so the
+        // automatic one drew a seam with the desktop showing through beside it.
+        sidebarItem.titlebarSeparatorStyle = .none
         addSplitViewItem(sidebarItem)
 
         pageItem = NSSplitViewItem(viewController: page)
         pageItem.canCollapse = false
         pageItem.minimumThickness = 380
+        pageItem.titlebarSeparatorStyle = .none
         addSplitViewItem(pageItem)
 
         // No autosaveName. It restores a divider position from a previous run,

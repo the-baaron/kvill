@@ -10,6 +10,9 @@ final class DocumentViewController: NSViewController {
     let editor = EditorViewController()
     private let stats = StatsPillView()
     private let optionsBar = DisplayOptionsBar()
+    /// Opens and closes the sidebar. Mirrors the options button on the other
+    /// side, at the same height, so the two top corners match.
+    private let sidebarToggle = SidebarToggleButton()
     private let dragArea = WindowDragArea()
     private let titleLabel = NSTextField(labelWithString: "")
     private var toast: ToastView?
@@ -64,6 +67,7 @@ final class DocumentViewController: NSViewController {
         container.addSubview(dragArea)
         container.addSubview(stats)
         container.addSubview(optionsBar)
+        container.addSubview(sidebarToggle)
 
 
         editorLeading = editorView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
@@ -95,6 +99,9 @@ final class DocumentViewController: NSViewController {
 
             optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
             optionsBar.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+
+            sidebarToggle.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
+            sidebarToggle.topAnchor.constraint(equalTo: optionsBar.topAnchor),
 
             stats.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
             stats.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -22),
@@ -174,6 +181,7 @@ final class DocumentViewController: NSViewController {
     private func applyChromeVisibility() {
         let hidden = ThemeManager.shared.chromeHidden
         optionsBar.isHidden = hidden
+        sidebarToggle.isHidden = hidden
         stats.isHidden = hidden
         updateTitleVisibility()
         if hidden {

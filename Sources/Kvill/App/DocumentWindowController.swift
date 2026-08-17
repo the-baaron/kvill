@@ -20,6 +20,10 @@ final class DocumentWindowController: NSWindowController {
         window.setContentSize(NSSize(width: 900, height: 720))
         window.center()
         window.titlebarAppearsTransparent = true
+        // Nothing draws a line across or down the title bar. With a translucent
+        // palette there is no opaque ground under it, so a hairline reads as a
+        // gap with the desktop behind it.
+        window.titlebarSeparatorStyle = .none
         // The name is drawn in the page instead, centred and only at the top of
         // the document, so the title bar itself stays empty.
         window.titleVisibility = .hidden
@@ -34,6 +38,7 @@ final class DocumentWindowController: NSWindowController {
         let controller = DocumentWindowController(window: window)
         controller.shouldCascadeWindows = true
         controller.start()
+
         return controller
     }
 
