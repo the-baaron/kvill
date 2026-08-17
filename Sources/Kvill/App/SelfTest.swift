@@ -138,6 +138,56 @@ enum SelfTest {
                   "\(sizes.map { Int($0 * 10) }) vs \(Int(normal * 10)) (tenths)")
         }
 
+        // --- Code blocks and tables stay inside the window --------------------
+        // The panels behind them were drawn from the typography preset's column
+        // width, which is a fixed number that knows nothing about the window. In
+        // a narrow window the text rewrapped to what fitted and the panel did
+        // not, so it ran off the right edge.
+        //
+        // Measured from the rects the view actually painted, not from the same
+        // sum worked out a second time here.
+        do {
+            controller.loadText("""
+            Prose above.
+
+            ```swift
+            let x = compute(a, b)
+            ```
+
+            | Column | Another |
+            | --- | --- |
+            | 1 | 2 |
+
+            > [!NOTE]
+            > A callout, which has the widest padding of the lot.
+            """)
+
+            for width in [460.0, 620.0, 1200.0] as [CGFloat] {
+                window.setContentSize(NSSize(width: width, height: 600))
+                controller.view.layoutSubtreeIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+                let textView = controller.editor.textView
+                textView.display()
+
+                let panels = textView.drawnPanels
+                check("panels at \(Int(width))pt: something was drawn to measure",
+                      !panels.isEmpty, "\(panels.count) panels")
+                let page = textView.bounds.width
+                let overflowing = panels.filter { $0.maxX > page + 0.5 }
+                check("panels at \(Int(width))pt: none runs past the right edge",
+                      overflowing.isEmpty,
+                      overflowing.isEmpty
+                        ? "widest \(Int(panels.map(\.maxX).max() ?? 0)) of \(Int(page))"
+                        : "\(overflowing.count) past \(Int(page)): "
+                          + overflowing.map { Int($0.maxX).description }.joined(separator: ", "))
+                check("panels at \(Int(width))pt: none starts off the left edge",
+                      panels.allSatisfy { $0.minX >= -0.5 },
+                      "leftmost \(Int(panels.map(\.minX).min() ?? 0))")
+            }
+            window.setContentSize(NSSize(width: 900, height: 600))
+            controller.view.layoutSubtreeIfNeeded()
+        }
+
         // --- An empty document says what to do --------------------------------
         do {
             controller.loadText("")
@@ -696,6 +746,71 @@ enum SelfTest {
             }
 
             documentController.documents.forEach { $0.close() }
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        // --- A launch that opens a file leaves no blank window behind ---------
+        // Double-clicking a file in the Finder put up two windows stacked
+        // exactly on top of each other, an empty one and the file. AppKit asks
+        // whether the launch wants an untitled document before it delivers the
+        // Apple Event carrying the file, so the launch really does look empty at
+        // the moment the question is asked.
+        //
+        // The launch itself cannot be staged from inside the running app, so
+        // what is checked here is the part that can be: the blank document is
+        // marked as the launch's own, and a file opening behind it takes it
+        // away. The real sequence was reproduced against /Applications/Kvill.app
+        // by hand, with the app not running and no saved state, and both windows
+        // came up at 414,105.
+        do {
+            let documentController = (NSDocumentController.shared as? KvillDocumentController)
+                ?? KvillDocumentController()
+            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kvill-launch-\(ProcessInfo.processInfo.processIdentifier)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("Opened.md")
+            try? "# Opened\n".write(to: file, atomically: true, encoding: .utf8)
+
+            // Exactly what the delegate does when AppKit asks at launch.
+            documentController.isMakingLaunchPlaceholder = true
+            let blank = try? documentController.openUntitledDocumentAndDisplay(true)
+            hide(blank)
+            settled()
+            check("launch: the blank document is recognised as the launch's own",
+                  documentController.hasLaunchPlaceholder)
+
+            documentController.openDocument(withContentsOf: file, display: true) { d, _, _ in
+                hide(d)
+            }
+            settled()
+            check("launch: opening a file closes the blank window",
+                  !documentController.hasLaunchPlaceholder)
+            let untitled = documentController.documents.filter { $0.fileURL == nil }
+            check("launch: no untitled document is left standing",
+                  untitled.isEmpty, "\(untitled.count)")
+
+            // The other half: a blank window someone has typed into is theirs,
+            // and opening a file must not take it away.
+            documentController.documents.forEach { $0.close() }
+            settled()
+            documentController.isMakingLaunchPlaceholder = true
+            let typedIn = try? documentController.openUntitledDocumentAndDisplay(true)
+            hide(typedIn)
+            typedIn?.updateChangeCount(.changeDone)
+            settled()
+            documentController.openDocument(withContentsOf: file, display: true) { d, _, _ in
+                hide(d)
+            }
+            settled()
+            check("launch: a blank window that was typed into is left alone",
+                  documentController.documents.contains { $0.fileURL == nil })
+
+            documentController.documents.forEach {
+                $0.updateChangeCount(.changeCleared)
+                $0.close()
+            }
+            settled()
             try? FileManager.default.removeItem(at: folder)
         }
 

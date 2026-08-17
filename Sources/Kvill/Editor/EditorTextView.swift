@@ -447,12 +447,38 @@ final class EditorTextView: NSTextView {
         }
     }
 
+    /// The panels painted on the last drawing pass.
+    ///
+    /// Recorded as they are drawn rather than recomputed for the checks. A check
+    /// that works the geometry out a second time is only ever agreeing with its
+    /// own copy of the sum, which is how the listing checks once reported 2619
+    /// characters while Apple was receiving 80.
+    private(set) var drawnPanels: [NSRect] = []
+
     private func drawDecorations(in dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         let metrics = theme.metrics
         let origin = textContainerOrigin
         let columnLeft = origin.x + metrics.gutter
-        let columnRight = columnLeft + metrics.measure
+        // Clamped to the page's own margin. `measure` is the column width the
+        // typography preset asks for and takes no account of the window: in a
+        // narrow window the text rewraps to what actually fits, but a panel drawn
+        // to `measure` kept its full width and ran off the right edge. The mirror
+        // of the left inset is as far right as anything may go.
+        let pageRight = bounds.width - origin.x
+        let columnRight = min(columnLeft + metrics.measure, pageRight)
+
+        /// A panel behind a block, never wider than the page.
+        func panel(_ block: NSRect, pad: CGFloat, dy: CGFloat) -> NSRect {
+            let left = columnLeft - pad
+            let right = min(columnRight + pad, pageRight)
+            let rect = NSRect(
+                x: left, y: block.minY - dy,
+                width: max(0, right - left), height: block.height + dy * 2)
+            drawnPanels.append(rect)
+            return rect
+        }
+        drawnPanels.removeAll(keepingCapacity: true)
 
         context.saveGState()
         defer { context.restoreGState() }
@@ -463,31 +489,23 @@ final class EditorTextView: NSTextView {
 
             switch decoration.kind {
             case .codeBlock:
-                let box = NSRect(
-                    x: columnLeft - 14, y: bounds.minY - 6,
-                    width: columnRight - columnLeft + 28, height: bounds.height + 12)
+                let box = panel(bounds, pad: 14, dy: 6)
                 fill(box, radius: 8, color: theme.colors.codeBackground,
                      stroke: theme.colors.codeBorder)
 
             case .table:
-                let box = NSRect(
-                    x: columnLeft - 14, y: bounds.minY - 6,
-                    width: columnRight - columnLeft + 28, height: bounds.height + 12)
+                let box = panel(bounds, pad: 14, dy: 6)
                 fill(box, radius: 8, color: theme.colors.codeBackground,
                      stroke: theme.colors.tableBorder.withAlpha(0.5))
 
             case .frontMatter:
-                let box = NSRect(
-                    x: columnLeft - 14, y: bounds.minY - 5,
-                    width: columnRight - columnLeft + 28, height: bounds.height + 10)
+                let box = panel(bounds, pad: 14, dy: 5)
                 fill(box, radius: 8, color: theme.colors.backgroundElevated,
                      stroke: theme.colors.rule)
 
             case .callout(let kind):
                 let palette = theme.callout(kind)
-                let box = NSRect(
-                    x: columnLeft - 18, y: bounds.minY - 7,
-                    width: columnRight - columnLeft + 32, height: bounds.height + 14)
+                let box = panel(bounds, pad: 18, dy: 7)
                 fill(box, radius: 9, color: palette.background, stroke: palette.accent.withAlpha(0.28))
 
                 // Accent bar down the left edge, with the box's corner radius.

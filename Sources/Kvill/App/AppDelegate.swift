@@ -58,9 +58,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// opens, because the bug this replaced left the app with no window, no Dock
     /// icon and no menu bar, and nothing at all to click.
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
-        Self.opensBlankDocument(
+        let opens = Self.opensBlankDocument(
             backgroundEnabled: BackgroundService.isEnabled,
             secondsSinceLogin: Self.consoleLoginDate.map { Date().timeIntervalSince($0) })
+        // The answer can be right and still be wrong by the time the launch
+        // finishes: AppKit asks this before delivering the Apple Event for a file
+        // double-clicked in the Finder, so a launch that has a document to show
+        // still looks empty here. The blank document is marked rather than
+        // refused, and closed again if a file turns up behind it.
+        if opens { (NSDocumentController.shared as? KvillDocumentController)?.isMakingLaunchPlaceholder = true }
+        return opens
     }
 
     /// The decision on its own, with no clock and no defaults, so both branches
@@ -106,7 +113,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showBlankDocument() {
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
         NSApp.activate(ignoringOtherApps: true)
+        // Marked for the same reason as at launch. With the background setting on
+        // the app sits there with no windows, so double-clicking a file sends a
+        // reopen as well as the file, and the reopen arrives first: this window is
+        // opened for a click that already had a document behind it.
+        let controller = NSDocumentController.shared as? KvillDocumentController
+        controller?.isMakingLaunchPlaceholder = true
         _ = try? NSDocumentController.shared.openUntitledDocumentAndDisplay(true)
+        controller?.isMakingLaunchPlaceholder = false
     }
 
     /// Opening an app that is already running sends this instead of a launch,

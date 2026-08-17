@@ -125,6 +125,71 @@ final class KvillDocumentController: NSDocumentController {
         (try? typeForContents(of: url)) ?? "net.daringfireball.markdown"
     }
 
+    // MARK: - The blank window a launch leaves behind
+
+    /// Set while AppKit is being asked whether this launch wants a blank
+    /// document, so the document that follows can be recognised as the launch's
+    /// own rather than one the user asked for.
+    var isMakingLaunchPlaceholder = false
+
+    /// How long a blank window stays attributable to the click that opened it.
+    static let placeholderGrace: TimeInterval = 2
+
+    /// The blank document AppKit opened because the launch appeared to have
+    /// nothing else to show.
+    ///
+    /// Double-clicking a file in the Finder opened two windows stacked exactly on
+    /// top of each other, an empty one and the file. AppKit asks whether to open
+    /// an untitled document before the launch's `odoc` event has been delivered,
+    /// so at the moment the question is asked the launch genuinely does look
+    /// empty, and answering it honestly is what produces the second window.
+    ///
+    /// Reproduced against `/Applications/Kvill.app` with the app not running and
+    /// no saved state on disk: `Untitled` and the file, both at 414,105. It does
+    /// not reproduce against an ad-hoc build, which starts fast enough to have the
+    /// event in hand first, so a check that only ever ran here would have called
+    /// this fixed while every real user still saw it.
+    ///
+    /// Held weakly. If the document closes on its own this must not be what keeps
+    /// it alive.
+    private weak var launchPlaceholder: NSDocument?
+
+    override func addDocument(_ document: NSDocument) {
+        super.addDocument(document)
+
+        if isMakingLaunchPlaceholder {
+            isMakingLaunchPlaceholder = false
+            guard document.fileURL == nil else { return }
+            launchPlaceholder = document
+            // Only for as long as the click that opened it. A file arriving in
+            // the same breath is the double-window bug; a file opened a minute
+            // later is just the next thing the user did, and a blank window they
+            // have been looking at all that time is not this app's to close.
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.placeholderGrace) { [weak self] in
+                if self?.launchPlaceholder === document { self?.launchPlaceholder = nil }
+            }
+            return
+        }
+
+        // A real file arriving means the launch was never empty after all.
+        guard document.fileURL != nil else { return }
+        discardLaunchPlaceholder()
+    }
+
+    /// Closes the launch's blank window, if it is still blank.
+    ///
+    /// Only ever the untouched one. Anything typed into it is the user's, and a
+    /// window that is holding someone's words is not this app's to close.
+    func discardLaunchPlaceholder() {
+        guard let placeholder = launchPlaceholder else { return }
+        launchPlaceholder = nil
+        guard placeholder.fileURL == nil, !placeholder.isDocumentEdited else { return }
+        placeholder.close()
+    }
+
+    /// Whether the launch's blank window is still standing, for the self test.
+    var hasLaunchPlaceholder: Bool { launchPlaceholder != nil }
+
     /// Opens a folder: remember it, then show its tree beside whichever document
     /// is already open, or beside the first one in the folder.
     func openFolder(_ folder: URL) {
