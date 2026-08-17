@@ -790,6 +790,33 @@ enum SelfTest {
             check("launch: no untitled document is left standing",
                   untitled.isEmpty, "\(untitled.count)")
 
+            // The window the launch put up is the one a folder drop moves into,
+            // and closing it as a stray took it out from under the document
+            // arriving in it. Dropping a folder within two seconds of opening
+            // the app closed the window and left nothing at all on screen.
+            documentController.documents.forEach { $0.close() }
+            settled()
+            documentController.isMakingLaunchPlaceholder = true
+            let reused = try? documentController.openUntitledDocumentAndDisplay(true)
+            hide(reused)
+            settled()
+            if let reused, let host = reused.windowControllers.first?.window {
+                let moved = documentController.openInPlace(file, replacing: reused)
+                settled()
+                check("launch: a folder dropped into the blank window is taken by it",
+                      moved)
+                let stillThere = documentController.documents
+                    .contains { $0.windowControllers.first?.window === host }
+                check("launch: and the window is still there afterwards", stillThere)
+                check("launch: showing the file rather than nothing",
+                      documentController.document(for: host)?.fileURL?.lastPathComponent
+                        == "Opened.md",
+                      documentController.document(for: host)?
+                        .fileURL?.lastPathComponent ?? "nothing")
+            } else {
+                check("launch: a blank window was opened to drop into", false)
+            }
+
             // The other half: a blank window someone has typed into is theirs,
             // and opening a file must not take it away.
             documentController.documents.forEach { $0.close() }

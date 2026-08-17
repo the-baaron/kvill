@@ -106,6 +106,13 @@ final class KvillDocumentController: NSDocumentController {
         // Before anything is detached, so it cannot be reading a stale editor.
         (current as? MarkdownDocument)?.captureText()
 
+        // The launch's blank window is being moved into here, which is exactly
+        // what should become of it, so let go of it without closing it. Closing
+        // it took the window out from under the document arriving in it: within
+        // two seconds of opening the app, dropping a folder on the page made the
+        // window disappear with nothing to show for it.
+        if current === launchPlaceholder { launchPlaceholder = nil }
+
         addDocument(fresh)
         let editor = DocumentViewController()
         (fresh as? MarkdownDocument)?.adopt(editor)
