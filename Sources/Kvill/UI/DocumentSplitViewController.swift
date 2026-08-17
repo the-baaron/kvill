@@ -139,9 +139,7 @@ final class DocumentSplitViewController: NSSplitViewController {
     @objc private func applyTheme() {
         let colors = ThemeManager.shared.theme.colors
         splitView.wantsLayer = true
-        splitView.layer?.backgroundColor = colors.isTranslucent
-            ? colors.background.withAlphaComponent(colors.pageAlpha).cgColor
-            : colors.background.cgColor
+        splitView.layer?.backgroundColor = colors.background.cgColor
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }

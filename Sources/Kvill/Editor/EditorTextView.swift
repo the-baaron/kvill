@@ -255,7 +255,6 @@ final class EditorTextView: NSTextView {
     /// colour instead means glyphs are antialiased against partial alpha, which
     /// is what made the page look wrong.
     private func fillPage(_ rect: NSRect) {
-        guard !theme.colors.isTranslucent else { return }
         theme.colors.background.setFill()
         rect.fill()
     }

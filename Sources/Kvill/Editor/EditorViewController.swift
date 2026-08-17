@@ -105,7 +105,7 @@ final class EditorViewController: NSViewController {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = !theme.colors.isTranslucent
+        scrollView.drawsBackground = true
         scrollView.backgroundColor = theme.colors.page
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.scrollerStyle = .overlay
@@ -512,7 +512,7 @@ final class EditorViewController: NSViewController {
 
     @objc private func themeChanged() {
         textView.theme = theme
-        scrollView.drawsBackground = !theme.colors.isTranslucent
+        scrollView.drawsBackground = true
         scrollView.backgroundColor = theme.colors.page
         styler.update(theme: theme)
         updateInsets()

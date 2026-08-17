@@ -96,26 +96,8 @@ struct ColorTheme {
     let callouts: [CalloutKind: CalloutColors]
     let genericCallout: CalloutColors
 
-    /// When true the page is painted semi-transparent over a window-level blur,
-    /// so the desktop shows faintly through, the way a native macOS window does.
-    var isTranslucent: Bool = false
-    /// How strongly the palette's own colour is laid over the material. Only
-    /// meaningful when translucent, and deliberately light: a heavy tint is just
-    /// a flat colour with a blurred desktop wasted behind it.
-    var pageAlpha: CGFloat = 1
-    /// Material for the window-level blur behind a translucent page.
-    ///
-    /// `.sidebar` is the translucent semantic material. The obvious-sounding
-    /// `.underWindowBackground` is for the area *under* a window, and
-    /// `.windowBackground` and `.contentBackground` are both documented as
-    /// opaque, which is why an earlier version of these palettes had no glass in
-    /// them at all.
-    var material: NSVisualEffectView.Material = .sidebar
-
     /// The page colour as it should actually be painted.
-    var page: NSColor {
-        isTranslucent ? background.withAlphaComponent(pageAlpha) : background
-    }
+    var page: NSColor { background }
 
     var appearance: NSAppearance? {
         NSAppearance(named: isDark ? .darkAqua : .aqua)
@@ -335,86 +317,22 @@ enum Palettes {
             accent: NSColor(hex: "#D2D2D2"), background: NSColor(hex: "#D2D2D2", alpha: 0.14))
     )
 
-    /// Light glass: a near-opaque page over a window blur. The closest of the
-    /// set to a stock macOS document window.
-    static let frost = ColorTheme(
-        id: "frost",
-        name: "Frost",
-        isDark: false,
-        background: NSColor(hex: "#F6F6F8"),
-        backgroundElevated: NSColor(hex: "#000000", alpha: 0.045),
-        text: NSColor(hex: "#1D1D1F"),
-        textSecondary: NSColor(hex: "#6E6E73"),
-        marker: NSColor(hex: "#C2C2C8"),
-        markerActive: NSColor(hex: "#86868B"),
-        accent: NSColor(hex: "#0A6CFF"),
-        heading: NSColor(hex: "#111113"),
-        link: NSColor(hex: "#0A6CFF"),
-        code: NSColor(hex: "#B02A5B"),
-        // Panels are tints, not fills. An opaque card on a translucent page
-        // reads as a white rectangle pasted onto glass.
-        codeBackground: NSColor(hex: "#000000", alpha: 0.055),
-        codeBorder: NSColor(hex: "#000000", alpha: 0.10),
-        quoteBar: NSColor(hex: "#000000", alpha: 0.20),
-        quoteText: NSColor(hex: "#4A4A4F"),
-        rule: NSColor(hex: "#000000", alpha: 0.16),
-        selection: NSColor(hex: "#B7D3FF"),
-        cursor: NSColor(hex: "#0A6CFF"),
-        tableBorder: NSColor(hex: "#000000", alpha: 0.14),
-        tableHeaderBackground: NSColor(hex: "#000000", alpha: 0.07),
-        tableStripe: NSColor(hex: "#000000", alpha: 0.035),
-        highlightBackground: NSColor(hex: "#FFE79A"),
-        taskDone: NSColor(hex: "#86868B"),
-        callouts: callouts(
-            note: "#0A6CFF", tip: "#28874A", important: "#7A4FD0",
-            warning: "#A97400", caution: "#D0342C", tint: 0.09),
-        genericCallout: CalloutColors(
-            accent: NSColor(hex: "#6E6E73"), background: NSColor(hex: "#6E6E73", alpha: 0.08)),
-        isTranslucent: true,
-        pageAlpha: 0.16,
-        material: .sidebar
-    )
-
-    /// Dark glass, the same idea after dark.
-    static let onyx = ColorTheme(
-        id: "onyx",
-        name: "Onyx",
-        isDark: true,
-        background: NSColor(hex: "#1C1C1E"),
-        backgroundElevated: NSColor(hex: "#FFFFFF", alpha: 0.055),
-        text: NSColor(hex: "#E6E6EB"),
-        textSecondary: NSColor(hex: "#98989F"),
-        marker: NSColor(hex: "#4B4B52"),
-        markerActive: NSColor(hex: "#8E8E96"),
-        accent: NSColor(hex: "#0A84FF"),
-        heading: NSColor(hex: "#F5F5F7"),
-        link: NSColor(hex: "#64D2FF"),
-        code: NSColor(hex: "#FF8AB3"),
-        codeBackground: NSColor(hex: "#FFFFFF", alpha: 0.07),
-        codeBorder: NSColor(hex: "#FFFFFF", alpha: 0.12),
-        quoteBar: NSColor(hex: "#FFFFFF", alpha: 0.22),
-        quoteText: NSColor(hex: "#B0B0B8"),
-        rule: NSColor(hex: "#FFFFFF", alpha: 0.16),
-        selection: NSColor(hex: "#0A4A8F"),
-        cursor: NSColor(hex: "#0A84FF"),
-        tableBorder: NSColor(hex: "#FFFFFF", alpha: 0.16),
-        tableHeaderBackground: NSColor(hex: "#FFFFFF", alpha: 0.08),
-        tableStripe: NSColor(hex: "#FFFFFF", alpha: 0.04),
-        highlightBackground: NSColor(hex: "#6B5717"),
-        taskDone: NSColor(hex: "#75757C"),
-        callouts: callouts(
-            note: "#64D2FF", tip: "#6FDD8B", important: "#C6A6FF",
-            warning: "#FFD426", caution: "#FF6961", tint: 0.14),
-        genericCallout: CalloutColors(
-            accent: NSColor(hex: "#98989F"), background: NSColor(hex: "#98989F", alpha: 0.10)),
-        isTranslucent: true,
-        pageAlpha: 0.22,
-        material: .sidebar
-    )
-
     static let all: [ColorTheme] = [
-        paper, ink, sepia, nord, frost, onyx, contrastLight, contrastDark,
+        paper, ink, sepia, nord, contrastLight, contrastDark,
     ]
 
-    static func theme(id: String) -> ColorTheme? { all.first { $0.id == id } }
+    /// Palettes that used to exist, and what a saved one becomes.
+    ///
+    /// Frost and Onyx were translucent: the page was painted semi-transparent
+    /// over a window-level blur. They cost a great deal of machinery, a black
+    /// frame around the sidebar, and a hard seam down the middle of the window,
+    /// and they are gone. Someone who was using Onyx should land on a dark
+    /// palette rather than be thrown into a light one on upgrade.
+    static let retired: [String: String] = ["frost": paper.id, "onyx": ink.id]
+
+    static func theme(id: String) -> ColorTheme? {
+        if let found = all.first(where: { $0.id == id }) { return found }
+        guard let replacement = retired[id] else { return nil }
+        return all.first { $0.id == replacement }
+    }
 }

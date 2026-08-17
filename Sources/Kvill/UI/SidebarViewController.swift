@@ -7,52 +7,22 @@ import AppKit
 /// animation, running full height under the title bar so the traffic lights sit
 /// over it the way they do in Finder. None of that is written here.
 ///
-/// The *colour* is not AppKit's, and that is deliberate. A sidebar built with
-/// `NSSplitViewItem(sidebarWithViewController:)` paints the system's grey
-/// material, which is right in Finder and wrong here: next to an Onyx page it
-/// read as a grey slab bolted to a black window, with the window's own clear
-/// background showing through at the corners. Kvill has eight palettes and the
-/// sidebar belongs to whichever one is on, so it paints the same backdrop and
-/// tint the page does.
+/// The colour is the palette's rather than the system's grey sidebar material.
+/// Kvill's palettes are opaque paper colours, and a grey slab beside a sepia
+/// page reads as two apps in one window.
 final class SidebarViewController: NSViewController {
 
     let tree = FileTreeView()
-
-    /// Blur behind a translucent palette, off for the opaque ones.
-    private let backdrop = NSVisualEffectView()
-    /// The palette's own colour over the blur, so glass still reads as Frost or
-    /// Onyx rather than as bare system blur.
-    private let tint = NSView()
-
-    private var theme: Theme { ThemeManager.shared.theme }
 
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
         view = container
 
-        backdrop.blendingMode = .behindWindow
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(backdrop)
-
-        tint.wantsLayer = true
-        tint.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(tint)
-
         tree.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(tree)
 
         NSLayoutConstraint.activate([
-            backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            backdrop.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            backdrop.topAnchor.constraint(equalTo: container.topAnchor),
-            backdrop.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
-            tint.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            tint.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            tint.topAnchor.constraint(equalTo: container.topAnchor),
-            tint.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
             tree.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             tree.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             // Clear of the traffic lights, which sit over a full-height sidebar
@@ -69,22 +39,8 @@ final class SidebarViewController: NSViewController {
     deinit { NotificationCenter.default.removeObserver(self) }
 
     @objc private func applyTheme() {
-        let colors = theme.colors
-        let glass = colors.isTranslucent
-
-        backdrop.isHidden = !glass
-        // A hidden visual effect view keeps blurring unless told to stop.
-        backdrop.state = glass ? .active : .inactive
-        backdrop.material = colors.material
-        backdrop.appearance = colors.appearance
-
-        tint.isHidden = !glass
-        tint.layer?.backgroundColor = glass
-            ? colors.background.withAlphaComponent(colors.pageAlpha).cgColor
-            : nil
-
-        // Opaque palettes paint the sidebar directly. Slightly raised off the
-        // page so the divider is not the only thing telling them apart.
-        view.layer?.backgroundColor = glass ? nil : colors.backgroundElevated.cgColor
+        // Slightly raised off the page, so the divider is not the only thing
+        // telling the two apart.
+        view.layer?.backgroundColor = ThemeManager.shared.theme.colors.backgroundElevated.cgColor
     }
 }

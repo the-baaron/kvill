@@ -105,10 +105,8 @@ final class DocumentWindowController: NSWindowController {
     /// not sit as a grey strip above a sepia page.
     @objc private func applyTheme() {
         let theme = ThemeManager.shared.theme
-        // A translucent palette needs the window itself to be see-through,
-        // otherwise the blur behind the page has nothing to blur.
-        window?.isOpaque = !theme.colors.isTranslucent
-        window?.backgroundColor = theme.colors.isTranslucent ? .clear : theme.colors.background
+        window?.isOpaque = true
+        window?.backgroundColor = theme.colors.background
         // Drives the traffic lights and the title text. Without an explicit
         // appearance they follow the system, so light buttons end up on a dark
         // page, or dark ones on Sepia.

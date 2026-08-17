@@ -28,12 +28,10 @@ enum SelfTest {
 
         // --- Palettes -------------------------------------------------------
         let ids = Palettes.all.map(\.id)
-        check("palettes registered", ids.count == 8, ids.joined(separator: ", "))
-        check("glass palettes present",
-              ids.contains("frost") && ids.contains("onyx"))
-        check("glass palettes are translucent",
-              Palettes.theme(id: "frost")?.isTranslucent == true
-                && Palettes.theme(id: "onyx")?.isTranslucent == true)
+        check("palettes registered", ids.count == 6, ids.joined(separator: ", "))
+        check("no translucent palettes remain",
+              !ids.contains("frost") && !ids.contains("onyx"),
+              ids.joined(separator: ", "))
 
         // --- The real view tree ---------------------------------------------
         let controller = DocumentViewController()
@@ -414,53 +412,6 @@ enum SelfTest {
             manager.typewriterScrolling = wasTypewriter
         }
 
-        // --- Translucent palettes ---------------------------------------------
-        // Every piece of the chain has to be right for a glass theme to read as
-        // glass: a see-through window, a backdrop behind the page, a scroll view
-        // that paints nothing, and a page colour that is not fully opaque.
-        let previousPalette = ThemeManager.shared.activePaletteID
-        ThemeManager.shared.selectPalette(id: "frost")
-        let glassWindow = DocumentWindowController.create()
-        glassWindow.window?.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-        glassWindow.showWindow(nil)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-
-        if let glassController = (glassWindow.contentViewController as? DocumentSplitViewController)?.page {
-            check("glass: window is see-through", glassWindow.window?.isOpaque == false)
-            check("glass: window background is clear",
-                  glassWindow.window?.backgroundColor.alphaComponent == 0)
-            check("glass: backdrop is showing", glassController.hasVisibleBackdrop)
-            check("glass: palette tint is over it", glassController.hasVisibleTint)
-            check("glass: scroll view paints nothing",
-                  glassController.editor.scrollView.drawsBackground == false)
-            let alpha = ThemeManager.shared.theme.colors.page.alphaComponent
-            check("glass: page is translucent", alpha < 0.95,
-                  "page alpha \(String(format: "%.2f", alpha))")
-            check("system scroll edge effect requested", glassWindow.hasSoftScrollEdge)
-
-            // Half the materials are documented as opaque, and picking one of
-            // those is indistinguishable from having no glass at all.
-            let opaqueMaterials: Set<NSVisualEffectView.Material> = [
-                .windowBackground, .contentBackground, .underWindowBackground, .underPageBackground,
-            ]
-            let material = ThemeManager.shared.theme.colors.material
-            check("glass: material is a translucent one",
-                  !opaqueMaterials.contains(material), "material \(material.rawValue)")
-            let colors = ThemeManager.shared.theme.colors
-            check("glass: panels are translucent too",
-                  colors.codeBackground.alphaComponent < 0.5
-                    && colors.tableHeaderBackground.alphaComponent < 0.5
-                    && colors.backgroundElevated.alphaComponent < 0.5,
-                  "code panel alpha \(String(format: "%.2f", colors.codeBackground.alphaComponent))")
-            check("glass: tint is light enough to see through",
-                  ThemeManager.shared.theme.colors.pageAlpha < 0.4,
-                  "tint \(String(format: "%.2f", ThemeManager.shared.theme.colors.pageAlpha))")
-        } else {
-            check("glass: window builds", false)
-        }
-        glassWindow.close()
-        ThemeManager.shared.selectPalette(id: previousPalette)
-
         // --- Centred title ----------------------------------------------------
         controller.documentTitle = "Notes.md"
         clip.scroll(to: .zero)
@@ -477,8 +428,15 @@ enum SelfTest {
               "alpha \(String(format: "%.2f", atTop))")
         check("title goes once scrolled", scrolledAway < 0.1,
               "alpha \(String(format: "%.2f", scrolledAway))")
+        let documentWindow = DocumentWindowController.create()
         check("window title bar is empty",
-              glassWindow.window?.titleVisibility == .hidden)
+              documentWindow.window?.titleVisibility == .hidden)
+
+        check("a retired palette becomes one of the same darkness",
+              Palettes.theme(id: "onyx")?.isDark == true
+                && Palettes.theme(id: "frost")?.isDark == false,
+              "onyx -> \(Palettes.theme(id: "onyx")?.id ?? "nothing"), "
+                + "frost -> \(Palettes.theme(id: "frost")?.id ?? "nothing")")
 
         // --- Stale decorations --------------------------------------------------
         // Decorations are built from a parse and drawn later; a deletion in
@@ -754,6 +712,17 @@ enum SelfTest {
             // through the animator. An off-screen window runs no animation, so
             // the pane stayed at zero width and the frames said the sidebar was
             // nowhere: a measurement of the test rig, not of the app.
+            // An off-screen split view never divides itself, so the panes sat at
+            // zero width and the frames reported the sidebar as nowhere: a
+            // measurement of the rig rather than of the app. The divider is put
+            // where a real window would put it, and the geometry checked from
+            // there.
+            // Uncollapsed through the animator, which in an off-screen window
+            // never finishes: `isCollapsed` reads false while the layout never
+            // ran, so setting it false again is a no-op and the pane keeps zero
+            // width. A real transition, both ways, without the animator.
+            split.splitViewItems.first?.isCollapsed = true
+            split.view.layoutSubtreeIfNeeded()
             split.splitViewItems.first?.isCollapsed = false
             split.view.layoutSubtreeIfNeeded()
 
@@ -773,6 +742,7 @@ enum SelfTest {
             // point of it being collapsible.
             let widthWithSidebar = split.page.view.frame.width
             split.splitViewItems.first?.isCollapsed = true
+            split.splitView.adjustSubviews()
             split.view.layoutSubtreeIfNeeded()
             check("sidebar: collapsing gives the room to the page",
                   split.page.view.frame.width > widthWithSidebar,

@@ -39,16 +39,6 @@ final class PaletteSwatchButton: NSButton {
 
         // A translucent theme is shown as one: the page colour is drawn over a
         // hint of what would be behind it.
-        if palette.isTranslucent {
-            NSGraphicsContext.saveGraphicsState()
-            path.addClip()
-            NSColor.systemBlue.withAlphaComponent(0.35).setFill()
-            NSRect(x: box.minX, y: box.minY, width: box.width, height: box.height * 0.5).fill()
-            palette.background.withAlphaComponent(palette.pageAlpha).setFill()
-            box.fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
         let inset: CGFloat = 7
         let width = box.width - inset * 2
         bar(x: box.minX + inset, y: box.maxY - 13, width: width * 0.66, height: 4,
