@@ -63,10 +63,32 @@ if (notes.length > 4000) {
   process.exit(1);
 }
 
+// The contact table may hold `$NAME` instead of a value, because this
+// repository is public and a phone number published to GitHub cannot be taken
+// back. Anything of that shape is expanded from the environment, which is
+// `~/.appstoreconnect/env` in practice.
+//
+// An unset variable is a hard stop, never an empty string. App Review
+// Information being blank is exactly what got 1.0 rejected under 2.1, and this
+// script would otherwise be able to blank it again by running with no
+// environment.
 const field = (label) => {
   const row = source.match(new RegExp(`^\\|\\s*${label}\\s*\\|\\s*(.+?)\\s*\\|`, 'm'));
   if (!row) { console.error(`review-notes.md has no "${label}" row.`); process.exit(1); }
-  return row[1];
+  const value = row[1].replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (whole, name) => {
+    const found = process.env[name];
+    if (!found) {
+      console.error(`review-notes.md wants ${whole} for "${label}", and it is not set.`);
+      console.error('Set it in ~/.appstoreconnect/env. Refusing to send a blank contact field.');
+      process.exit(1);
+    }
+    return found;
+  });
+  if (!value.trim()) {
+    console.error(`"${label}" came out empty. Refusing to send it.`);
+    process.exit(1);
+  }
+  return value;
 };
 
 const attributes = {

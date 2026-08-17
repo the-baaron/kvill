@@ -9,7 +9,12 @@ email, no phone, no notes. Apple's message asks for exactly that, so it is very
 likely the whole of the problem. Verified by reading
 `appStoreReviewDetail` for version 1.0.
 
-Contact to set alongside it:
+Contact to set alongside it. This repository is public, so the email and phone
+are references rather than values: `push-review-notes.mjs` expands anything
+written as `$NAME` from the environment, which means `~/.appstoreconnect/env`
+in practice, alongside the App Store Connect key. It refuses to send rather
+than send a blank, because a blank contact section is what got 1.0 rejected in
+the first place.
 
 | Field | Value |
 | --- | --- |
