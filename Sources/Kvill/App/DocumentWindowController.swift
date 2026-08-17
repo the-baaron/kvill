@@ -6,7 +6,7 @@ import AppKit
 final class DocumentWindowController: NSWindowController {
 
     static func create() -> DocumentWindowController {
-        let viewController = DocumentViewController()
+        let split = DocumentSplitViewController(page: DocumentViewController())
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 720),
@@ -14,7 +14,7 @@ final class DocumentWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.contentViewController = viewController
+        window.contentViewController = split
         // Setting a content view controller resizes the window to that view's
         // fitting size. The editor has no intrinsic size, so restore the frame.
         window.setContentSize(NSSize(width: 900, height: 720))

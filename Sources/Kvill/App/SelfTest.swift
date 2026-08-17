@@ -177,8 +177,18 @@ enum SelfTest {
             UserDefaults.standard.set(true, forKey: key)
             check("background: on keeps the app alive with no windows",
                   !delegate.applicationShouldTerminateAfterLastWindowClosed(NSApp), "")
-            check("background: on does not put a blank window in your face at login",
-                  !delegate.applicationShouldOpenUntitledFile(NSApp), "")
+            check("background: on still opens one when a person opens the app",
+                  delegate.applicationShouldOpenUntitledFile(NSApp), "")
+
+            // The login branch, which no test can reach through the real clock.
+            check("launch: at login it opens nothing",
+                  !AppDelegate.opensBlankDocument(backgroundEnabled: true, secondsSinceLogin: 3))
+            check("launch: opened by a person later, it opens a document",
+                  AppDelegate.opensBlankDocument(backgroundEnabled: true, secondsSinceLogin: 4000))
+            check("launch: with the setting off it always opens one",
+                  AppDelegate.opensBlankDocument(backgroundEnabled: false, secondsSinceLogin: 3))
+            check("launch: an unreadable session start errs towards a window",
+                  AppDelegate.opensBlankDocument(backgroundEnabled: true, secondsSinceLogin: nil))
 
             UserDefaults.standard.set(was, forKey: key)
             check("background: the test left no login item behind",
@@ -223,13 +233,14 @@ enum SelfTest {
             check("file tree: shows a row per document", tree.rowCountForTest == 3,
                   "rows: \(tree.rowCountForTest)")
 
-            let controller = DocumentViewController()
-            _ = controller.view
+            let split = DocumentSplitViewController(page: DocumentViewController())
+            _ = split.view
             check("file tree: the sidebar is hidden until a folder is opened",
-                  !controller.isShowingFileTree, "")
-            controller.showFolder(root)
+                  !split.isShowingFileTree, "")
+            split.showFolder(root)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
             check("file tree: opening a folder puts the sidebar up",
-                  controller.isShowingFileTree, "")
+                  split.isShowingFileTree, "")
 
             // A render is a read. Rendering with a theme used to leave the user's
             // own copy of Kvill set to it.
@@ -414,7 +425,7 @@ enum SelfTest {
         glassWindow.showWindow(nil)
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
 
-        if let glassController = glassWindow.contentViewController as? DocumentViewController {
+        if let glassController = (glassWindow.contentViewController as? DocumentSplitViewController)?.page {
             check("glass: window is see-through", glassWindow.window?.isOpaque == false)
             check("glass: window background is clear",
                   glassWindow.window?.backgroundColor.alphaComponent == 0)
@@ -568,14 +579,14 @@ enum SelfTest {
                   Set(opened.values.compactMap { $0.windowControllers.first }).count == 2)
             check("isolation: each window got its own editor",
                   Set(opened.values.compactMap {
-                      ($0.windowControllers.first?.contentViewController as? DocumentViewController)
-                          .map(ObjectIdentifier.init)
+                      ($0.windowControllers.first?.contentViewController
+                        as? DocumentSplitViewController).map { ObjectIdentifier($0.page) }
                   }).count == 2)
 
             // Type something only ever typed into this one, then save both.
             for (name, document) in opened {
-                let editor = document.windowControllers.first?
-                    .contentViewController as? DocumentViewController
+                let editor = (document.windowControllers.first?
+                    .contentViewController as? DocumentSplitViewController)?.page
                 editor?.editor.textView.insertText(
                     "\nTyped into \(name)\n",
                     replacementRange: NSRange(location: 0, length: 0))
@@ -621,7 +632,7 @@ enum SelfTest {
             settled()
 
             if let one = first, let window = one.windowControllers.first?.window {
-                let editorOne = window.contentViewController as? DocumentViewController
+                let editorOne = (window.contentViewController as? DocumentSplitViewController)?.page
                 editorOne?.editor.textView.insertText(
                     "GAMMA-ONLY\n", replacementRange: NSRange(location: 0, length: 0))
                 one.updateChangeCount(.changeDone)
@@ -630,7 +641,7 @@ enum SelfTest {
                 check("switch: the window took the second file", switched)
                 settled()
 
-                let editorTwo = window.contentViewController as? DocumentViewController
+                let editorTwo = (window.contentViewController as? DocumentSplitViewController)?.page
                 check("switch: it is showing the file that was clicked",
                       editorTwo?.documentURL?.lastPathComponent == "Delta.md",
                       editorTwo?.documentURL?.lastPathComponent ?? "nothing")
@@ -672,19 +683,21 @@ enum SelfTest {
             try? FileManager.default.removeItem(at: folder)
         }
 
-        // --- The page never moves towards an arriving sidebar -----------------
-        // Reported as "the main content snaps to the wrong side". Narrowing the
-        // window flipped the page's inset from the sidebar width to zero, so the
-        // page slid left, and the sidebar was then drawn over it: it moved the
-        // wrong way and got covered, both at once. Docked and peeking are
-        // separate states now and this holds them apart.
+        // --- The sidebar is AppKit's, and the page is never under it ----------
+        // Reported as the content snapping to the wrong side: a hand-written
+        // sidebar moved the page left and then covered it. It is an
+        // NSSplitViewItem now, so collapsing, the width limits, the animation
+        // and the divider are the system's. What is still worth checking is that
+        // it is genuinely the standard component and that the page is beside it
+        // rather than beneath it.
         do {
-            let host = DocumentViewController()
+            let split = DocumentSplitViewController(page: DocumentViewController())
             let shell = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 1400, height: 800),
-                styleMask: [.titled, .resizable], backing: .buffered, defer: false)
-            shell.contentViewController = host
-            shell.setContentSize(NSSize(width: 1400, height: 800))
+                contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+                styleMask: [.titled, .resizable, .fullSizeContentView],
+                backing: .buffered, defer: false)
+            shell.contentViewController = split
+            shell.setContentSize(NSSize(width: 1200, height: 800))
             shell.setFrameOrigin(NSPoint(x: -20000, y: -20000))
             shell.orderFront(nil)
 
@@ -693,51 +706,40 @@ enum SelfTest {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try? "# One\n".write(to: folder.appendingPathComponent("One.md"),
                                  atomically: true, encoding: .utf8)
-            host.showFolder(folder)
-            host.view.layoutSubtreeIfNeeded()
 
-            let wide = host.sidebarStateForTest
-            check("sidebar: wide window docks it", wide.docked && wide.visible,
-                  "docked \(wide.docked), visible \(wide.visible)")
-            check("sidebar: docked, the page starts after it, never under it",
-                  wide.pageInset > 100, "page inset \(Int(wide.pageInset))")
+            let items = split.splitViewItems
+            check("sidebar: it is a real NSSplitViewItem sidebar",
+                  items.first?.behavior == .sidebar, "\(items.count) items")
+            check("sidebar: the page pane cannot be collapsed away",
+                  items.last?.canCollapse == false)
+            check("sidebar: it starts collapsed, before any folder is open",
+                  items.first?.isCollapsed == true)
 
-            // Narrow it. The sidebar undocks, and the page may only widen once
-            // the sidebar has actually gone.
-            shell.setContentSize(NSSize(width: 760, height: 800))
-            host.view.layoutSubtreeIfNeeded()
-            let narrow = host.sidebarStateForTest
-            check("sidebar: a narrow window undocks it", !narrow.docked)
-            check("sidebar: the page only takes the full width once it is gone",
-                  narrow.visible == false || narrow.pageInset > 100,
-                  "visible \(narrow.visible), page inset \(Int(narrow.pageInset))")
-
-            // Peek. It rides over the page as an inset card; the page holds still.
-            host.peekSidebarForTest()
-            host.view.layoutSubtreeIfNeeded()
-            let peek = host.sidebarStateForTest
-            check("sidebar: reaching for the edge brings it out", peek.visible)
-            check("sidebar: peeking, it is a card away from the edges",
-                  peek.cardInset > 0, "card inset \(Int(peek.cardInset))")
-            check("sidebar: peeking never drags the page left",
-                  peek.pageInset == narrow.pageInset,
-                  "\(Int(narrow.pageInset)) -> \(Int(peek.pageInset))")
-
-            // Pinning it on a narrow window docks it, and the page gives up room
-            // rather than being covered.
-            host.toggleFileTree(nil)
-            // Toggling animates, so the constants are not their new values until
-            // the animation has run. Reading them straight away compared the old
-            // ones and called it a failure.
+            split.showFolder(folder)
             RunLoop.current.run(until: Date().addingTimeInterval(0.4))
-            host.view.layoutSubtreeIfNeeded()
-            let pinned = host.sidebarStateForTest
-            check("sidebar: pinning docks it even on a narrow window",
-                  pinned.docked && pinned.visible)
-            check("sidebar: pinned, the page is inset for it",
-                  pinned.pageInset > 100, "page inset \(Int(pinned.pageInset))")
-            check("sidebar: pinned, it is flush rather than a floating card",
-                  pinned.cardInset == 0, "card inset \(Int(pinned.cardInset))")
+            split.view.layoutSubtreeIfNeeded()
+            check("sidebar: opening a folder opens it", split.isShowingFileTree)
+
+            // The reported bug, in the terms the split view makes available: the
+            // page's frame must begin after the sidebar's, never inside it.
+            let space = split.splitView
+            let sidebarFrame = space.convert(split.sidebar.view.bounds, from: split.sidebar.view)
+            let pageFrame = space.convert(split.page.view.bounds, from: split.page.view)
+            check("sidebar: the page starts where the sidebar ends",
+                  pageFrame.minX >= sidebarFrame.maxX - 1,
+                  "sidebar to \(Int(sidebarFrame.maxX)), page from \(Int(pageFrame.minX))")
+            check("sidebar: the page is not underneath it",
+                  !pageFrame.intersects(sidebarFrame.insetBy(dx: 1, dy: 0)),
+                  "page \(Int(pageFrame.minX))..\(Int(pageFrame.maxX))")
+
+            // Collapsing gives the width back to the page, which is the whole
+            // point of it being collapsible.
+            let widthWithSidebar = split.page.view.frame.width
+            split.splitViewItems.first?.isCollapsed = true
+            split.view.layoutSubtreeIfNeeded()
+            check("sidebar: collapsing gives the room to the page",
+                  split.page.view.frame.width > widthWithSidebar,
+                  "\(Int(widthWithSidebar)) -> \(Int(split.page.view.frame.width))")
 
             shell.orderOut(nil)
             try? FileManager.default.removeItem(at: folder)

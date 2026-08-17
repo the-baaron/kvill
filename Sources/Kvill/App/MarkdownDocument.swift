@@ -32,8 +32,8 @@ final class MarkdownDocument: NSDocument {
     override func makeWindowControllers() {
         let windowController = DocumentWindowController.create()
         addWindowController(windowController)
-        if let viewController = windowController.contentViewController as? DocumentViewController {
-            adopt(viewController)
+        if let split = windowController.contentViewController as? DocumentSplitViewController {
+            adopt(split.page)
         }
     }
 

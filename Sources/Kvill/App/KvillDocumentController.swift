@@ -113,12 +113,9 @@ final class KvillDocumentController: NSDocumentController {
         current.removeWindowController(windowController)
         fresh.addWindowController(windowController)
 
-        // Setting a content view controller resizes the window to that view's
-        // fitting size, and the editor has no intrinsic one, so the frame is put
-        // back afterwards.
-        let frame = window.frame
-        window.contentViewController = editor
-        window.setFrame(frame, display: true)
+        // Into the split view's page pane, which keeps the sidebar where it is
+        // and lets AppKit deal with the geometry.
+        (window.contentViewController as? DocumentSplitViewController)?.showPage(editor)
 
         current.autosave(withImplicitCancellability: false) { _ in current.close() }
         return true
@@ -133,22 +130,35 @@ final class KvillDocumentController: NSDocumentController {
     func openFolder(_ folder: URL) {
         FolderAccess.remember(folder)
 
-        if let controller = NSApp.keyWindow?.contentViewController as? DocumentViewController {
-            controller.showFolder(folder)
+        if let window = NSApp.keyWindow,
+           let split = window.contentViewController as? DocumentSplitViewController {
+            split.showFolder(folder)
+            // A blank untitled document is what a launch puts up when it has
+            // nothing else to show, and opening a folder gives it something.
+            // Without this you got an empty page beside a sidebar listing four
+            // files, which reads as the app having failed to open any of them.
+            if let current = document(for: window), current.fileURL == nil,
+               !current.isDocumentEdited, let first = Self.firstMarkdown(in: folder) {
+                openInPlace(first, replacing: current)
+            }
             return
         }
         // Nothing open to attach it to, so the first document in the folder
         // becomes the window the tree lives in.
-        let first = (try? FileManager.default.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]))?
-            .first { FileTreeView.isMarkdown($0) }
-
-        guard let first else { return }
+        guard let first = Self.firstMarkdown(in: folder) else { return }
         openDocument(withContentsOf: first, display: true) { document, _, _ in
-            guard let controller = document?.windowControllers.first?
-                .contentViewController as? DocumentViewController else { return }
-            controller.showFolder(folder)
+            guard let split = document?.windowControllers.first?
+                .contentViewController as? DocumentSplitViewController else { return }
+            split.showFolder(folder)
         }
+    }
+
+    /// The first Markdown file in a folder, which is what a folder opens to.
+    static func firstMarkdown(in folder: URL) -> URL? {
+        (try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]))?
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            .first { FileTreeView.isMarkdown($0) }
     }
 
     /// True when the start of the file reads as text.

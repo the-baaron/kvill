@@ -29,7 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // starts. Used to record the App Review demonstration.
         DemoDriver.runIfRequested()
 
-        openUntitledIfUserLaunched()
 
         // With the background setting on, closing the last window leaves the app
         // running. It steps out of the Dock rather than sitting there empty, and
@@ -47,38 +46,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Except at login, where nobody asked for one: an app that starts itself
     /// and puts an empty window in your face has misread the instruction.
     ///
-    /// AppKit asks this on every launch and cannot say which kind it is, so with
-    /// the background setting on the answer used to be no to both. That made the
-    /// app unreachable: no window, and `updateActivationPolicy` had already
-    /// taken the Dock icon and the menu bar away, so there was nothing left to
-    /// click and no File menu to open a folder from. The only way back in was to
-    /// double-click a document in the Finder. `openUntitledIfUserLaunched`
-    /// resolves the ambiguity a moment later instead.
+    /// AppKit only asks this when the launch has nothing else to open, so a
+    /// document double-clicked in the Finder never reaches here. Answering it
+    /// somewhere else, on a delay, was a mistake: the delay ran before the
+    /// launch's own Apple Event had been delivered, so opening a file put an
+    /// empty Untitled window up beside it.
+    ///
+    /// There is no API for "this launch is the login item", so the clock decides:
+    /// a login item starts within seconds of the console session, a person opens
+    /// the app later. If the session start cannot be read at all, the window
+    /// opens, because the bug this replaced left the app with no window, no Dock
+    /// icon and no menu bar, and nothing at all to click.
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
-        !BackgroundService.isEnabled || !NSDocumentController.shared.documents.isEmpty
+        Self.opensBlankDocument(
+            backgroundEnabled: BackgroundService.isEnabled,
+            secondsSinceLogin: Self.consoleLoginDate.map { Date().timeIntervalSince($0) })
     }
 
-    /// Opens the blank document a launch would have opened, unless this launch
-    /// is macOS starting the login item.
-    ///
-    /// There is no API that says which it is. Activation looked like the answer,
-    /// on the theory that opening an app brings it to the front and launchd does
-    /// not, but it was measured wrong: `open` an app while a terminal holds
-    /// focus and `NSApp.isActive` is still false a second later, so a real
-    /// launch got no window. What does hold is the clock. A login item starts
-    /// within seconds of the session; a person opens the app later, usually much
-    /// later.
-    ///
-    /// If the session start cannot be read, a window opens. Every failure here
-    /// resolves towards being reachable, because the bug this replaces left the
-    /// app with no window, no Dock icon and no menu bar, and nothing to click.
-    private func openUntitledIfUserLaunched() {
-        guard BackgroundService.isEnabled else { return }
-        guard let login = Self.consoleLoginDate,
-              Date().timeIntervalSince(login) < 90 else {
-            showBlankDocument()
-            return
-        }
+    /// The decision on its own, with no clock and no defaults, so both branches
+    /// can be checked. Neither can be reached otherwise: a test cannot log the
+    /// user in, and a test machine is always hours past its own login.
+    static func opensBlankDocument(
+        backgroundEnabled: Bool, secondsSinceLogin: TimeInterval?
+    ) -> Bool {
+        // Without the background setting the app is its windows, so it always
+        // opens one.
+        guard backgroundEnabled else { return true }
+        // Unreadable session start resolves towards being reachable, because the
+        // bug this replaced left the app with no window, no Dock icon and no
+        // menu bar, and nothing at all to click.
+        guard let secondsSinceLogin else { return true }
+        return secondsSinceLogin >= 90
     }
 
     /// When the console session began, from `utmpx`. Nil if it cannot be read.

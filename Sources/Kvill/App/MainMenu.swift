@@ -296,7 +296,9 @@ enum MainMenu {
             markers.tag = MenuTag.markers
 
             menu.addItem(.separator())
-            add(menu, "Show Sidebar", #selector(DocumentViewController.toggleFileTree(_:)), "s",
+            // AppKit's own action. The standard item, the standard shortcut, and
+            // the title flips between Show and Hide without this app doing it.
+            add(menu, "Show Sidebar", #selector(NSSplitViewController.toggleSidebar(_:)), "s",
                 modifiers: [.command, .control])
             add(menu, "Hide Interface", #selector(DocumentViewController.toggleInterface(_:)), ".")
             add(menu, "Display Options", #selector(DocumentViewController.toggleThemePanel(_:)), "t")
