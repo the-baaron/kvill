@@ -32,7 +32,16 @@ final class MarkdownDocument: NSDocument {
     override func makeWindowControllers() {
         let windowController = DocumentWindowController.create()
         addWindowController(windowController)
+        bind(to: windowController)
+    }
 
+    /// Points a window controller at this document.
+    ///
+    /// Separate from `makeWindowControllers` because a window is not always new.
+    /// Choosing a file in the sidebar hands the window it is already in to the
+    /// next document, so the two behave like tabs without looking like them, and
+    /// that path needs the same wiring without a second window being made.
+    func bind(to windowController: NSWindowController) {
         guard let viewController = windowController.contentViewController as? DocumentViewController else {
             return
         }

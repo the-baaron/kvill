@@ -57,6 +57,51 @@ final class KvillDocumentController: NSDocumentController {
             withContentsOf: url, display: displayDocument, completionHandler: completionHandler)
     }
 
+    /// Opens `url` into a window that is already on screen, in place of what it
+    /// is showing.
+    ///
+    /// Choosing a file in the sidebar used to call `openDocument(display: true)`,
+    /// which is by definition a new document in a new window, so a folder of
+    /// twelve notes read on screen as twelve windows. One file per window is
+    /// still the model; this only says that *switching* reuses the window you
+    /// are looking at, the way tabs behave, without any tab bar appearing.
+    ///
+    /// The window controller is moved between documents rather than the text
+    /// being swapped underneath one, so each document keeps its own undo stack,
+    /// dirty state and autosave.
+    @discardableResult
+    func openInPlace(_ url: URL, replacing current: NSDocument) -> Bool {
+        if current.fileURL == url { return true }
+
+        // Already open in its own window: raise that instead of opening a
+        // second copy, which AppKit would otherwise refuse in a confusing way.
+        if let already = document(for: url) {
+            already.windowControllers.first?.window?.makeKeyAndOrderFront(nil)
+            return true
+        }
+
+        // An untitled document with unsaved work has nowhere to autosave to, so
+        // its window is left alone and the new file gets its own.
+        guard current.fileURL != nil || !current.isDocumentEdited,
+              let windowController = current.windowControllers.first,
+              let fresh = try? makeDocument(withContentsOf: url, ofType: typeName(for: url))
+        else { return false }
+
+        addDocument(fresh)
+        current.removeWindowController(windowController)
+        fresh.addWindowController(windowController)
+        (fresh as? MarkdownDocument)?.bind(to: windowController)
+        // Autosave is in place and on a delay, so the outgoing document is asked
+        // to write before it goes rather than being closed on top of edits that
+        // have not landed yet.
+        current.autosave(withImplicitCancellability: false) { _ in current.close() }
+        return true
+    }
+
+    private func typeName(for url: URL) -> String {
+        (try? typeForContents(of: url)) ?? "net.daringfireball.markdown"
+    }
+
     /// Opens a folder: remember it, then show its tree beside whichever document
     /// is already open, or beside the first one in the folder.
     func openFolder(_ folder: URL) {
