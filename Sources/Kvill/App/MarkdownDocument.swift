@@ -35,24 +35,18 @@ final class MarkdownDocument: NSDocument {
         bind(to: windowController)
     }
 
-    /// Lets go of the window's view controller without closing the document.
-    ///
-    /// Handing a window to another document leaves this one still holding the
-    /// view controller it used to drive, and `fileURL`'s observer writes into
-    /// that controller. Closing a document sets `fileURL`, so one on its way out
-    /// reached into a window it no longer owned and put its own name back: every
-    /// switch in the sidebar left the window showing the file before last.
-    func releaseController() {
-        controller = nil
-        watcher = nil
-    }
-
     /// Points a window controller at this document.
     ///
-    /// Separate from `makeWindowControllers` because a window is not always new.
-    /// Choosing a file in the sidebar hands the window it is already in to the
-    /// next document, so the two behave like tabs without looking like them, and
-    /// that path needs the same wiring without a second window being made.
+    /// A window belongs to exactly one document for its whole life, and this is
+    /// called once, from `makeWindowControllers`. It is a separate method only
+    /// so the wiring reads in one piece.
+    ///
+    /// Handing a live window from one document to another is not a thing that
+    /// can be done here, however much it would make switching files feel like
+    /// tabs. `data(ofType:)` reads the text out of the view controller, so a view
+    /// controller shared by two documents means the one being replaced autosaves
+    /// the other one's text into its own file. That shipped, and it silently
+    /// rewrote four of someone's notes with each other's contents.
     func bind(to windowController: NSWindowController) {
         guard let viewController = windowController.contentViewController as? DocumentViewController else {
             return

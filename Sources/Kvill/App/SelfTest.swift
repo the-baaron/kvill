@@ -530,73 +530,80 @@ enum SelfTest {
             check("palette builds: \(section.title)", built > 0, "\(built) rows")
         }
 
-        // --- Switching files in one window -------------------------------------
-        // Real documents through the real controller, because the bug this
-        // guards against only exists between them: the document being replaced
-        // is closed after its autosave, so for a moment it sits on the
-        // controller's list with no window. Switching back to a file just left
-        // found that one, had nothing to raise, and reported success, so the
-        // sidebar appeared to ignore every other click.
-        //
-        // The controller is built here if the shared one is not Kvill's, which
-        // headlessly it is not: `--selftest` exits before main.swift makes it.
-        // The first version of this block asked for it with `as?` and skipped
-        // the whole test when the cast failed, so it passed by not running.
+        // --- Two open files never touch each other's contents -------------
+        // The regression that matters most in this app. A view controller was
+        // once shared between documents so a window could be reused when
+        // switching files in the sidebar. `data(ofType:)` reads the text out of
+        // the view controller, so the document being replaced autosaved the
+        // incoming file's text into its own path. Four notes ended up holding
+        // each other's contents, two of them identical, with stray keystrokes in
+        // the wrong files. This opens two documents, types a distinct line into
+        // each, saves both, and reads the bytes back off disk.
         do {
             let documentController = (NSDocumentController.shared as? KvillDocumentController)
                 ?? KvillDocumentController()
             let folder = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("kvill-switch-\(ProcessInfo.processInfo.processIdentifier)")
+                .appendingPathComponent("kvill-isolation-\(ProcessInfo.processInfo.processIdentifier)")
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let first = folder.appendingPathComponent("First.md")
-            let second = folder.appendingPathComponent("Second.md")
-            try? "# First\n\nOne.\n".write(to: first, atomically: true, encoding: .utf8)
-            try? "# Second\n\nTwo.\n".write(to: second, atomically: true, encoding: .utf8)
 
-            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.35)) }
-            var opened: NSDocument?
-            documentController.openDocument(withContentsOf: first, display: true) { document, _, _ in
-                opened = document
+            let files = ["Alpha.md": "# Alpha\n\nAlpha body.\n",
+                         "Beta.md": "# Beta\n\nBeta body.\n"]
+            for (name, body) in files {
+                try? body.write(to: folder.appendingPathComponent(name), atomically: true, encoding: .utf8)
+            }
+            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
+
+            var opened: [String: NSDocument] = [:]
+            for name in files.keys.sorted() {
+                documentController.openDocument(
+                    withContentsOf: folder.appendingPathComponent(name), display: true
+                ) { document, _, _ in
+                    if let document { opened[name] = document }
+                }
+                settled()
+            }
+
+            check("isolation: both files opened", opened.count == 2, "\(opened.count)")
+            check("isolation: each file got its own window",
+                  Set(opened.values.compactMap { $0.windowControllers.first }).count == 2)
+            check("isolation: each window got its own editor",
+                  Set(opened.values.compactMap {
+                      ($0.windowControllers.first?.contentViewController as? DocumentViewController)
+                          .map(ObjectIdentifier.init)
+                  }).count == 2)
+
+            // Type something only ever typed into this one, then save both.
+            for (name, document) in opened {
+                let editor = document.windowControllers.first?
+                    .contentViewController as? DocumentViewController
+                editor?.editor.textView.insertText(
+                    "\nTyped into \(name)\n",
+                    replacementRange: NSRange(location: 0, length: 0))
+                document.updateChangeCount(.changeDone)
             }
             settled()
-
-            if let one = opened, let window = one.windowControllers.first?.window {
-                let windowsBefore = documentController.documents.compactMap {
-                    $0.windowControllers.first?.window
-                }.count
-
-                check("switch: opening the second file reuses the window",
-                      documentController.openInPlace(second, replacing: one))
-                settled()
-
-                let showing = window.contentViewController as? DocumentViewController
-                check("switch: the window shows the file that was clicked",
-                      showing?.documentURL?.lastPathComponent == "Second.md",
-                      showing?.documentURL?.lastPathComponent ?? "nothing")
-                check("switch: no second window appeared",
-                      documentController.documents.compactMap {
-                          $0.windowControllers.first?.window
-                      }.count <= windowsBefore)
-
-                // The regression. Going back has to work, and has to work
-                // immediately rather than only once the outgoing document has
-                // finished closing.
-                if let nowShowing = documentController.document(for: window) {
-                    check("switch: going straight back to the first file works",
-                          documentController.openInPlace(first, replacing: nowShowing))
-                    settled()
-                    let back = window.contentViewController as? DocumentViewController
-                    check("switch: and the window really shows it again",
-                          back?.documentURL?.lastPathComponent == "First.md",
-                          back?.documentURL?.lastPathComponent ?? "nothing")
-                } else {
-                    check("switch: the window still belongs to a document", false)
-                }
-
-                documentController.documents.forEach { $0.close() }
-            } else {
-                check("switch: a document opened to switch away from", false)
+            for document in opened.values {
+                document.save(withDelegate: nil, didSave: nil, contextInfo: nil)
             }
+            settled()
+            settled()
+
+            for name in files.keys.sorted() {
+                let onDisk = (try? String(
+                    contentsOf: folder.appendingPathComponent(name), encoding: .utf8)) ?? ""
+                let other = files.keys.first { $0 != name } ?? ""
+                let flat = onDisk.replacingOccurrences(of: "\n", with: "\u{23CE}")
+                check("isolation: \(name) was actually written and read back",
+                      onDisk.count > 20, "\(onDisk.count) bytes")
+                check("isolation: \(name) still holds its own text",
+                      onDisk.contains("Typed into \(name)"), String(flat.prefix(50)))
+                check("isolation: \(name) holds none of \(other)",
+                      !onDisk.contains("Typed into \(other)")
+                        && !onDisk.contains("# \(other.dropLast(3))"),
+                      String(flat.prefix(50)))
+            }
+
+            opened.values.forEach { $0.close() }
             try? FileManager.default.removeItem(at: folder)
         }
 

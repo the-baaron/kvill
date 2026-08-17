@@ -337,17 +337,28 @@ final class DocumentViewController: NSViewController {
     func showFolder(_ folder: URL) {
         let tree = fileTree ?? {
             let made = FileTreeView()
-            made.onOpen = { [weak self] url in
-                let controller = NSDocumentController.shared as? KvillDocumentController
-                // Switching files reuses this window, the way a tab would. The
-                // sidebar has to be put back either way, otherwise clicking a
-                // file in it is a way of losing it.
-                if let self, let window = self.view.window,
-                   let current = NSDocumentController.shared.document(for: window),
-                   controller?.openInPlace(url, replacing: current) == true {
-                    (window.contentViewController as? DocumentViewController)?.showFolder(folder)
-                    return
-                }
+            made.onOpen = { url in
+                // One file, one window. Do not be tempted to reuse this window
+                // for the next file.
+                //
+                // That was tried, by handing the window controller from one
+                // document to the next, and it corrupted people's files. A
+                // document reads its text from this view controller when it
+                // saves. Share the view controller between two documents and the
+                // outgoing one's autosave, which is on a delay, reads the text of
+                // the file that replaced it and writes that into its own path.
+                // Switching quickly through four notes left every one of them
+                // holding another one's content, two of them holding the same
+                // content, and stray keystrokes in the wrong documents.
+                //
+                // The editor is the document's source of truth, so there can only
+                // ever be one document per editor. Making switching feel like
+                // tabs means giving each document its own editor and swapping
+                // which one the window shows, not moving the window between
+                // documents.
+                //
+                // The new document gets the tree too, otherwise clicking a file
+                // in the sidebar is a way of losing the sidebar.
                 NSDocumentController.shared.openDocument(
                     withContentsOf: url, display: true) { document, _, _ in
                     (document?.windowControllers.first?.contentViewController
