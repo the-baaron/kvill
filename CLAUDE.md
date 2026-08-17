@@ -25,8 +25,9 @@ main claim, not just in a benchmark.
 | `--tree folder out.png` | Draws the file-tree sidebar, `--theme` optional |
 | `--login-item [status\|on\|off]` | Reads what macOS thinks of the login item, not what the setting claims |
 | `./store/make-screenshots.sh` | Regenerates all five App Store screenshots |
-| `scripts/make-portfolio.swift` | Composes a rendered page in a window at any canvas size, `--wash HEX A` to fade it behind text |
-| `scripts/make-motif.swift` | Draws the hanging-marker signature as an abstract |
+| `./store/make-portfolio-assets.sh` | Builds all ten baars.design case-study images and the wordmark, from the app |
+| `scripts/make-portfolio.swift` | Composes a rendered page in a window at any canvas size. `--wash HEX A` flat, `--fade HEX A0 A1 HOLD [END]` graded, `--drop F` |
+| `scripts/make-motif.swift` | Draws the hanging-marker signature as an abstract. `--band F` composes inside the part that survives a centre crop |
 | `scripts/make-logo.swift` | Writes the wordmark as SVG outlines |
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
 | `node store/submit.mjs` | Submits the current version for review |
@@ -57,6 +58,13 @@ API against a local CSR and chaining through **WWDR G3**, not G5.
 2.1 "Information Needed" with that whole section empty: no contact name, email,
 phone or notes. Apple's own message says to put the answers in the Notes field.
 `store/review-notes.md` holds the text and `push-review-notes.mjs` sends it.
+
+The contact email and phone are **not in this repository**, because it is
+public and a phone number on GitHub is indexed and cannot be taken back. The
+table in `review-notes.md` holds `$ASC_CONTACT_EMAIL` and `$ASC_CONTACT_PHONE`,
+which the pusher expands from `~/.appstoreconnect/env`. An unset variable stops
+the script rather than sending an empty string, since a blank contact section is
+the thing that caused the rejection in the first place.
 
 **App Review's actual words are not in the API.** Rejection reasons live in the
 Resolution Center, which is web only; `appStoreVersions` gives you the state
