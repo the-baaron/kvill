@@ -18,6 +18,9 @@ final class FileTreeView: NSView {
 
     private let outline = NSOutlineView()
     private let scrollView = NSScrollView()
+    /// The folder being shown, named above its files the way a source list
+    /// names its sections.
+    private let heading = NSTextField(labelWithString: "")
     private var root: Node?
 
     /// A folder or a Markdown file. Folders holding no Markdown are left out,
@@ -88,6 +91,11 @@ final class FileTreeView: NSView {
         NotificationCenter.default.addObserver(
             self, selector: #selector(themeChanged), name: .kvillThemeChanged, object: nil)
 
+        heading.font = .systemFont(ofSize: 11, weight: .semibold)
+        heading.lineBreakMode = .byTruncatingMiddle
+        heading.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(heading)
+
         scrollView.documentView = outline
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
@@ -95,9 +103,16 @@ final class FileTreeView: NSView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
         NSLayoutConstraint.activate([
+            // No inset of its own. The sidebar already holds this view clear of
+            // the traffic lights; a second 44 here made it 88 and left a hole
+            // above the first file.
+            heading.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            heading.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            heading.topAnchor.constraint(equalTo: topAnchor),
+
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor, constant: 44),
+            scrollView.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 6),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
     }
@@ -110,6 +125,7 @@ final class FileTreeView: NSView {
     /// belongs to the theme the way everything else in the window does.
     @objc private func themeChanged() {
         outline.reloadData()
+        applyHeadingColour()
         applyFloatingBackground()
     }
 
@@ -123,6 +139,10 @@ final class FileTreeView: NSView {
             guard isFloating != oldValue else { return }
             applyFloatingBackground()
         }
+    }
+
+    private func applyHeadingColour() {
+        heading.textColor = ThemeManager.shared.theme.colors.textSecondary
     }
 
     private func applyFloatingBackground() {
@@ -140,6 +160,7 @@ final class FileTreeView: NSView {
     func show(_ folder: URL) {
         guard FolderAccess.beginAccess(to: folder) else { return }
         root = Node(url: folder, isFolder: true)
+        heading.stringValue = folder.lastPathComponent
         outline.reloadData()
         outline.expandItem(nil, expandChildren: false)
         for node in root?.children ?? [] where node.isFolder {
@@ -231,6 +252,14 @@ extension FileTreeView: NSOutlineViewDataSource, NSOutlineViewDelegate {
         (item as? Node)?.isFolder ?? false
     }
 
+    /// The selected row is drawn here rather than by the source list, whose
+    /// highlight is a system grey that belongs to no palette and fades almost to
+    /// nothing when the sidebar is not the focused view. Which file is open is
+    /// worth saying at the same strength either way.
+    func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        ThemedTreeRow()
+    }
+
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?,
                      item: Any) -> NSView? {
         guard let node = item as? Node else { return nil }
@@ -278,5 +307,31 @@ extension FileTreeView: NSOutlineViewDataSource, NSOutlineViewDelegate {
             ? node.name
             : node.url.deletingPathExtension().lastPathComponent
         return cell
+    }
+}
+
+/// A sidebar row whose selection is the palette's, not the system's.
+///
+/// `NSOutlineView.style = .sourceList` paints a grey capsule that belongs to no
+/// theme, and drops it to a barely visible tint when the sidebar is not the
+/// focused view. In an editor with six palettes both are wrong: the row should
+/// be the palette's own selection colour, and it should say which file is open
+/// just as clearly when the caret is in the text.
+private final class ThemedTreeRow: NSTableRowView {
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none, isSelected else { return }
+        let colors = ThemeManager.shared.theme.colors
+        colors.selection.setFill()
+        NSBezierPath(
+            roundedRect: bounds.insetBy(dx: 8, dy: 1),
+            xRadius: 6, yRadius: 6
+        ).fill()
+    }
+
+    /// Focused or not makes no difference, which is the point.
+    override var isEmphasized: Bool {
+        get { true }
+        set { }
     }
 }
