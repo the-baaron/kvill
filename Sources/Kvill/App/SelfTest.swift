@@ -7,6 +7,18 @@ import AppKit
 /// The floating chrome is built from glass and visual-effect views, which never
 /// render in an off-screen window, so the only honest way to know whether they
 /// are wired up is to build the real view tree, lay it out, and interrogate it.
+/// A window that stays where it is put.
+///
+/// AppKit drags an off-screen window back onto the display when it is ordered
+/// front, so every window the checks built for layout appeared in front of
+/// whatever was on screen, and one was still there when they finished. Nothing
+/// here is meant to be looked at.
+private final class OffscreenWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
+}
+
 enum SelfTest {
 
     static func run(document: String?) -> Int32 {
@@ -17,6 +29,16 @@ enum SelfTest {
         func say(_ line: String) {
             FileHandle.standardError.write(Data((line + "\n").utf8))
         }
+        /// Takes a window off screen the moment a check has opened one.
+        ///
+        /// The checks open real documents, and a real document arrives in a
+        /// visible, centred window. Running them put a handful of windows in
+        /// front of whatever was there. Ordered out they still lay out, which is
+        /// all the checks want from them.
+        func hide(_ document: NSDocument?) {
+            document?.windowControllers.forEach { $0.window?.orderOut(nil) }
+        }
+
         func check(_ name: String, _ passed: Bool, _ detail: String = "") {
             let mark = passed ? "ok  " : "FAIL"
             if !passed { failures += 1 }
@@ -29,13 +51,11 @@ enum SelfTest {
         // --- Palettes -------------------------------------------------------
         let ids = Palettes.all.map(\.id)
         check("palettes registered", ids.count == 6, ids.joined(separator: ", "))
-        check("no translucent palettes remain",
-              !ids.contains("frost") && !ids.contains("onyx"),
-              ids.joined(separator: ", "))
+
 
         // --- The real view tree ---------------------------------------------
         let controller = DocumentViewController()
-        let window = NSWindow(
+        let window = OffscreenWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
@@ -431,12 +451,11 @@ enum SelfTest {
         let documentWindow = DocumentWindowController.create()
         check("window title bar is empty",
               documentWindow.window?.titleVisibility == .hidden)
+        // Closed again. It was left on screen, so running the checks put a
+        // stray empty window in front of whatever was there.
+        documentWindow.window?.orderOut(nil)
+        documentWindow.close()
 
-        check("a retired palette becomes one of the same darkness",
-              Palettes.theme(id: "onyx")?.isDark == true
-                && Palettes.theme(id: "frost")?.isDark == false,
-              "onyx -> \(Palettes.theme(id: "onyx")?.id ?? "nothing"), "
-                + "frost -> \(Palettes.theme(id: "frost")?.id ?? "nothing")")
 
         // --- Stale decorations --------------------------------------------------
         // Decorations are built from a parse and drawn later; a deletion in
@@ -541,6 +560,7 @@ enum SelfTest {
                     withContentsOf: folder.appendingPathComponent(name), display: true
                 ) { document, _, _ in
                     if let document { opened[name] = document }
+                    hide(document)
                 }
                 settled()
             }
@@ -599,6 +619,7 @@ enum SelfTest {
             var first: NSDocument?
             documentController.openDocument(withContentsOf: gamma, display: true) { d, _, _ in
                 first = d
+                hide(d)
             }
             settled()
 
@@ -636,6 +657,30 @@ enum SelfTest {
                 }
                 settled(); settled()
 
+                // Through the sidebar's own callback, which is the path a click
+                // takes. Calling openInPlace directly checks the mechanism but
+                // not the wiring, and the wiring is what broke: files opened in
+                // their own windows again while every direct check passed.
+                let windowsBefore = documentController.documents
+                    .compactMap { $0.windowControllers.first?.window }
+                    .filter { $0.isVisible }.count
+                if let hostSplit = window.contentViewController as? DocumentSplitViewController {
+                    hostSplit.openFromSidebarForTest(gamma)
+                    settled()
+                    let after = documentController.documents
+                        .compactMap { $0.windowControllers.first?.window }
+                        .filter { $0.isVisible }.count
+                    check("sidebar: choosing a file opens no second window",
+                          after <= windowsBefore, "\(windowsBefore) -> \(after)")
+                    check("sidebar: and the window it is in shows that file",
+                          (window.contentViewController as? DocumentSplitViewController)?
+                            .page.documentURL?.lastPathComponent == "Gamma.md",
+                          (window.contentViewController as? DocumentSplitViewController)?
+                            .page.documentURL?.lastPathComponent ?? "nothing")
+                } else {
+                    check("sidebar: the window holds a split view", false)
+                }
+
                 let g = (try? String(contentsOf: gamma, encoding: .utf8)) ?? ""
                 let d = (try? String(contentsOf: delta, encoding: .utf8)) ?? ""
                 check("switch: Gamma.md kept the text typed into it",
@@ -662,15 +707,18 @@ enum SelfTest {
         // it is genuinely the standard component and that the page is beside it
         // rather than beneath it.
         do {
-            let split = DocumentSplitViewController(page: DocumentViewController())
-            let shell = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
-                styleMask: [.titled, .resizable, .fullSizeContentView],
-                backing: .buffered, defer: false)
-            shell.contentViewController = split
-            shell.setContentSize(NSSize(width: 1200, height: 800))
-            shell.setFrameOrigin(NSPoint(x: -20000, y: -20000))
-            shell.orderFront(nil)
+            // The app's own window, not a bare NSWindow assembled here. The
+            // hand-built one had no opaque background and no title bar setup, so
+            // it drew a see-through border around the sidebar: a thing that only
+            // ever existed inside the checks, which is the worst kind of thing to
+            // be looking at when judging how the app looks.
+            let host = DocumentWindowController.create()
+            guard let split = host.window?.contentViewController
+                    as? DocumentSplitViewController else {
+                check("sidebar: the app's window holds a split view", false)
+                return failures == 0 ? 0 : 1
+            }
+            host.window?.setContentSize(NSSize(width: 1200, height: 800))
 
             let folder = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("kvill-sidebar-\(ProcessInfo.processInfo.processIdentifier)")
@@ -748,9 +796,21 @@ enum SelfTest {
                   split.page.view.frame.width > widthWithSidebar,
                   "\(Int(widthWithSidebar)) -> \(Int(split.page.view.frame.width))")
 
-            shell.orderOut(nil)
+            host.close()
             try? FileManager.default.removeItem(at: folder)
         }
+
+        // Nothing this run opened may still be on screen. A check that leaves a
+        // window behind is a check that changed the machine it ran on.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        let leftBehind = NSApp.windows.filter {
+            $0.isVisible && $0.frame.origin.x > -10000
+        }
+        check("the checks left no windows on screen", leftBehind.isEmpty,
+              leftBehind.map {
+                  "\(type(of: $0)) \(type(of: $0.contentViewController ?? NSViewController())) "
+                    + "at \(Int($0.frame.origin.x)),\(Int($0.frame.origin.y))"
+              }.joined(separator: " | "))
 
         say(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
         return failures == 0 ? 0 : 1

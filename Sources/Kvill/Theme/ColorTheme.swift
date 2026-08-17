@@ -321,18 +321,5 @@ enum Palettes {
         paper, ink, sepia, nord, contrastLight, contrastDark,
     ]
 
-    /// Palettes that used to exist, and what a saved one becomes.
-    ///
-    /// Frost and Onyx were translucent: the page was painted semi-transparent
-    /// over a window-level blur. They cost a great deal of machinery, a black
-    /// frame around the sidebar, and a hard seam down the middle of the window,
-    /// and they are gone. Someone who was using Onyx should land on a dark
-    /// palette rather than be thrown into a light one on upgrade.
-    static let retired: [String: String] = ["frost": paper.id, "onyx": ink.id]
-
-    static func theme(id: String) -> ColorTheme? {
-        if let found = all.first(where: { $0.id == id }) { return found }
-        guard let replacement = retired[id] else { return nil }
-        return all.first { $0.id == replacement }
-    }
+    static func theme(id: String) -> ColorTheme? { all.first { $0.id == id } }
 }

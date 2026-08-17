@@ -97,6 +97,11 @@ final class FileTreeView: NSView {
         addSubview(heading)
 
         scrollView.documentView = outline
+        // A source list adds its own padding above the first row, and the scroll
+        // view adds more by adjusting its insets for the window. Between them
+        // the folder's name floated well clear of its files.
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = .init(top: 0, left: 0, bottom: 0, right: 0)
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder

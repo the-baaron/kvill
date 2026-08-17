@@ -32,6 +32,13 @@ func startHeadless() {
     application.finishLaunching()
 }
 
+// Built before any mode branches, because the first document controller created
+// becomes the shared one. The self test needs the real subclass to be `.shared`,
+// or it checks a path the app never takes: code that casts
+// `NSDocumentController.shared` to this type would get nil in the test and fall
+// down its own error branch, which is exactly the regression this hid.
+let documentController = KvillDocumentController()
+
 if CommandLine.arguments.contains("--selftest") {
     startHeadless()
     let document = CommandLine.arguments.last.flatMap { $0.hasSuffix(".md") ? $0 : nil }
@@ -91,10 +98,6 @@ if let request = ScreenshotRenderer.parse(CommandLine.arguments) {
     startHeadless()
     exit(ScreenshotRenderer.run(request))
 }
-
-// The first document controller created becomes the shared one, so Kvill's own
-// subclass has to be built here, before AppKit reaches for the stock class.
-let documentController = KvillDocumentController()
 
 let delegate = AppDelegate()
 application.delegate = delegate

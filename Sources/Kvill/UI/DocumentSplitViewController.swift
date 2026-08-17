@@ -95,6 +95,11 @@ final class DocumentSplitViewController: NSSplitViewController {
         return sidebar.tree.documentCount > 1
     }
 
+    /// Stands in for a click on a row, so the whole path can be checked rather
+    /// than only `openInPlace` underneath it. The regression this exists for was
+    /// files opening in their own windows again while the direct checks passed.
+    func openFromSidebarForTest(_ url: URL) { open(url) }
+
     /// Called when a file is chosen in the sidebar.
     private func open(_ url: URL) {
         guard let window = view.window,

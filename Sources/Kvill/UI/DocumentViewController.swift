@@ -16,7 +16,6 @@ final class DocumentViewController: NSViewController {
     private let dragArea = WindowDragArea()
     private let titleLabel = NSTextField(labelWithString: "")
     private var toast: ToastView?
-    /// reads as Frost or Onyx rather than as bare system blur.
     /// Built on first use. Eleven SF Symbol buttons and a glass backdrop is real
     /// work, and none of it is needed until there is a selection to act on.
     private var selectionToolbar: SelectionToolbarView?
@@ -68,7 +67,7 @@ final class DocumentViewController: NSViewController {
         sidebarToggleLeading = sidebarToggle.leadingAnchor.constraint(
             equalTo: container.leadingAnchor, constant: Self.toggleClearOfLights)
         chromeTop = optionsBar.topAnchor.constraint(
-            equalTo: container.topAnchor, constant: Self.chromeTopFallback)
+            equalTo: container.topAnchor, constant: Self.chromeInset)
 
         NSLayoutConstraint.activate([
             editorLeading,
@@ -85,7 +84,7 @@ final class DocumentViewController: NSViewController {
             dragArea.topAnchor.constraint(equalTo: container.topAnchor),
             dragArea.heightAnchor.constraint(equalToConstant: WindowDragArea.height),
 
-            optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            optionsBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.chromeInset),
             chromeTop,
 
             sidebarToggleLeading,
@@ -149,8 +148,13 @@ final class DocumentViewController: NSViewController {
     /// button landed on top of them.
     private static let toggleBesideText: CGFloat = 18
     private static let toggleClearOfLights: CGFloat = 88
-    /// Until the window exists and the real buttons can be measured.
-    private static let chromeTopFallback: CGFloat = 16
+    /// The buttons sit as far from the top as the options button sits from the
+    /// side, so the corner reads as one measurement rather than two.
+    ///
+    /// They used to be centred on the traffic lights, measured off
+    /// `standardWindowButton`. That put them higher than this, and the two
+    /// cannot both be true: the lights' centre is the system's to place.
+    private static let chromeInset: CGFloat = 18
 
     override func viewWillLayout() {
         super.viewWillLayout()
@@ -177,26 +181,9 @@ final class DocumentViewController: NSViewController {
         if abs(sidebarToggleLeading.constant - wanted) > 0.5 {
             sidebarToggleLeading.constant = wanted
         }
-        alignChromeWithTrafficLights()
     }
 
-    /// Puts the floating buttons on the same centre line as the traffic lights.
-    ///
-    /// Measured off the real buttons rather than written as a number, because
-    /// the title bar's height is the system's to decide and changes with the
-    /// toolbar style and the OS version. `standardWindowButton` is where they
-    /// actually are.
-    private func alignChromeWithTrafficLights() {
-        guard let window = view.window,
-              let close = window.standardWindowButton(.closeButton) else { return }
-        let inWindow = close.convert(close.bounds, to: nil)
-        let inContainer = view.convert(inWindow, from: nil)
-        // The container is not flipped, so the top edge is maxY.
-        let fromTop = view.bounds.maxY - inContainer.midY
-        let wanted = (fromTop - SidebarToggleButton.size / 2).rounded()
-        guard wanted > 0, abs(chromeTop.constant - wanted) > 0.5 else { return }
-        chromeTop.constant = wanted
-    }
+
 
     override func viewDidAppear() {
         super.viewDidAppear()
