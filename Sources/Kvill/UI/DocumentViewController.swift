@@ -161,9 +161,20 @@ final class DocumentViewController: NSViewController {
         // No sidebar worth opening means no button offering to open it.
         sidebarToggle.isHidden = ThemeManager.shared.chromeHidden
             || !(split?.hasSomethingToSwitchBetween ?? false)
-        let sidebarOpen = split?.isShowingFileTree ?? false
-        let wanted = sidebarOpen ? Self.toggleBesideText : Self.toggleClearOfLights
-        if sidebarToggleLeading.constant != wanted {
+
+        // Follows the page's own edge rather than flipping between two numbers.
+        //
+        // The traffic lights are at a fixed place in the window, so what the
+        // button has to clear is a distance from the *window's* left edge, not
+        // from the page's. Subtracting where the page currently starts gives an
+        // inset that shrinks smoothly as the sidebar slides in and the page
+        // moves right, and settles at its own margin once it is past the lights.
+        // Switching on whether the sidebar is open flipped the constant the
+        // instant the collapse began, so the button jumped while the sidebar was
+        // still sliding.
+        let pageStartsAt = view.convert(NSPoint.zero, to: nil).x
+        let wanted = max(Self.toggleBesideText, Self.toggleClearOfLights - pageStartsAt)
+        if abs(sidebarToggleLeading.constant - wanted) > 0.5 {
             sidebarToggleLeading.constant = wanted
         }
         alignChromeWithTrafficLights()
