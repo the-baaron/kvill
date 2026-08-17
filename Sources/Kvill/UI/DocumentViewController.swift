@@ -25,6 +25,9 @@ final class DocumentViewController: NSViewController {
     /// documents never do.
     private var fileTree: FileTreeView?
     private var treeWidth: NSLayoutConstraint!
+    private var treeLeading: NSLayoutConstraint!
+    private var treeTop: NSLayoutConstraint!
+    private var treeBottom: NSLayoutConstraint!
     private var editorLeading: NSLayoutConstraint!
 
     private var toolbarLeading: NSLayoutConstraint!
@@ -379,118 +382,168 @@ final class DocumentViewController: NSViewController {
             }
             view.addSubview(made, positioned: .below, relativeTo: dragArea)
             treeWidth = made.widthAnchor.constraint(equalToConstant: 220)
-            NSLayoutConstraint.activate([
-                made.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                made.topAnchor.constraint(equalTo: view.topAnchor),
-                made.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-                treeWidth,
-            ])
+            // Flush to the window's edges when docked, inset as a card when it
+            // is peeking over the page. The constants move between the two.
+            treeLeading = made.leadingAnchor.constraint(equalTo: view.leadingAnchor)
+            treeTop = made.topAnchor.constraint(
+                equalTo: view.topAnchor, constant: WindowDragArea.height)
+            treeBottom = made.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            NSLayoutConstraint.activate([treeLeading, treeTop, treeBottom, treeWidth])
             fileTree = made
             return made
         }()
 
         tree.show(folder)
         tree.select(documentURL)
-        // Asking for a folder is asking to see it, even on a narrow window,
-        // where it floats over the page rather than pushing it.
-        sidebarWanted = true
+        // Asking for a folder is asking to see it. A wide window is already
+        // docked by default so there is nothing to say; a narrow one peeks, so
+        // the folder is visibly there without taking a fifth of the page from
+        // someone who did not ask for that.
+        //
+        // Deliberately not pinned. Pinning here made opening a folder an
+        // permanent answer to a question about window width, so narrowing the
+        // window afterwards could never undock it again.
+        if isNarrow { sidebarPeeking = true }
         updateTreeLayout(animated: false)
         view.needsLayout = true
     }
 
-    // MARK: - The sidebar, wide and narrow
+    // MARK: - The sidebar: docked, or peeking over the page
 
-    /// Below this the sidebar floats over the page instead of pushing it aside.
+    /// Two states, kept apart, which is the whole lesson of the first attempt.
     ///
-    /// A 220pt sidebar out of a 900pt window is a quarter of the writing
-    /// surface, and the page already owes another 63pt of what is left to the
-    /// gutter the syntax markers hang in. On a small window it is the text
-    /// column that gets squeezed, which is the one thing that should not.
-    /// Above this width there is room for both, and pushing reads better,
-    /// because then nothing is covering anything.
-    private static let sidebarPushesAbove: CGFloat = 1040
+    /// **Docked.** The sidebar owns its strip of the window. The page begins
+    /// where the sidebar ends and is never underneath it.
+    ///
+    /// **Peeking.** The sidebar is off, and reaching for the left edge slides it
+    /// in as a card over the page, inset from the window's edges with a shadow
+    /// under it, until the pointer leaves. The page does not move, because the
+    /// covering is momentary and was asked for.
+    ///
+    /// Mixing them is what went wrong: on a narrow window the page was given the
+    /// full width, moving it left, and the sidebar was then drawn on top of it.
+    /// The page both moved the wrong way and got covered. A page never moves
+    /// towards a sidebar that is appearing.
 
-    /// Whether the sidebar is over the page rather than beside it.
-    var sidebarFloats: Bool { view.bounds.width < Self.sidebarPushesAbove }
+    /// Below this a sidebar is not worth a fifth of the window by default, so it
+    /// starts off and peeks instead. Above it, docked.
+    private static let docksByDefaultAbove: CGFloat = 1040
 
-    /// Set by the menu item. Nil means "decide from the width", which is the
-    /// state until someone expresses a preference.
-    private var sidebarWanted: Bool?
+    /// What the reader asked for. Nil until they say, which is when the width
+    /// decides.
+    private var sidebarPinned: Bool?
 
-    /// Whether the pointer is near enough the left edge to be reaching for it.
-    private var sidebarReachedFor = false
+    /// The pointer is at the left edge and the sidebar is riding over the page.
+    private var sidebarPeeking = false
 
-    private var sidebarShowing: Bool {
+    private var isNarrow: Bool { view.bounds.width < Self.docksByDefaultAbove }
+
+    /// Docked means it takes space from the page rather than covering it.
+    private var sidebarDocked: Bool {
         guard fileTree != nil else { return false }
-        if let wanted = sidebarWanted { return wanted || sidebarReachedFor }
-        return !sidebarFloats || sidebarReachedFor
+        return sidebarPinned ?? !isNarrow
     }
 
     @objc func toggleFileTree(_ sender: Any?) {
         guard fileTree != nil else { return }
-        sidebarWanted = !(sidebarWanted ?? !sidebarFloats)
-        sidebarReachedFor = false
+        sidebarPinned = !sidebarDocked
+        sidebarPeeking = false
         updateTreeLayout(animated: true)
     }
 
-    /// Reveals or hides the sidebar and decides whether the page moves for it.
+    /// Places the sidebar and decides whether the page gives up room for it.
     func updateTreeLayout(animated: Bool) {
         guard let tree = fileTree else { return }
-        let showing = sidebarShowing
-        let floats = sidebarFloats
-        // Floating means the page keeps its full width and the sidebar is drawn
-        // over it. Pushed means the page starts where the sidebar ends.
-        let leading = (showing && !floats) ? treeWidth.constant : 0
-        tree.isFloating = floats
-        tree.isHidden = false
+        let docked = sidebarDocked
+        let visible = docked || sidebarPeeking
 
-        // Nothing to do is the common case, and it has to stay a no-op: this
-        // runs from `viewDidLayout`, so changing a constraint or asking for
-        // layout when nothing actually differs is an endless layout loop.
-        let wantedAlpha: CGFloat = showing ? 1 : 0
-        guard editorLeading.constant != leading || tree.alphaValue != wantedAlpha else { return }
+        // The page is inset by the sidebar only when the sidebar is docked. It
+        // is never inset by less while the sidebar is on screen, which is what
+        // used to slide it left into the thing covering it.
+        let pageInset = docked ? treeWidth.constant : 0
+        // A card when it peeks: away from the edges, with a shadow. Flush when
+        // docked, because then it is part of the window rather than over it.
+        let cardInset: CGFloat = docked ? 0 : 10
+        let alpha: CGFloat = visible ? 1 : 0
 
+        guard editorLeading.constant != pageInset
+                || treeLeading.constant != cardInset
+                || tree.alphaValue != alpha
+        else { return }
+
+        tree.isFloating = !docked
+
+        let apply = {
+            self.editorLeading.animator().constant = pageInset
+            self.treeLeading.animator().constant = cardInset
+            self.treeTop.animator().constant = docked
+                ? WindowDragArea.height : WindowDragArea.height + cardInset
+            self.treeBottom.animator().constant = -cardInset
+            tree.animator().alphaValue = alpha
+        }
         if animated {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
+                context.duration = 0.16
                 context.allowsImplicitAnimation = true
-                self.editorLeading.animator().constant = leading
-                tree.animator().alphaValue = wantedAlpha
+                apply()
             }
         } else {
-            editorLeading.constant = leading
-            tree.alphaValue = wantedAlpha
+            editorLeading.constant = pageInset
+            treeLeading.constant = cardInset
+            treeTop.constant = docked
+                ? WindowDragArea.height : WindowDragArea.height + cardInset
+            treeBottom.constant = -cardInset
+            tree.alphaValue = alpha
         }
     }
 
-    /// A strip down the left edge that opens the sidebar when reached for, the
-    /// same idea as the display options opening when the pointer arrives near
-    /// the dot rather than only on a click.
+    /// A strip down the left edge that brings the sidebar out when reached for,
+    /// the same idea as the display options opening as the pointer arrives
+    /// rather than only on a click.
     private func updateSidebarReach() {
         for area in view.trackingAreas where area.userInfo?["sidebarReach"] != nil {
             view.removeTrackingArea(area)
         }
         guard fileTree != nil else { return }
-        let strip = NSRect(x: 0, y: 0, width: 26, height: view.bounds.height)
+        // Wide enough to be reachable without being in the way, and while the
+        // sidebar is out it covers the sidebar too, so crossing onto the file
+        // names does not read as leaving.
+        let width: CGFloat = sidebarPeeking ? treeWidth.constant + 30 : 24
         view.addTrackingArea(NSTrackingArea(
-            rect: strip,
+            rect: NSRect(x: 0, y: 0, width: width, height: view.bounds.height),
             options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
             owner: self,
             userInfo: ["sidebarReach": true]))
     }
 
     override func mouseEntered(with event: NSEvent) {
-        guard event.trackingArea?.userInfo?["sidebarReach"] != nil else { return }
-        guard !sidebarShowing else { return }
-        sidebarReachedFor = true
+        guard event.trackingArea?.userInfo?["sidebarReach"] != nil,
+              !sidebarDocked, !sidebarPeeking else { return }
+        sidebarPeeking = true
         updateTreeLayout(animated: true)
+        updateSidebarReach()
     }
 
     override func mouseExited(with event: NSEvent) {
-        guard event.trackingArea?.userInfo?["sidebarReach"] != nil else { return }
-        guard sidebarReachedFor else { return }
-        sidebarReachedFor = false
+        guard event.trackingArea?.userInfo?["sidebarReach"] != nil, sidebarPeeking else { return }
+        sidebarPeeking = false
         updateTreeLayout(animated: true)
+        updateSidebarReach()
+    }
+
+    /// Where the sidebar and the page have actually ended up, for the self test.
+    var sidebarStateForTest: (docked: Bool, visible: Bool, pageInset: CGFloat, cardInset: CGFloat) {
+        (sidebarDocked,
+         (fileTree?.alphaValue ?? 0) > 0,
+         editorLeading.constant,
+         treeLeading?.constant ?? 0)
+    }
+
+    /// Stands in for the pointer arriving at the left edge.
+    func peekSidebarForTest() {
+        guard !sidebarDocked else { return }
+        sidebarPeeking = true
+        updateTreeLayout(animated: false)
     }
 
     /// Whether the sidebar is showing, for the self test.

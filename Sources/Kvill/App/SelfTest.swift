@@ -672,6 +672,77 @@ enum SelfTest {
             try? FileManager.default.removeItem(at: folder)
         }
 
+        // --- The page never moves towards an arriving sidebar -----------------
+        // Reported as "the main content snaps to the wrong side". Narrowing the
+        // window flipped the page's inset from the sidebar width to zero, so the
+        // page slid left, and the sidebar was then drawn over it: it moved the
+        // wrong way and got covered, both at once. Docked and peeking are
+        // separate states now and this holds them apart.
+        do {
+            let host = DocumentViewController()
+            let shell = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1400, height: 800),
+                styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            shell.contentViewController = host
+            shell.setContentSize(NSSize(width: 1400, height: 800))
+            shell.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+            shell.orderFront(nil)
+
+            let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("kvill-sidebar-\(ProcessInfo.processInfo.processIdentifier)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? "# One\n".write(to: folder.appendingPathComponent("One.md"),
+                                 atomically: true, encoding: .utf8)
+            host.showFolder(folder)
+            host.view.layoutSubtreeIfNeeded()
+
+            let wide = host.sidebarStateForTest
+            check("sidebar: wide window docks it", wide.docked && wide.visible,
+                  "docked \(wide.docked), visible \(wide.visible)")
+            check("sidebar: docked, the page starts after it, never under it",
+                  wide.pageInset > 100, "page inset \(Int(wide.pageInset))")
+
+            // Narrow it. The sidebar undocks, and the page may only widen once
+            // the sidebar has actually gone.
+            shell.setContentSize(NSSize(width: 760, height: 800))
+            host.view.layoutSubtreeIfNeeded()
+            let narrow = host.sidebarStateForTest
+            check("sidebar: a narrow window undocks it", !narrow.docked)
+            check("sidebar: the page only takes the full width once it is gone",
+                  narrow.visible == false || narrow.pageInset > 100,
+                  "visible \(narrow.visible), page inset \(Int(narrow.pageInset))")
+
+            // Peek. It rides over the page as an inset card; the page holds still.
+            host.peekSidebarForTest()
+            host.view.layoutSubtreeIfNeeded()
+            let peek = host.sidebarStateForTest
+            check("sidebar: reaching for the edge brings it out", peek.visible)
+            check("sidebar: peeking, it is a card away from the edges",
+                  peek.cardInset > 0, "card inset \(Int(peek.cardInset))")
+            check("sidebar: peeking never drags the page left",
+                  peek.pageInset == narrow.pageInset,
+                  "\(Int(narrow.pageInset)) -> \(Int(peek.pageInset))")
+
+            // Pinning it on a narrow window docks it, and the page gives up room
+            // rather than being covered.
+            host.toggleFileTree(nil)
+            // Toggling animates, so the constants are not their new values until
+            // the animation has run. Reading them straight away compared the old
+            // ones and called it a failure.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            host.view.layoutSubtreeIfNeeded()
+            let pinned = host.sidebarStateForTest
+            check("sidebar: pinning docks it even on a narrow window",
+                  pinned.docked && pinned.visible)
+            check("sidebar: pinned, the page is inset for it",
+                  pinned.pageInset > 100, "page inset \(Int(pinned.pageInset))")
+            check("sidebar: pinned, it is flush rather than a floating card",
+                  pinned.cardInset == 0, "card inset \(Int(pinned.cardInset))")
+
+            shell.orderOut(nil)
+            try? FileManager.default.removeItem(at: folder)
+        }
+
         say(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
         return failures == 0 ? 0 : 1
     }
