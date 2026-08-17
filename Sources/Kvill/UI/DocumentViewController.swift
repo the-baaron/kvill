@@ -114,7 +114,15 @@ final class DocumentViewController: NSViewController {
         // grants access to what is in it, exactly as File > Open Folder does.
         editor.textView.onFolderDrop = { folder in
             FolderAccess.remember(folder)
-            (NSDocumentController.shared as? KvillDocumentController)?.openFolder(folder)
+            // Off the drop, not inside it. A drop runs its own nested run loop
+            // and AppKit lays the window out inside it, so building the sidebar
+            // and activating its constraints there is mutating layout from
+            // inside a layout pass: `_postWindowNeedsLayout` throws and the app
+            // dies with an abort. The crash report for 7.0.0 is exactly that,
+            // NSCoreDragReceiveMessageProc down to layoutIfNeeded.
+            DispatchQueue.main.async {
+                (NSDocumentController.shared as? KvillDocumentController)?.openFolder(folder)
+            }
         }
 
         NotificationCenter.default.addObserver(
@@ -138,6 +146,19 @@ final class DocumentViewController: NSViewController {
         applyBackdrop()
         titleLabel.textColor = theme.colors.textSecondary
         updateStats()
+    }
+
+    /// The sidebar decides between floating and pushing from the window width,
+    /// so it has to be reconsidered every time that changes.
+    ///
+    /// In `viewWillLayout`, before the pass rather than after it. Changing a
+    /// constraint from `viewDidLayout` asks a window that is laying out to lay
+    /// out again, which is the same mistake that made a folder drop abort the
+    /// app in 7.0.0, just reached from the other side.
+    override func viewWillLayout() {
+        super.viewWillLayout()
+        updateSidebarReach()
+        updateTreeLayout(animated: false)
     }
 
     override func viewDidAppear() {
@@ -368,14 +389,112 @@ final class DocumentViewController: NSViewController {
             return made
         }()
 
-        editorLeading.constant = treeWidth.constant
         tree.show(folder)
         tree.select(documentURL)
+        // Asking for a folder is asking to see it, even on a narrow window,
+        // where it floats over the page rather than pushing it.
+        sidebarWanted = true
+        updateTreeLayout(animated: false)
         view.needsLayout = true
     }
 
+    // MARK: - The sidebar, wide and narrow
+
+    /// Below this the sidebar floats over the page instead of pushing it aside.
+    ///
+    /// A 220pt sidebar out of a 900pt window is a quarter of the writing
+    /// surface, and the page already owes another 63pt of what is left to the
+    /// gutter the syntax markers hang in. On a small window it is the text
+    /// column that gets squeezed, which is the one thing that should not.
+    /// Above this width there is room for both, and pushing reads better,
+    /// because then nothing is covering anything.
+    private static let sidebarPushesAbove: CGFloat = 1040
+
+    /// Whether the sidebar is over the page rather than beside it.
+    var sidebarFloats: Bool { view.bounds.width < Self.sidebarPushesAbove }
+
+    /// Set by the menu item. Nil means "decide from the width", which is the
+    /// state until someone expresses a preference.
+    private var sidebarWanted: Bool?
+
+    /// Whether the pointer is near enough the left edge to be reaching for it.
+    private var sidebarReachedFor = false
+
+    private var sidebarShowing: Bool {
+        guard fileTree != nil else { return false }
+        if let wanted = sidebarWanted { return wanted || sidebarReachedFor }
+        return !sidebarFloats || sidebarReachedFor
+    }
+
+    @objc func toggleFileTree(_ sender: Any?) {
+        guard fileTree != nil else { return }
+        sidebarWanted = !(sidebarWanted ?? !sidebarFloats)
+        sidebarReachedFor = false
+        updateTreeLayout(animated: true)
+    }
+
+    /// Reveals or hides the sidebar and decides whether the page moves for it.
+    func updateTreeLayout(animated: Bool) {
+        guard let tree = fileTree else { return }
+        let showing = sidebarShowing
+        let floats = sidebarFloats
+        // Floating means the page keeps its full width and the sidebar is drawn
+        // over it. Pushed means the page starts where the sidebar ends.
+        let leading = (showing && !floats) ? treeWidth.constant : 0
+        tree.isFloating = floats
+        tree.isHidden = false
+
+        // Nothing to do is the common case, and it has to stay a no-op: this
+        // runs from `viewDidLayout`, so changing a constraint or asking for
+        // layout when nothing actually differs is an endless layout loop.
+        let wantedAlpha: CGFloat = showing ? 1 : 0
+        guard editorLeading.constant != leading || tree.alphaValue != wantedAlpha else { return }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.allowsImplicitAnimation = true
+                self.editorLeading.animator().constant = leading
+                tree.animator().alphaValue = wantedAlpha
+            }
+        } else {
+            editorLeading.constant = leading
+            tree.alphaValue = wantedAlpha
+        }
+    }
+
+    /// A strip down the left edge that opens the sidebar when reached for, the
+    /// same idea as the display options opening when the pointer arrives near
+    /// the dot rather than only on a click.
+    private func updateSidebarReach() {
+        for area in view.trackingAreas where area.userInfo?["sidebarReach"] != nil {
+            view.removeTrackingArea(area)
+        }
+        guard fileTree != nil else { return }
+        let strip = NSRect(x: 0, y: 0, width: 26, height: view.bounds.height)
+        view.addTrackingArea(NSTrackingArea(
+            rect: strip,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: ["sidebarReach": true]))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard event.trackingArea?.userInfo?["sidebarReach"] != nil else { return }
+        guard !sidebarShowing else { return }
+        sidebarReachedFor = true
+        updateTreeLayout(animated: true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard event.trackingArea?.userInfo?["sidebarReach"] != nil else { return }
+        guard sidebarReachedFor else { return }
+        sidebarReachedFor = false
+        updateTreeLayout(animated: true)
+    }
+
     /// Whether the sidebar is showing, for the self test.
-    var isShowingFileTree: Bool { fileTree != nil && editorLeading.constant > 0 }
+    var isShowingFileTree: Bool { fileTree != nil && (fileTree?.alphaValue ?? 0) > 0 }
 
     /// Where the file lives, for resolving and filing images.
     var documentURL: URL? {

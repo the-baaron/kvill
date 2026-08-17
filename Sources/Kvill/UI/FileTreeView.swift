@@ -108,7 +108,32 @@ final class FileTreeView: NSView {
 
     /// The sidebar is set in the page's own ink rather than the system's, so it
     /// belongs to the theme the way everything else in the window does.
-    @objc private func themeChanged() { outline.reloadData() }
+    @objc private func themeChanged() {
+        outline.reloadData()
+        applyFloatingBackground()
+    }
+
+    /// Whether the tree is drawn over the page rather than beside it.
+    ///
+    /// Beside the page it needs no ground of its own: the window is behind it.
+    /// Over the page it does, because this view paints nothing and the text
+    /// would read straight through the file names.
+    var isFloating = false {
+        didSet {
+            guard isFloating != oldValue else { return }
+            applyFloatingBackground()
+        }
+    }
+
+    private func applyFloatingBackground() {
+        wantsLayer = true
+        let colors = ThemeManager.shared.theme.colors
+        layer?.backgroundColor = isFloating ? colors.backgroundElevated.cgColor : nil
+        layer?.shadowOpacity = isFloating ? 0.22 : 0
+        layer?.shadowRadius = 20
+        layer?.shadowOffset = .zero
+        layer?.masksToBounds = false
+    }
 
     /// Shows a folder. Access is opened first: without it the scan comes back
     /// empty and the tree would look like an empty folder rather than a refusal.
