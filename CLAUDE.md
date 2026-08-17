@@ -55,6 +55,21 @@ does not matter because users never see it. Team `496Y48L8AX`. Certificates are
 `3rd Party Mac Developer Application` and `... Installer`, both issued from the
 API against a local CSR and chaining through **WWDR G3**, not G5.
 
+**CFBundleVersion has to be dotted, and has to exceed 3.** A plain integer is
+legal and builds 1 to 3 used one, but uploading 1.0.1 as build `4` was refused
+six times with `Info.plist value mismatch. CFBundleShortVersionString value of
+1.0.1 does not match the value of 1.0.0 specified in the request`, which is a
+lie: nothing anywhere held 1.0.0. Giving CFBundleVersion a dotted value made it
+go away. It has to exceed the highest already uploaded, which Apple compares
+component by component, so `1.0.1` is refused for having a leading 1 against a
+previous `3`. 1.0.1 shipped as build `4.0.0`.
+
+Found by comparing against Yellendar, which uploads from the same machine
+without complaint and whose package differs in exactly that one way. Hours went
+into reading the error literally and hunting for wherever 1.0.0 was cached.
+**When one app uploads and another does not, diff the two packages before
+theorising.**
+
 **Fill in App Review Information before submitting.** 1.0 was rejected under
 2.1 "Information Needed" with that whole section empty: no contact name, email,
 phone or notes. Apple's own message says to put the answers in the Notes field.
