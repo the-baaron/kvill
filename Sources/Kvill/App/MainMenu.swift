@@ -91,6 +91,9 @@ enum MainMenu {
             menu.addItem(.separator())
             add(menu, "Close", #selector(NSWindow.performClose(_:)), "w")
             add(menu, "Save…", #selector(NSDocument.save(_:)), "s")
+            // Out of live mode the page stops following the file, so there has
+            // to be a way to ask it to catch up.
+            add(menu, "Reload from Disk", #selector(MarkdownDocument.reloadFromDisk(_:)), "r")
             add(menu, "Save As…", #selector(NSDocument.saveAs(_:)), "s", modifiers: [.command, .shift])
             add(menu, "Revert to Saved", #selector(NSDocument.revertToSaved(_:)))
             menu.addItem(.separator())
@@ -296,7 +299,7 @@ enum MainMenu {
             markers.tag = MenuTag.markers
 
             let autosave = add(
-                menu, "Save While You Type", #selector(AppDelegate.toggleAutosave(_:)),
+                menu, "Live Mode", #selector(AppDelegate.toggleAutosave(_:)),
                 "", target: appDelegate)
             autosave.tag = MenuTag.autosave
 

@@ -331,12 +331,23 @@ final class DocumentViewController: NSViewController {
     /// did the work, and saying "don't worry" would be worse than saying
     /// nothing: it is the one setting where the reassurance is not true.
     func confirmSaved() {
-        if ThemeManager.shared.autosaves {
+        if ThemeManager.shared.liveMode {
             makeToast().show("Your files are auto-saved, don't worry",
                              symbol: "checkmark.circle.fill")
         } else {
             makeToast().show("Saved", symbol: "square.and.arrow.down.fill")
         }
+    }
+
+    /// Says that something else wrote the file, out of live mode where the page
+    /// deliberately does not follow it.
+    ///
+    /// A note rather than a reload: the whole point of the setting is that the
+    /// page stays where it was put. Cmd R is named because otherwise being told
+    /// leaves nothing to do about it.
+    func noteChangedOnDisk() {
+        makeToast().show("Changed on disk. Cmd R to reload",
+                         symbol: "arrow.triangle.2.circlepath")
     }
 
     private func makeToast() -> ToastView {

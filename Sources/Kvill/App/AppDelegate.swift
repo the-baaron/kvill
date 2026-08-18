@@ -192,14 +192,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Turning autosave off writes out whatever was already waiting, so edits
     /// made a moment before the setting changed are not stranded by it.
     @objc func toggleAutosave(_ sender: Any?) {
-        let wanted = !ThemeManager.shared.autosaves
+        let wanted = !ThemeManager.shared.liveMode
         if !wanted {
             for document in NSDocumentController.shared.documents
             where document.isDocumentEdited && document.fileURL != nil {
                 document.save(withDelegate: nil, didSave: nil, contextInfo: nil)
             }
         }
-        ThemeManager.shared.autosaves = wanted
+        ThemeManager.shared.liveMode = wanted
     }
     @objc func toggleMarkers(_ sender: Any?) { ThemeManager.shared.alwaysShowMarkers.toggle() }
 
@@ -223,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case MenuTag.markers:
             item.state = manager.alwaysShowMarkers ? .on : .off
         case MenuTag.autosave:
-            item.state = manager.autosaves ? .on : .off
+            item.state = manager.liveMode ? .on : .off
         case MenuTag.followSystem:
             item.state = manager.followsSystemAppearance ? .on : .off
         default:

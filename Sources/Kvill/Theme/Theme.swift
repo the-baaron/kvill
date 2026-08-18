@@ -92,7 +92,9 @@ final class ThemeManager {
         static let typewriter = "kvill.typewriterScrolling"
         static let scrollPastEnd = "kvill.scrollPastEnd"
         static let showMarkers = "kvill.showMarkers"
-        static let autosave = "kvill.autosave"
+        static let liveMode = "kvill.liveMode"
+        /// What live mode was called when it only governed saving.
+        static let legacyAutosave = "kvill.autosave"
     }
 
     private let defaults = UserDefaults.standard
@@ -176,16 +178,22 @@ final class ThemeManager {
         }
     }
 
-    /// Whether a document writes itself as you type.
+    /// Whether the file and the page keep themselves in step on their own.
     ///
-    /// On, and it stays on unless someone deliberately turns it off. Off makes
-    /// Kvill an ordinary save-with-Cmd-S editor: closing an edited window asks
-    /// what to do with it, which is AppKit's own sheet and not something written
-    /// here.
-    var autosaves: Bool {
+    /// One switch over the whole question of movement, in both directions. On,
+    /// the document writes itself as you type and reloads the moment something
+    /// else writes the file, marking what changed. Off, nothing moves unless you
+    /// ask: Cmd S saves, the page keeps showing what you opened however many
+    /// times the file is rewritten underneath it, and saving over a file that
+    /// has changed in the meantime asks first.
+    ///
+    /// The two halves belong together. Autosave without live reload writes your
+    /// copy over someone else's work half a second after they saved it, and live
+    /// reload without autosave replaces the page while you are typing into it.
+    var liveMode: Bool {
         didSet {
-            guard autosaves != oldValue else { return }
-            defaults.set(autosaves, forKey: Key.autosave)
+            guard liveMode != oldValue else { return }
+            defaults.set(liveMode, forKey: Key.liveMode)
             NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
         }
     }
@@ -229,7 +237,11 @@ final class ThemeManager {
         scrollPastEnd = defaults.object(forKey: Key.scrollPastEnd) as? Bool ?? true
         // The same shape, and for the same reason: an editor that does not save
         // your work is the odd case, so absent an answer the answer is yes.
-        autosaves = defaults.object(forKey: Key.autosave) as? Bool ?? true
+        // Anyone who turned the old autosave setting off meant this, so their
+        // answer is carried over rather than quietly reset.
+        liveMode = defaults.object(forKey: Key.liveMode) as? Bool
+            ?? defaults.object(forKey: Key.legacyAutosave) as? Bool
+            ?? true
 
         theme = ThemeManager.build(
             paletteID: defaults.string(forKey: Key.palette) ?? Palettes.paper.id,

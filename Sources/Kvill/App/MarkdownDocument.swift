@@ -12,7 +12,7 @@ final class MarkdownDocument: NSDocument {
     /// silently rewriting a Latin-1 file as UTF-8.
     private var encoding: String.Encoding = .utf8
 
-    private weak var controller: DocumentViewController?
+    private(set) weak var controller: DocumentViewController?
 
     /// Watches the file for changes made by anything other than this window.
     private var watcher: FileWatcher?
@@ -26,7 +26,7 @@ final class MarkdownDocument: NSDocument {
     /// ordinary Cmd-S editor and AppKit puts up its own "do you want to save"
     /// sheet on close. Read fresh every time rather than captured once, so the
     /// toggle takes effect on documents that are already open.
-    override class var autosavesInPlace: Bool { ThemeManager.shared.autosaves }
+    override class var autosavesInPlace: Bool { ThemeManager.shared.liveMode }
 
 
     override var windowNibName: NSNib.Name? { nil }
@@ -151,6 +151,18 @@ final class MarkdownDocument: NSDocument {
         guard text != lastWritten else { return }
         // Already showing it.
         guard text != (controller?.text ?? content) else { return }
+
+        // Out of live mode nothing moves on its own. The page keeps showing what
+        // was opened, however many times the file is rewritten behind it, and
+        // the only sign is a note that it happened. Remembered, because saving
+        // over it later has to ask first, and because being able to look at what
+        // arrived is the whole point of being told.
+        guard ThemeManager.shared.liveMode else {
+            diskText = text
+            controller?.noteChangedOnDisk()
+            return
+        }
+
         // There are unsaved edits here. Reloading would throw them away, and
         // writing from inside a file-change handler is how a write loop starts.
         // The autosave already scheduled lands within half a second and settles
@@ -161,6 +173,32 @@ final class MarkdownDocument: NSDocument {
         lastWritten = text
         controller?.replaceKeepingPlace(with: text)
         updateChangeCount(.changeCleared)
+    }
+
+    /// What the file held when it last changed behind this window, out of live
+    /// mode. Nil once it has been reloaded or deliberately overwritten.
+    private(set) var diskText: String?
+
+    /// Whether the file has moved on since this window last agreed with it.
+    var hasChangedOnDisk: Bool { diskText != nil }
+
+    /// Reads the file again, replacing what is on screen.
+    ///
+    /// AppKit's own revert, so the undo stack, the change count and the modified
+    /// dot are all handled by the framework rather than by arithmetic here.
+    @objc func reloadFromDisk(_ sender: Any?) {
+        guard let url = fileURL else { return }
+        try? revert(toContentsOf: url, ofType: fileType ?? "net.daringfireball.markdown")
+        diskText = nil
+    }
+
+    /// Whether saving now would write over something this window never saw.
+    ///
+    /// Only out of live mode. In live mode the page already holds whatever the
+    /// file holds, so there is nothing to write over.
+    private func wouldOverwriteSomethingUnseen(_ operation: NSDocument.SaveOperationType) -> Bool {
+        guard !ThemeManager.shared.liveMode, hasChangedOnDisk else { return false }
+        return operation == .saveOperation
     }
 
     override func data(ofType typeName: String) throws -> Data {
@@ -186,6 +224,24 @@ final class MarkdownDocument: NSDocument {
         // user asked for: doing it on every autosave would reflow the columns
         // under the cursor mid-word, which is the thing the caret-leave rule
         // exists to avoid.
+        // Somebody else wrote this file while it sat here unwatched, and this
+        // save would put it back the way this window remembers it. Ask, and
+        // offer to show what would go, because "are you sure" is not a question
+        // anyone can answer without seeing the answer.
+        if wouldOverwriteSomethingUnseen(saveOperation) {
+            askBeforeOverwriting { [weak self] proceed in
+                guard let self else { return }
+                guard proceed else {
+                    completionHandler(CocoaError(.userCancelled))
+                    return
+                }
+                self.diskText = nil
+                self.save(to: url, ofType: typeName, for: saveOperation,
+                          completionHandler: completionHandler)
+            }
+            return
+        }
+
         if saveOperation != .autosaveInPlaceOperation,
            saveOperation != .autosaveElsewhereOperation {
             controller?.formatTables()

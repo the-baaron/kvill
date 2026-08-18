@@ -270,12 +270,12 @@ final class OptionsPalette: NSViewController {
     private let pastEndToggle = NSButton(checkboxWithTitle: "Scroll past end", target: nil, action: nil)
     private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
     private let autosaveToggle = NSButton(
-        checkboxWithTitle: "Save while you type", target: nil, action: nil)
+        checkboxWithTitle: "Live mode", target: nil, action: nil)
     /// The only toggle here that changes what happens to someone's work, so it
     /// says what turning it off actually means rather than leaving them to find
     /// out at the moment they close a window.
     private let autosaveNote = NSTextField(
-        labelWithString: "Off, use Cmd S. Closing an edited file will ask first")
+        labelWithString: "Off, nothing moves on its own: Cmd S saves, Cmd R reloads")
     private let backgroundToggle = NSButton(
         checkboxWithTitle: "Open files faster", target: nil, action: nil)
     /// "Open files faster" says nothing about the cost. This says what is
@@ -376,6 +376,10 @@ final class OptionsPalette: NSViewController {
             markersToggle.action = #selector(toggleMarkers)
             autosaveToggle.target = self
             autosaveToggle.action = #selector(toggleAutosave)
+            autosaveToggle.toolTip =
+                "On, the file and the page keep themselves in step: edits are written as "
+                + "you type, and anything another program writes appears straight away with "
+                + "the change marked. Off, Kvill behaves like an ordinary file editor."
             autosaveNote.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
             autosaveNote.textColor = .secondaryLabelColor
             backgroundToggle.target = self
@@ -428,8 +432,8 @@ final class OptionsPalette: NSViewController {
         typewriterToggle.state = manager.typewriterScrolling ? .on : .off
         pastEndToggle.state = manager.scrollPastEnd ? .on : .off
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
-        autosaveToggle.state = manager.autosaves ? .on : .off
-        autosaveNote.isHidden = manager.autosaves
+        autosaveToggle.state = manager.liveMode ? .on : .off
+        autosaveNote.isHidden = manager.liveMode
         backgroundToggle.state = BackgroundService.isEnabled ? .on : .off
     }
 
@@ -480,7 +484,7 @@ final class OptionsPalette: NSViewController {
     ///
     /// Those edits were going to be saved a moment later, and leaving them in
     /// limbo because of a setting changed in between is not what anyone means by
-    /// turning autosave off.
+    /// asking the app to stop moving on its own.
     @objc private func toggleAutosave() {
         let on = autosaveToggle.state == .on
         if !on {
@@ -489,7 +493,7 @@ final class OptionsPalette: NSViewController {
                 document.save(withDelegate: nil, didSave: nil, contextInfo: nil)
             }
         }
-        ThemeManager.shared.autosaves = on
+        ThemeManager.shared.liveMode = on
         sync()
     }
 

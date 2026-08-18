@@ -749,6 +749,98 @@ enum SelfTest {
             try? FileManager.default.removeItem(at: folder)
         }
 
+        // --- Live mode governs whether anything moves on its own --------------
+        // One switch over both directions. On, the page follows the file and the
+        // file follows the page. Off, neither moves unless asked, and saving
+        // over a file that changed in the meantime has to ask first.
+        //
+        // Checked by writing to the file from outside and reading what the page
+        // did about it, because the whole feature is about what happens when
+        // something other than this window writes.
+        do {
+            let documentController = (NSDocumentController.shared as? KvillDocumentController)
+                ?? KvillDocumentController()
+            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.6)) }
+            let manager = ThemeManager.shared
+            let was = manager.liveMode
+
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kvill-live-\(ProcessInfo.processInfo.processIdentifier)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("Watched.md")
+            try? "# Watched\n\noriginal body\n".write(to: file, atomically: true, encoding: .utf8)
+
+            manager.liveMode = true
+            var doc: NSDocument?
+            documentController.openDocument(withContentsOf: file, display: true) { d, _, _ in
+                doc = d
+                hide(d)
+            }
+            settled()
+
+            if let live = doc as? MarkdownDocument {
+                try? "# Watched\n\nrewritten by something else\n"
+                    .write(to: file, atomically: true, encoding: .utf8)
+                settled(); settled()
+                check("live mode on: the page follows the file",
+                      live.controller?.text.contains("rewritten by something else") == true,
+                      live.controller?.text.contains("rewritten") == true ? "followed" : "did not")
+                check("live mode on: nothing is left waiting to be asked about",
+                      !live.hasChangedOnDisk)
+
+                // Off, the same write must not move the page.
+                manager.liveMode = false
+                let showing = live.controller?.text ?? ""
+                try? "# Watched\n\nrewritten a second time\n"
+                    .write(to: file, atomically: true, encoding: .utf8)
+                settled(); settled()
+                check("live mode off: the page keeps showing what was opened",
+                      live.controller?.text == showing,
+                      live.controller?.text.contains("second time") == true
+                        ? "it moved anyway" : "held")
+                check("live mode off: but it knows the file moved",
+                      live.hasChangedOnDisk)
+                check("live mode off: and it kept what arrived, to show later",
+                      live.diskText?.contains("rewritten a second time") == true)
+
+                // Reloading is the way back, and it clears the warning with it.
+                live.reloadFromDisk(nil)
+                settled()
+                check("live mode off: reloading catches the page up",
+                      live.controller?.text.contains("rewritten a second time") == true,
+                      live.controller?.text.contains("second time") == true ? "caught up" : "did not")
+                check("live mode off: and there is nothing left to warn about",
+                      !live.hasChangedOnDisk)
+            } else {
+                check("live mode: a document opened to watch", false)
+            }
+
+            documentController.documents.forEach {
+                $0.updateChangeCount(.changeCleared)
+                $0.close()
+            }
+            settled()
+            manager.liveMode = was
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        // --- The changes sheet says what would be lost ------------------------
+        // Reached from the overwrite warning, which cannot be opened from here
+        // because it is a sheet waiting on a person. What can be checked is the
+        // listing it shows, which is the part that would be wrong quietly.
+        do {
+            let same = ChangesSheet.listing(theirs: "a\nb\n", mine: "a\nb\n").string
+            check("changes: identical files say so", same.contains("identical"), same.trimmingCharacters(in: .whitespacesAndNewlines))
+
+            let listing = ChangesSheet.listing(
+                theirs: "# Title\n\ntheir new line\n",
+                mine: "# Title\n\nmy own line\n").string
+            check("changes: it shows what is on disk", listing.contains("their new line"))
+            check("changes: and what this window would write", listing.contains("my own line"))
+            check("changes: without dragging in the lines that match",
+                  !listing.contains("# Title"), "it listed the unchanged heading")
+        }
+
         // --- What something else changed gets marked --------------------------
         // Agents and scripts rewrite these files while the window is open. The
         // page already reloaded silently; now the part that moved is lit for a
@@ -916,13 +1008,13 @@ enum SelfTest {
                 ?? KvillDocumentController()
             let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
             let manager = ThemeManager.shared
-            let wasAutosaving = manager.autosaves
+            let wasAutosaving = manager.liveMode
 
-            check("autosave: on unless it has been turned off", wasAutosaving)
-            check("autosave: the document class asks the setting",
+            check("live mode: on unless it has been turned off", wasAutosaving)
+            check("live mode: the document class asks the setting",
                   MarkdownDocument.autosavesInPlace)
-            manager.autosaves = false
-            check("autosave: turning it off reaches NSDocument",
+            manager.liveMode = false
+            check("live mode: turning it off reaches NSDocument",
                   !MarkdownDocument.autosavesInPlace)
 
             let folder = FileManager.default.temporaryDirectory
@@ -948,19 +1040,19 @@ enum SelfTest {
 
                 let reused = documentController.openInPlace(two, replacing: first)
                 settled()
-                check("autosave off: an edited file does not give up its window",
+                check("live mode off: an edited file does not give up its window",
                       !reused)
-                check("autosave off: and it is still open with its edit",
+                check("live mode off: and it is still open with its edit",
                       documentController.documents.contains { $0 === first }
                         && first.isDocumentEdited)
 
                 // The same click with autosave on is the normal path, and has to
                 // keep working: this is the only thing stopping a folder full of
                 // notes opening a window each.
-                manager.autosaves = true
+                manager.liveMode = true
                 first.updateChangeCount(.changeCleared)
                 settled()
-                check("autosave on: the window is handed over as before",
+                check("live mode on: the window is handed over as before",
                       documentController.openInPlace(two, replacing: first))
                 settled()
             } else {
@@ -972,8 +1064,8 @@ enum SelfTest {
                 $0.close()
             }
             settled()
-            manager.autosaves = wasAutosaving
-            check("autosave: the checks put the setting back", manager.autosaves)
+            manager.liveMode = wasAutosaving
+            check("live mode: the checks put the setting back", manager.liveMode)
             try? FileManager.default.removeItem(at: folder)
         }
 

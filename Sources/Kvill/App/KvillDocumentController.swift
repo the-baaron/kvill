@@ -105,7 +105,7 @@ final class KvillDocumentController: NSDocumentController {
         // past. Someone who turned autosave off did so to decide when their work
         // is written, and answering that by writing it anyway is no better.
         guard current.fileURL != nil || !current.isDocumentEdited,
-              ThemeManager.shared.autosaves || !current.isDocumentEdited,
+              ThemeManager.shared.liveMode || !current.isDocumentEdited,
               let windowController = current.windowControllers.first,
               let window = windowController.window,
               let fresh = try? makeDocument(withContentsOf: url, ofType: typeName(for: url))
