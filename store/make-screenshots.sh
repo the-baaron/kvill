@@ -29,11 +29,11 @@ shot() {  # number theme typography layout light|dark headline subline [sidebar]
     # sidebar without a seam and the only way to show glass chrome at all.
     ./store/capture-window.sh "store/window-$1.png" "$PWD/store/notes" "$2" \
       "$PWD/store/notes/Launch checklist.md" > /dev/null
-    SHOT_THEME="$2" SHOT_CAPTION="${9:-}" SHOT_WINDOW="store/window-$1.png" \
+    SHOT_THEME="$2" SHOT_WINDOW="store/window-$1.png" \
       swift scripts/make-shot.swift "store/screenshots/$1.png" "store/page-$1.png" \
       "$4" "$5" "$6" "$7" > /dev/null
   else
-    SHOT_THEME="$2" SHOT_CAPTION="${9:-}" swift scripts/make-shot.swift "store/screenshots/$1.png" "store/page-$1.png" \
+    SHOT_THEME="$2" swift scripts/make-shot.swift "store/screenshots/$1.png" "store/page-$1.png" \
       "$4" "$5" "$6" "$7" > /dev/null
   fi
   printf "  %s.png  %-7s %-9s %-7s %s\n" "$1" "$2" "$3" "$4" "${8:-}"
@@ -45,24 +45,20 @@ rm -f store/screenshots/*.png store/page-*.png store/window-*.png
 echo "==> Composing"
 shot 1 paper editorial centre light \
   "Opens faster than you can say Markdown" \
-  "Nine hundredths of a second, and nothing deferred to make that true." \
-  "" "No index. No project. Just text."
+  "Nine hundredths of a second, and nothing deferred to make that true."
 shot 2 ink editorial right dark \
   "A folder of notes, in one window" \
   "Open a folder and its files sit down the side. Click through them in place." \
-  photo "One window, however many notes"
+  photo
 shot 3 sepia editorial small light \
   "Just edit local files" \
-  "Plain Markdown on your own disk. Nothing to sign into, nothing to import." \
-  "" "Your disk. Your files. No account."
+  "Plain Markdown on your own disk. Nothing to sign into, nothing to import."
 shot 4 nord editorial centre dark \
   "Six colour schemes and five typefaces" \
-  "Each with the line height, measure and spacing that suit it." \
-  "" "Set for reading, not for screenshots"
+  "Each with the line height, measure and spacing that suit it."
 shot 5 contrast-light grotesk right light \
   "Every command has a key" \
-  "Press / for the insert menu. Bold, links and headings are one chord away." \
-  "" "Everything, without the mouse"
+  "Press / for the insert menu. Bold, links and headings are one chord away."
 
 rm -f store/page-*.png store/window-*.png
 echo

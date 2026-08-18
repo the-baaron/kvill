@@ -37,9 +37,6 @@ let theme = ProcessInfo.processInfo.environment["SHOT_THEME"] ?? ""
 /// off screen at all, so no drawn window could ever show the options panel or
 /// the insert menu. Where a photograph exists it is used as it is: rounded
 /// corners, real chrome, real selection, nothing reconstructed.
-/// The line set on its side down the edge.
-let caption = ProcessInfo.processInfo.environment["SHOT_CAPTION"] ?? ""
-
 let photograph = ProcessInfo.processInfo.environment["SHOT_WINDOW"]
     .flatMap { NSImage(contentsOfFile: $0) }
 let headline = arguments[5]
@@ -183,28 +180,13 @@ if let context = NSGraphicsContext.current?.cgContext {
 
 // --- Furniture -------------------------------------------------------------
 // A poster rather than a template with a screenshot dropped into it: a dark
-// shape running off one edge, a dot grid, an outsized marker, a watermark
-// letter and a caption set on its side. Everything here is drawn, so it costs
-// nothing to carry and cannot go out of date.
-
-/// A short line set vertically down an edge, in small caps with wide letter
-/// spacing, under a stub of accent.
-func drawCaption(_ text: String, atX x: CGFloat, y: CGFloat) {
-    guard !text.isEmpty, let context = NSGraphicsContext.current?.cgContext else { return }
-    context.saveGState()
-    defer { context.restoreGState() }
-
-    accent.withAlphaComponent(0.85).setFill()
-    NSRect(x: x - 1, y: y + 12, width: 22, height: 3).fill()
-
-    context.translateBy(x: x + 10, y: y)
-    context.rotate(by: -.pi / 2)
-    NSAttributedString(string: text.uppercased(), attributes: [
-        .font: font(.default, 10.5, .medium),
-        .foregroundColor: quiet.withAlphaComponent(0.75),
-        .kern: 3.4,
-    ]).draw(at: NSPoint(x: -0, y: -6))
-}
+// shape running off one edge, a dot grid, an outsized marker and a watermark
+// letter. Everything here is drawn, so it costs nothing to carry and cannot go
+// out of date.
+//
+// Deliberately few. Rules on the shape and a line of type set on its side were
+// tried and taken out again: five of these sit in a row on a store page, and a
+// row of busy pictures reads as noise however good each one is on its own.
 
 /// A grid of small dots, the way a sheet of graph paper starts.
 func drawDots(at origin: NSPoint, columns: Int, rows: Int) {
@@ -239,20 +221,15 @@ func drawWatermark(_ letter: String, at point: NSPoint) {
     ]).draw(at: point)
 }
 
-/// The dark shape, with a few rules on it standing in for lines of text.
-func drawSlab(centre: NSPoint, radius: CGFloat, rulesAt rules: NSPoint) {
+/// The dark shape running off an edge.
+///
+/// It had a few accent rules on it, standing in for lines of text. Together
+/// with the captions set on their side the canvas had more furniture than
+/// picture, so the shape stays and the decoration on it goes.
+func drawSlab(centre: NSPoint, radius: CGFloat) {
     (dark ? colour("#0F1115") : colour("#232A36")).setFill()
     NSBezierPath(ovalIn: NSRect(x: centre.x - radius, y: centre.y - radius,
                                 width: radius * 2, height: radius * 2)).fill()
-    // Rules placed explicitly rather than measured off the centre: the centre is
-    // off the canvas, which is the point of the shape, so anything derived from
-    // it was drawn off the canvas too.
-    accent.withAlphaComponent(0.8).setFill()
-    let lengths: [CGFloat] = [1, 0.82, 1, 0.64, 0.9]
-    for (index, fraction) in lengths.enumerated() {
-        NSRect(x: rules.x, y: rules.y - CGFloat(index) * 18,
-               width: 52 * fraction, height: 1.8).fill()
-    }
 }
 
 // --- The mark --------------------------------------------------------------
@@ -283,28 +260,22 @@ func drawMark(at point: NSPoint, centred: Bool = false) {
 switch layout {
 case "centre":
     // Window down the middle: both flanks are free.
-    drawSlab(centre: NSPoint(x: -110, y: 300), radius: 290,
-             rulesAt: NSPoint(x: 42, y: 300))
+    drawSlab(centre: NSPoint(x: -110, y: 300), radius: 290)
     drawDots(at: NSPoint(x: 18, y: size.height - 22), columns: 7, rows: 6)
     drawBigMarker(at: NSPoint(x: 40, y: 690), size: 46)
     drawWatermark(headline.prefix(1).uppercased(), at: NSPoint(x: size.width - 150, y: 210))
-    drawCaption(caption, atX: size.width - 42, y: 660)
     drawMark(at: NSPoint(x: size.width / 2 - 55, y: size.height - 62), centred: true)
 case "left", "small":
     // Window on the left, so everything else lives on the right.
-    drawSlab(centre: NSPoint(x: size.width + 90, y: 720), radius: 250,
-             rulesAt: NSPoint(x: size.width - 130, y: 720))
+    drawSlab(centre: NSPoint(x: size.width + 90, y: 720), radius: 250)
     drawDots(at: NSPoint(x: size.width - 110, y: 240), columns: 6, rows: 5)
     drawWatermark(headline.prefix(1).uppercased(), at: NSPoint(x: size.width - 300, y: 90))
-    drawCaption(caption, atX: size.width - 42, y: 620)
     drawMark(at: NSPoint(x: size.width - 190, y: 74))
 default:
     // Window on the right: the words and the furniture share the left.
-    drawSlab(centre: NSPoint(x: -120, y: 810), radius: 240,
-             rulesAt: NSPoint(x: 40, y: 790))
+    drawSlab(centre: NSPoint(x: -120, y: 810), radius: 240)
     drawDots(at: NSPoint(x: 18, y: 250), columns: 7, rows: 6)
     drawBigMarker(at: NSPoint(x: 96, y: 300), size: 46)
-    drawCaption(caption, atX: 42, y: 640)
     drawMark(at: NSPoint(x: 96, y: 74))
 }
 
