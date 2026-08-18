@@ -53,10 +53,25 @@ without touching a pipe character.
 
 READING IT
 
-Eight colour schemes and five typefaces, each with the line height, measure and
+Six colour schemes and five typefaces, each with the line height, measure and
 spacing that actually suit it rather than one set of numbers applied to
 everything. Focus mode dims all but the paragraph you're in. Typewriter
 scrolling holds your line at eye level.
+
+A FOLDER OF NOTES
+
+Open a folder and its Markdown files sit down the side of the window. Clicking
+one shows it in the same window instead of opening another, so a set of notes
+is one window rather than a screen full of them.
+
+WHEN SOMETHING ELSE IS EDITING
+
+Live mode keeps the file and the page in step both ways: your edits are written
+as you type, and anything another program writes appears straight away with the
+words it changed lit for a moment. Useful when an agent or a script is working
+in the same folder you are. Turn it off and Kvill behaves like an ordinary
+editor, where Cmd S saves, Cmd R reloads, and saving over a file that changed in
+the meantime asks first and offers to show you what would go.
 
 It's Swift and AppKit and the system fonts. No web view, no Electron, no
 bundled runtime, which is most of why the number at the top is what it is.
@@ -64,8 +79,7 @@ bundled runtime, which is most of why the number at the top is what it is.
 WHAT IT WON'T DO
 
 There's no preview pane, on the grounds that Markdown is already legible. No
-export, no publishing, no plugins, no sidebar, no file browser. One window per
-file, and opening a second file gives you a second window rather than a tab.
+export, no publishing, no plugins, no tabs, no sync and no account.
 
 What it does instead is edit the file you opened. Markdown on your own disk,
 changed in place. Nothing to sign into, no library to import into, no copy kept
@@ -82,9 +96,20 @@ GitHub.
 
 markdown,fast,quick,lightweight,editor,md,notes,readme,plain text,minimal
 
-## What's New (1.0.0)
+## What's New (1.1.0)
 
-First release.
+A folder sidebar. Open a folder and its Markdown files sit down the side of the
+window, and clicking one shows it in place rather than opening another window.
+
+Live mode. On, the file and the page keep themselves in step: edits are written
+as you type, and anything another program writes to the file appears straight
+away with the words it changed lit for a moment. Off, Kvill is an ordinary
+editor where Cmd S saves and Cmd R reloads, and saving over a file that changed
+in the meantime asks first.
+
+Fixes: code blocks and tables stay inside a narrow window, double-clicking a
+file opens one window rather than two, and dropping a folder no longer closes
+the window.
 
 ## Privacy label
 

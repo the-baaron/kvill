@@ -193,10 +193,24 @@ final class EditorViewController: NSViewController {
 
     // MARK: - Layout
 
+    /// The least space kept either side of the text in a narrow window.
+    ///
+    /// Wide enough for the widest decoration padding, 18 points for a callout,
+    /// plus a little air between the panel and the window edge.
+    static let narrowMargin: CGFloat = 30
+
+    /// How close a decoration panel may come to the window's edge.
+    static let panelMargin: CGFloat = 10
+
     private func updateInsets() {
         let metrics = theme.metrics
         let available = scrollView.contentSize.width
-        let horizontal = max(24, (available - metrics.contentWidth) / 2)
+        // The floor leaves room for the panels a code block, a table or a callout
+        // draws around the text. Those are clamped to the page's margin in a
+        // narrow window, and at a 24 point inset the panel's edge landed exactly
+        // where the text ended, so a callout's last words sat on its own border
+        // with padding on the left and none on the right.
+        let horizontal = max(Self.narrowMargin, (available - metrics.contentWidth) / 2)
         // Air above the first line. It has to be the inset: paragraph spacing
         // before the first paragraph is not drawn by TextKit, which is why the
         // margin looked right when it was an inset and vanished when it moved

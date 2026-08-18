@@ -9,7 +9,7 @@ Target date: **1 September**. Everything below has to be done or deliberately dr
 - [ ] Add rate limiting to the public endpoints
 - [ ] Load test at three times expected peak traffic
 
-> [!NOTE] The rollback runbook is the one thing nobody has written yet. It is also the only thing that matters at two in the morning.
+> [!NOTE] The rollback plan is the one thing nobody has written yet. It is also the only thing that matters at two in the morning.
 
 ## Design
 

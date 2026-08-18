@@ -579,12 +579,16 @@ final class EditorTextView: NSTextView {
         let metrics = theme.metrics
         let origin = textContainerOrigin
         let columnLeft = origin.x + metrics.gutter
-        // Clamped to the page's own margin. `measure` is the column width the
-        // typography preset asks for and takes no account of the window: in a
-        // narrow window the text rewraps to what actually fits, but a panel drawn
-        // to `measure` kept its full width and ran off the right edge. The mirror
-        // of the left inset is as far right as anything may go.
-        let pageRight = bounds.width - origin.x
+        // Clamped, because `measure` is the column width the typography preset
+        // asks for and takes no account of the window: in a narrow window the
+        // text rewraps to what actually fits, but a panel drawn to `measure`
+        // kept its full width and ran off the right edge.
+        //
+        // Clamped to the window's own margin rather than to where the text ends.
+        // Clamping to the text's edge left a callout's last words sitting on its
+        // own border, padded on the left and not on the right. The text inset
+        // keeps enough room for this to sit outside it.
+        let pageRight = bounds.width - EditorViewController.panelMargin
         let columnRight = min(columnLeft + metrics.measure, pageRight)
 
         /// A panel behind a block, never wider than the page.

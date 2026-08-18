@@ -183,6 +183,22 @@ enum SelfTest {
                 check("panels at \(Int(width))pt: none starts off the left edge",
                       panels.allSatisfy { $0.minX >= -0.5 },
                       "leftmost \(Int(panels.map(\.minX).min() ?? 0))")
+
+                // The panel has to clear the text on both sides. Clamping it to
+                // where the text ended put a callout's last words on its own
+                // border, padded on one side and not the other.
+                // Only the right edge. On the left the panel starts at the text
+                // column, which begins after the marker gutter, so comparing it
+                // to the container's inset measures the gutter and calls a
+                // correct panel wrong.
+                let inset = textView.textContainerInset.width
+                let textRight = page - inset
+                let tight = panels.filter { $0.maxX < textRight + 1 }
+                check("panels at \(Int(width))pt: the text sits inside them, not on the edge",
+                      tight.isEmpty,
+                      tight.isEmpty
+                        ? "text ends \(Int(textRight)), panels \(Int(panels.map(\.maxX).min() ?? 0))+"
+                        : "\(tight.count) panel(s) end before the text does")
             }
             window.setContentSize(NSSize(width: 900, height: 600))
             controller.view.layoutSubtreeIfNeeded()
