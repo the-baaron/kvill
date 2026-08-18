@@ -1,3 +1,15 @@
+**Contents in the sidebar** - 18 August 2026
+The document's headings, listed down the side, to move around a long one.
+Off until you ask for it: Shift Cmd L.
+
+**Annotate a passage** - 18 August 2026
+Shift Cmd A wraps the selection and adds a footnote to write the note in.
+It is ordinary Markdown, so it reads anywhere and shows up in a diff.
+
+**Tabs** - 18 August 2026
+Documents open as tabs if you have asked macOS for tabs, in System
+Settings. A plain double-click still gets a window of its own.
+
 **Live mode** - 18 August 2026
 One switch for whether the file and the page keep in step on their own.
 Off, Kvill is an ordinary editor: Cmd S saves, Cmd R reloads.
