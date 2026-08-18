@@ -49,6 +49,11 @@ final class DocumentViewController: NSViewController {
 
         addChild(editor)
         let editorView = editor.view
+        // The page gives up its right margin when the index is showing, so the
+        // column centres in what is left rather than staying centred in the
+        // whole window with the index hanging off one side of it. That is what
+        // a documentation site does, and it is why the two line up.
+        editorTrailing = editorView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         editorView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(editorView)
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -71,7 +76,7 @@ final class DocumentViewController: NSViewController {
 
         NSLayoutConstraint.activate([
             editorLeading,
-            editorView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            editorTrailing,
             editorView.topAnchor.constraint(equalTo: container.topAnchor),
             editorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
@@ -94,6 +99,11 @@ final class DocumentViewController: NSViewController {
             stats.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -22),
         ])
 
+        contents.translatesAutoresizingMaskIntoConstraints = true
+        contents.isHidden = true
+        contents.onJump = { [weak self] entry in self?.editor.reveal(entry.location) }
+        view.addSubview(contents)
+
         editor.onTextChange = { [weak self] in
             self?.updateStats()
             self?.onTextChange?()
@@ -102,7 +112,7 @@ final class DocumentViewController: NSViewController {
             self?.updateSelectionToolbar()
             // Cheap: it moves a selection in a list already built. Rebuilding
             // the list is the expensive half and that is debounced below.
-            self?.split?.syncContentsSelection()
+            self?.contents.select(at: self?.editor.textView.selectedRange().location ?? 0)
         }
         editor.onScroll = { [weak self] _, _ in
         }
@@ -163,6 +173,7 @@ final class DocumentViewController: NSViewController {
 
     override func viewWillLayout() {
         super.viewWillLayout()
+        layoutContents()
         // Before the pass, never after it. A constraint changed from
         // viewDidLayout asks a window that is laying out to lay out again, and
         // that is an abort.
@@ -302,6 +313,73 @@ final class DocumentViewController: NSViewController {
     /// once typing stops rather than on every key.
     private var statsWork: DispatchWorkItem?
 
+    /// The document's own headings, floating in the right margin.
+    let contents = ContentsView()
+
+    /// The page's right edge, pulled in when the index is beside it.
+    private var editorTrailing: NSLayoutConstraint!
+
+    /// How wide the margin has to be before the index is worth showing.
+    ///
+    /// Documentation sites drop theirs on a narrow window rather than squeezing
+    /// the article, and so does this: the page keeps its measure and the index
+    /// waits until there is room beside it.
+    static let contentsWidth: CGFloat = 190
+    static let contentsGap: CGFloat = 28
+
+    /// How many headings a document needs before an index earns its place.
+    ///
+    /// A note with three headings is its own index: you can see all of them by
+    /// looking at the page. The list is for documents long enough that you
+    /// cannot.
+    static let contentsMinimum = 6
+
+    /// Whether this page is wide enough to carry the index.
+    static func hasRoomForContents(pageWidth: CGFloat, columnWidth: CGFloat) -> Bool {
+        // The column sits in the middle, so the margin either side is half what
+        // is left over. The index needs one of those margins to itself.
+        let margin = (pageWidth - columnWidth) / 2
+        return margin >= contentsWidth + contentsGap
+    }
+
+    /// Puts the index where there is room for it, or takes it away.
+    private func layoutContents() {
+        let wanted = ThemeManager.shared.showsContents
+            && !ThemeManager.shared.chromeHidden
+            && contents.entries.count >= Self.contentsMinimum
+            && Self.hasRoomForContents(
+                pageWidth: view.bounds.width,
+                columnWidth: theme.metrics.contentWidth)
+        contents.isHidden = !wanted
+        // The page's width follows, whether or not the index is showing, so
+        // turning it off puts the column back in the middle.
+        let reserved = wanted ? Self.contentsWidth + Self.contentsGap * 2 : 0
+        if editorTrailing.constant != -reserved { editorTrailing.constant = -reserved }
+        guard wanted else { return }
+
+        // Below the floating buttons, and down to the bottom of the window: a
+        // list cut off two thirds of the way down loses its last heading and
+        // looks like a bug rather than a boundary.
+        let top = Self.chromeInset + 44
+        let height = max(0, view.bounds.height - top - Self.chromeInset)
+        contents.frame = NSRect(
+            x: view.bounds.width - Self.contentsWidth - Self.contentsGap,
+            y: Self.chromeInset,
+            width: Self.contentsWidth, height: height)
+    }
+
+    /// Rebuilds the list from the page's own parse.
+    func refreshContents() {
+        guard ThemeManager.shared.showsContents else {
+            if !contents.entries.isEmpty { contents.show([]) }
+            contents.isHidden = true
+            return
+        }
+        contents.show(Outline.entries(of: editor.parsed, in: editor.text))
+        contents.select(at: editor.textView.selectedRange().location)
+        view.needsLayout = true
+    }
+
     /// The split view this page is in, if it is in one.
     var split: DocumentSplitViewController? {
         view.window?.contentViewController as? DocumentSplitViewController
@@ -314,7 +392,7 @@ final class DocumentViewController: NSViewController {
             self.stats.update(text: self.editor.text)
             // Rides the word count's debounce rather than adding a second one.
             // Both want the same thing: the document has stopped moving.
-            self.split?.refreshContents()
+            self.refreshContents()
         }
         statsWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)

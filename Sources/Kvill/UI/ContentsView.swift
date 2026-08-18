@@ -12,7 +12,7 @@ final class ContentsView: NSView {
 
     private let table = NSTableView()
     private let scrollView = NSScrollView()
-    private let heading = NSTextField(labelWithString: "Contents")
+    private let heading = NSTextField(labelWithString: "In this document")
     private(set) var entries: [Outline.Entry] = []
     /// Set while the selection is being moved to follow the caret, so following
     /// the caret does not read as a click and scroll the page out from under it.
@@ -34,14 +34,17 @@ final class ContentsView: NSView {
         table.addTableColumn(column)
         table.headerView = nil
         table.style = .sourceList
+        // After the style, not before it. Setting the style puts the selection
+        // highlight back, so disabling it first disabled nothing and the current
+        // heading kept a blue capsule in the middle of a page.
+        table.selectionHighlightStyle = .none
         table.backgroundColor = .clear
-        table.rowHeight = 24
+        table.rowHeight = 22
         table.intercellSpacing = NSSize(width: 0, height: 2)
         table.dataSource = self
         table.delegate = self
         table.target = self
         table.action = #selector(rowClicked)
-        table.selectionHighlightStyle = .regular
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.documentView = table
@@ -56,8 +59,8 @@ final class ContentsView: NSView {
         addSubview(heading)
         addSubview(scrollView)
         NSLayoutConstraint.activate([
-            heading.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            heading.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -14),
+            heading.leadingAnchor.constraint(equalTo: leadingAnchor),
+            heading.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
             heading.topAnchor.constraint(equalTo: topAnchor),
 
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -103,7 +106,14 @@ final class ContentsView: NSView {
         }
         guard table.selectedRow != row else { return }
         isSyncing = true
+        let previous = table.selectedRow
         table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        // The current row is drawn in ink rather than highlighted, so both the
+        // row being left and the row being entered have to be redrawn.
+        for changed in [previous, row] where changed >= 0 && changed < entries.count {
+            table.reloadData(forRowIndexes: IndexSet(integer: changed),
+                             columnIndexes: IndexSet(integer: 0))
+        }
         table.scrollRowToVisible(row)
         isSyncing = false
     }
@@ -128,15 +138,18 @@ extension ContentsView: NSTableViewDataSource, NSTableViewDelegate {
         let label = NSTextField(labelWithString: entry.title)
         label.lineBreakMode = .byTruncatingTail
         // Top level reads as a heading, the rest as its contents.
-        label.font = .systemFont(ofSize: 12, weight: entry.indent == 0 ? .medium : .regular)
-        label.textColor = entry.indent == 0 ? colors.text : colors.textSecondary
+        // The section the caret is in is the one in full ink. Everything else
+        // is quiet, so the list reads as a margin note rather than a control.
+        let current = row == table.selectedRow
+        label.font = .systemFont(ofSize: 11.5, weight: current ? .semibold : .regular)
+        label.textColor = current ? colors.accent : colors.textSecondary
         label.translatesAutoresizingMaskIntoConstraints = false
 
         let cell = NSTableCellView()
         cell.addSubview(label)
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(
-                equalTo: cell.leadingAnchor, constant: 14 + CGFloat(entry.indent) * 13),
+                equalTo: cell.leadingAnchor, constant: CGFloat(entry.indent) * 12),
             label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -10),
             label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
@@ -146,22 +159,22 @@ extension ContentsView: NSTableViewDataSource, NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         ThemedRow()
     }
+
+    /// How tall the list wants to be, so the page can give it exactly that and
+    /// no scroll bar appears unless the document really is longer than the
+    /// window.
+    var wantedHeight: CGFloat {
+        heading.intrinsicContentSize.height + 6
+            + CGFloat(entries.count) * (table.rowHeight + table.intercellSpacing.height)
+    }
 }
 
-/// Selection painted in the palette's own colour, and painted whether or not the
-/// sidebar is the focused view. The stock row goes pale grey when focus moves to
-/// the editor, which is exactly when someone is looking at it to see where they
-/// are.
+/// A row that draws nothing of its own.
+///
+/// The heading the caret is under is shown by setting it in the accent colour,
+/// not by putting a highlight behind it. This is a margin note beside a page,
+/// and a selected row in the middle of a page reads as a control.
 private final class ThemedRow: NSTableRowView {
-    override var isEmphasized: Bool {
-        get { true }
-        set {}
-    }
-
-    override func drawSelection(in dirtyRect: NSRect) {
-        guard selectionHighlightStyle != .none else { return }
-        ThemeManager.shared.theme.colors.selection.setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 6, dy: 1),
-                     xRadius: 6, yRadius: 6).fill()
-    }
+    override func drawSelection(in dirtyRect: NSRect) {}
+    override func drawBackground(in dirtyRect: NSRect) {}
 }

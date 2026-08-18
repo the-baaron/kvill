@@ -119,6 +119,14 @@ bar of any kind on a plain open.
 off again.** A folder opened deliberately shows its files, because that is what
 opening a folder means. Nothing else appears on its own.
 
+**The sidebar is about which file. The index is about where in it.** Those are
+different questions, so they are different things: the sidebar holds the folder,
+and the document's headings float in the page's own right margin the way a
+documentation site puts them there. The index appears only when the window is
+wide enough to have a margin to spare and the document is long enough to need
+one, and the page's column moves left to make room rather than the index sitting
+on top of it.
+
 **Native components, no custom rendering.** The sidebar is `NSSplitViewItem`,
 the lists are `NSOutlineView` and `NSTableView` in `.sourceList` style, the find
 bar is `NSTextFinder`, tabs are the system's window tabbing. Drawing is for the
@@ -144,7 +152,7 @@ one item at a time rather than as a whole.
 | Search highlighting | Yes, `NSTextFinder` |
 | File explorer | Yes, the folder sidebar |
 | Detects external changes | Yes, and marks the words that changed |
-| Auto table of contents | Yes, in the sidebar, off by default |
+| Auto table of contents | Yes, floating in the page's margin, off by default |
 | Multi-tab | Yes, the system's own window tabbing |
 | Inline annotations | Yes, as a highlight and a footnote, in the file |
 | Built-in terminal | **Refused**, see below |
@@ -163,6 +171,47 @@ understands, which is the thing this app exists not to be.
 `.automatic`, which respects the "Prefer tabs" setting in System Settings, so
 tabs are off unless someone has asked the whole system for them. Nothing is
 drawn and nothing is maintained.
+
+## Never put a window in front of the person at the machine
+
+**Testing must not take over the screen.** Someone is using this computer while
+the checks run, and a window that appears over their work is a bug in the
+checks, not a side effect of them.
+
+- `--selftest` builds its windows off screen and asserts at the end that it left
+  nothing visible. Any check that needs a window uses `OffscreenWindow`, which
+  overrides `constrainFrameRect` so AppKit cannot drag it back onto the display,
+  or hides the document it opened.
+- A check that genuinely needs a window to count as on screen, because the code
+  under test asks `isVisible`, sets `alphaValue = 0` and moves it off screen
+  instead. Visible to AppKit, invisible to a person.
+- **Launching the real app for a screenshot uses `open -g`**, which opens it
+  behind whatever is in front. `screencapture -l <window id>` photographs a
+  window that is not frontmost perfectly well, so there is no reason to steal
+  focus. Quit the app when the picture is taken.
+
+The one thing that does need the screen awake is `screencapture` itself: a
+sleeping display makes it fail on a window and return solid black for the whole
+screen, which reads as a permission problem and is not one. `caffeinate -u`
+first.
+
+## When the layout changes, the pictures are wrong
+
+**Anything that changes what a window looks like makes the App Store
+screenshots stale.** A new sidebar, a moved button, a changed margin, a palette
+that was removed: the store is still showing the old one, and the store is what
+people decide on.
+
+    ./store/make-screenshots.sh        # regenerates all five
+    open store/screenshots             # look at them, do not assume
+
+Shot 2 is a photograph of the real window through `store/capture-window.sh`, so
+it picks up interface changes on its own. The other four are composed around a
+rendered page and pick up typography and palette changes but not chrome.
+
+Pushing them is a separate, deliberate act: `node store/push-listing.mjs` sends
+text **and** screenshots immediately, with no dry run and no `--apply` flag,
+unlike every other script here. Regenerate freely; push when you mean to.
 
 ## What's new, in the About window
 

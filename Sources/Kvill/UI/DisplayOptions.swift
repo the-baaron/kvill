@@ -269,6 +269,8 @@ final class OptionsPalette: NSViewController {
     private let typewriterToggle = NSButton(checkboxWithTitle: "Typewriter scrolling", target: nil, action: nil)
     private let pastEndToggle = NSButton(checkboxWithTitle: "Scroll past end", target: nil, action: nil)
     private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
+    private let contentsToggle = NSButton(
+        checkboxWithTitle: "Show document index", target: nil, action: nil)
     private let autosaveToggle = NSButton(
         checkboxWithTitle: "Live mode", target: nil, action: nil)
     /// The only toggle here that changes what happens to someone's work, so it
@@ -365,7 +367,7 @@ final class OptionsPalette: NSViewController {
 
         case .reading:
             for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle,
-                           autosaveToggle, backgroundToggle] {
+                           contentsToggle, autosaveToggle, backgroundToggle] {
                 toggle.target = self
                 toggle.font = .systemFont(ofSize: 11)
             }
@@ -374,6 +376,11 @@ final class OptionsPalette: NSViewController {
             pastEndToggle.target = self
             pastEndToggle.action = #selector(togglePastEnd)
             markersToggle.action = #selector(toggleMarkers)
+            contentsToggle.target = self
+            contentsToggle.action = #selector(toggleContents)
+            contentsToggle.toolTip =
+                "The document's headings, floating beside the page. Appears only when "
+                + "the window is wide enough to have a margin to spare."
             autosaveToggle.target = self
             autosaveToggle.action = #selector(toggleAutosave)
             autosaveToggle.toolTip =
@@ -390,6 +397,7 @@ final class OptionsPalette: NSViewController {
                 "A first document costs about 100ms, nearly all of it starting up. "
                 + "A second one, with Kvill already running, costs about 25ms."
             return [focusToggle, typewriterToggle, pastEndToggle, markersToggle,
+                    contentsToggle,
                     autosaveToggle, autosaveNote,
                     backgroundToggle, backgroundNote]
         }
@@ -432,6 +440,7 @@ final class OptionsPalette: NSViewController {
         typewriterToggle.state = manager.typewriterScrolling ? .on : .off
         pastEndToggle.state = manager.scrollPastEnd ? .on : .off
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
+        contentsToggle.state = manager.showsContents ? .on : .off
         autosaveToggle.state = manager.liveMode ? .on : .off
         autosaveNote.isHidden = manager.liveMode
         backgroundToggle.state = BackgroundService.isEnabled ? .on : .off
@@ -495,6 +504,15 @@ final class OptionsPalette: NSViewController {
         }
         ThemeManager.shared.liveMode = on
         sync()
+    }
+
+    @objc private func toggleContents() {
+        ThemeManager.shared.showsContents = contentsToggle.state == .on
+        for window in NSApp.windows {
+            guard let split = window.contentViewController as? DocumentSplitViewController
+            else { continue }
+            split.page.refreshContents()
+        }
     }
 
     @objc private func toggleBackground() {

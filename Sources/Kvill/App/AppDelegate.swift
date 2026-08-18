@@ -192,15 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func toggleFocusMode(_ sender: Any?) { ThemeManager.shared.focusMode.toggle() }
     @objc func toggleTypewriter(_ sender: Any?) { ThemeManager.shared.typewriterScrolling.toggle() }
 
-    /// Lists the document's headings down the side. Off by default.
-    @objc func toggleContents(_ sender: Any?) {
-        ThemeManager.shared.showsContents.toggle()
-        for window in NSApp.windows {
-            (window.contentViewController as? DocumentSplitViewController)?
-                .updateSidebarForSettings()
-        }
-    }
-
     /// Turning autosave off writes out whatever was already waiting, so edits
     /// made a moment before the setting changed are not stranded by it.
     @objc func toggleAutosave(_ sender: Any?) {
@@ -236,8 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = manager.alwaysShowMarkers ? .on : .off
         case MenuTag.autosave:
             item.state = manager.liveMode ? .on : .off
-        case MenuTag.contents:
-            item.state = manager.showsContents ? .on : .off
         case MenuTag.followSystem:
             item.state = manager.followsSystemAppearance ? .on : .off
         default:

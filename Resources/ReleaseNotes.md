@@ -1,6 +1,6 @@
-**Contents in the sidebar** - 18 August 2026
-The document's headings, listed down the side, to move around a long one.
-Off until you ask for it: Shift Cmd L.
+**Document index** - 18 August 2026
+A long document's headings, in the margin beside it, the way a
+documentation site does. Turn it on in Settings.
 
 **Annotate a passage** - 18 August 2026
 Shift Cmd A wraps the selection and adds a footnote to write the note in.

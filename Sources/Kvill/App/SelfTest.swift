@@ -24,6 +24,13 @@ enum SelfTest {
     static func run(document: String?) -> Int32 {
         var failures = 0
 
+        // Every document window these checks open is built off screen and
+        // transparent. Hiding them afterwards was not enough: AppKit had already
+        // put them up, and a window that flashes for two frames in front of
+        // whoever is using the machine is still a window in their face.
+        DocumentWindowController.buildsHidden = true
+        defer { DocumentWindowController.buildsHidden = false }
+
         // Straight to stderr: buffered stdout is lost if a check crashes, which
         // hides the very line that would say where.
         func say(_ line: String) {
@@ -879,6 +886,283 @@ enum SelfTest {
                   rendered.contains("August 2026"), "")
         }
 
+        // --- Typewriter scrolling holds the line, wherever you are ------------
+        // Reported as feeling unstable and sometimes scrolling to the bottom of
+        // the page while typing. It did: the text view's height is recalculated
+        // on a debounce, so during a burst of keystrokes the number the centring
+        // clamped against was the old one, and pressing Return quickly at the
+        // end of a document clamped to the bottom with the caret a third of a
+        // page below the middle.
+        //
+        // Every case is driven through the real text view. The burst cases give
+        // the run loop no turn between keys, which is what a person typing at
+        // speed does and what the debounce hides.
+        do {
+            let manager = ThemeManager.shared
+            let wasTypewriter = manager.typewriterScrolling
+            let wasPastEnd = manager.scrollPastEnd
+            manager.typewriterScrolling = true
+            let editor = controller.editor
+
+            /// Types into a document and reports how far the caret ended up from
+            /// the middle of the window, and the largest single jump on the way.
+            func typing(lines: Int, at where_: String, pastEnd: Bool, keys: Int,
+                        newlines: Bool = false, deleting: Bool = false,
+                        settling: Bool) -> (offCentre: CGFloat, jump: CGFloat, atTop: Bool) {
+                manager.scrollPastEnd = pastEnd
+                let body = (1...lines).map { "Line \($0) of an ordinary document." }
+                    .joined(separator: "\n\n")
+                controller.loadText(body)
+                window.setContentSize(NSSize(width: 900, height: 600))
+                controller.view.layoutSubtreeIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+
+                let text = editor.text as NSString
+                let target: Int
+                switch where_ {
+                case "end": target = text.length
+                case "start": target = 0
+                default: target = text.range(of: "Line \(max(1, lines / 2))").location
+                }
+                editor.textView.setSelectedRange(NSRange(location: target, length: 0))
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+
+                var offsets: [CGFloat] = []
+                for _ in 0..<keys {
+                    if deleting {
+                        editor.textView.deleteBackward(nil)
+                    } else {
+                        editor.textView.insertText(
+                            newlines ? "\n" : "x", replacementRange: editor.textView.selectedRange())
+                    }
+                    if settling { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+                    offsets.append(editor.scrollView.contentView.bounds.origin.y)
+                }
+                var jump: CGFloat = 0
+                for i in 1..<max(1, offsets.count) {
+                    jump = max(jump, abs(offsets[i] - offsets[i - 1]))
+                }
+                let clip = editor.scrollView.contentView
+                let caret = editor.textView.selectedRange().location
+                let rect = editor.textView.lineFragmentRect(atCharacterIndex: caret) ?? .zero
+                let gap = rect.midY - (clip.bounds.origin.y + clip.bounds.height / 2)
+                return (abs(gap), jump, (offsets.last ?? 0) < 1)
+            }
+
+            // A line is about 22 points, so a jump of more than two lines
+            // between consecutive keystrokes is the page lurching.
+            let lurch: CGFloat = 50
+
+            for (name, at, pastEnd, newlines) in [
+                ("typing in the middle", "middle", true, false),
+                ("typing in the middle, past-end off", "middle", false, false),
+                ("typing at the end", "end", true, false),
+                ("typing at the end, past-end off", "end", false, false),
+                ("returns at the end", "end", true, true),
+                ("returns at the end, past-end off", "end", false, true),
+                ("returns in the middle", "middle", true, true),
+            ] as [(String, String, Bool, Bool)] {
+                let fast = typing(lines: 300, at: at, pastEnd: pastEnd, keys: 20,
+                                  newlines: newlines, settling: false)
+                check("typewriter: \(name), typed fast, stays on the middle line",
+                      fast.offCentre < 2, String(format: "%.0fpt off centre", fast.offCentre))
+                check("typewriter: \(name), typed fast, never lurches",
+                      fast.jump < lurch, String(format: "biggest jump %.0fpt", fast.jump))
+
+                let slow = typing(lines: 300, at: at, pastEnd: pastEnd, keys: 8,
+                                  newlines: newlines, settling: true)
+                check("typewriter: \(name), typed slowly, stays on the middle line",
+                      slow.offCentre < 2, String(format: "%.0fpt off centre", slow.offCentre))
+            }
+
+            let deleted = typing(lines: 300, at: "middle", pastEnd: true, keys: 8,
+                                 deleting: true, settling: true)
+            check("typewriter: deleting keeps the line on the middle too",
+                  deleted.offCentre < 2, String(format: "%.0fpt off centre", deleted.offCentre))
+
+            // The first line cannot be in the middle of the window without
+            // scrolling the document off the top, so it correctly is not.
+            let atStart = typing(lines: 300, at: "start", pastEnd: true, keys: 8, settling: true)
+            check("typewriter: at the top of a document the page stays at the top",
+                  atStart.atTop, "it scrolled away from the top")
+
+            // A document shorter than the window cannot scroll at all.
+            let tiny = typing(lines: 3, at: "end", pastEnd: true, keys: 8, settling: true)
+            check("typewriter: a document shorter than the window does not lurch",
+                  tiny.jump < lurch, String(format: "biggest jump %.0fpt", tiny.jump))
+
+            manager.typewriterScrolling = wasTypewriter
+            manager.scrollPastEnd = wasPastEnd
+            check("typewriter: the checks put the settings back",
+                  manager.typewriterScrolling == wasTypewriter
+                    && manager.scrollPastEnd == wasPastEnd)
+        }
+
+        // --- Focus mode dims what you are not in, and only that ---------------
+        // It used to restyle the whole document every time the caret crossed a
+        // paragraph, which invalidated the layout: with typewriter scrolling on
+        // the page lurched thousands of points mid-sentence. Now only the
+        // paragraph being left and the one being entered are touched, so this
+        // checks the dimming is still right after moving about.
+        do {
+            let manager = ThemeManager.shared
+            let wasFocus = manager.focusMode
+            manager.focusMode = true
+
+            controller.loadText("First paragraph here.\n\nSecond paragraph here.\n\nThird one.\n")
+            controller.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+            let editor = controller.editor
+            let text = editor.text as NSString
+
+            func ink(_ needle: String) -> NSColor? {
+                let at = text.range(of: needle).location
+                guard at != NSNotFound else { return nil }
+                return editor.textView.textStorage?
+                    .attribute(.foregroundColor, at: at, effectiveRange: nil) as? NSColor
+            }
+
+            func putCaret(in needle: String) {
+                editor.textView.setSelectedRange(
+                    NSRange(location: text.range(of: needle).location + 2, length: 0))
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            }
+
+            putCaret(in: "First paragraph")
+            let firstActive = ink("First paragraph")
+            let secondDimmed = ink("Second paragraph")
+            check("focus: the paragraph you are in is not dimmed",
+                  firstActive != nil && secondDimmed != nil && firstActive != secondDimmed,
+                  firstActive == secondDimmed ? "active and dimmed came back the same colour" : "")
+
+            // Moving to another paragraph has to dim the one left behind and
+            // brighten the one entered. Restyling only what changed is exactly
+            // where that could go wrong.
+            putCaret(in: "Second paragraph")
+            check("focus: moving on brightens the paragraph entered",
+                  ink("Second paragraph") == firstActive,
+                  ink("Second paragraph") == firstActive ? "" : "the new paragraph is not at full strength")
+            check("focus: and dims the one left behind",
+                  ink("First paragraph") == secondDimmed,
+                  ink("First paragraph") == secondDimmed ? "" : "the old paragraph stayed bright")
+
+            putCaret(in: "Third one")
+            check("focus: a third move still leaves only one bright",
+                  ink("Third one") == firstActive
+                    && ink("First paragraph") == secondDimmed
+                    && ink("Second paragraph") == secondDimmed,
+                  ink("Third one") == firstActive ? "" : "more than one paragraph is at full strength")
+
+            manager.focusMode = false
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            controller.loadText("First paragraph here.\n\nSecond paragraph here.\n")
+            controller.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            check("focus: turned off, nothing is dimmed",
+                  ink("First paragraph") == ink("Second paragraph"),
+                  ink("First paragraph") == ink("Second paragraph") ? "" : "something stayed dimmed with focus mode off")
+
+            manager.focusMode = wasFocus
+        }
+
+        // --- Features that have to work together ------------------------------
+        // Each of these is fine on its own and was not in combination. Its own
+        // window and its own editor: sharing the one the rest of the checks use
+        // made the numbers move between runs of the same binary, which is a
+        // measurement reporting on the checks above it rather than on the app.
+        do {
+            let manager = ThemeManager.shared
+            let wasTypewriter = manager.typewriterScrolling
+            let wasFocus = manager.focusMode
+
+            let page = DocumentViewController()
+            let stage = OffscreenWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+                styleMask: [.titled, .resizable, .fullSizeContentView],
+                backing: .buffered, defer: false)
+            stage.contentViewController = page
+            stage.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+            stage.orderFront(nil)
+            let editor = page.editor
+
+            let body = (1...80).map { "## Heading \($0)\n\nProse under heading \($0)." }
+                .joined(separator: "\n\n")
+
+            func load(height: CGFloat = 600) {
+                stage.setContentSize(NSSize(width: 900, height: height))
+                page.loadText(body)
+                page.view.layoutSubtreeIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+            }
+
+            // Jumping to a heading from the index, with typewriter mode both
+            // ways. Through the animator this depended on an animation actually
+            // running, and where one does not the scroll never happened: the
+            // click did nothing at all.
+            for typewriter in [false, true] {
+                manager.typewriterScrolling = typewriter
+                manager.focusMode = false
+                load()
+                let target = (editor.text as NSString).range(of: "## Heading 60").location
+                editor.reveal(target)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.7))
+                let clip = editor.scrollView.contentView
+                let rect = editor.textView.lineFragmentRect(atCharacterIndex: target) ?? .zero
+                check("index: a heading jumped to lands on screen, typewriter \(typewriter ? "on" : "off")",
+                      rect.midY > clip.bounds.minY && rect.midY < clip.bounds.maxY,
+                      String(format: "heading at %.0f, window %.0f to %.0f",
+                             rect.midY, clip.bounds.minY, clip.bounds.maxY))
+            }
+
+            // Resizing moves the middle of the window, and the line typewriter
+            // mode holds there has to move with it.
+            manager.typewriterScrolling = true
+            manager.focusMode = false
+            load()
+            let middle = (editor.text as NSString).range(of: "## Heading 40").location
+            editor.textView.setSelectedRange(NSRange(location: middle, length: 0))
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            for height in [400.0, 800.0, 500.0] as [CGFloat] {
+                stage.setContentSize(NSSize(width: 900, height: height))
+                page.view.layoutSubtreeIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                let clip = editor.scrollView.contentView
+                let rect = editor.textView.lineFragmentRect(
+                    atCharacterIndex: editor.textView.selectedRange().location) ?? .zero
+                let gap = abs(rect.midY - (clip.bounds.origin.y + clip.bounds.height / 2))
+                check("typewriter: resizing to \(Int(height)) keeps the line on the middle",
+                      gap < 2, String(format: "%.0fpt off centre", gap))
+            }
+
+            // Focus mode restyled the whole document on every paragraph, which
+            // invalidated its layout, so the caret's measured position came back
+            // wrong and the page lurched by thousands of points mid-sentence.
+            for (focus, typewriter) in [(true, true), (true, false), (false, true), (false, false)] {
+                manager.focusMode = focus
+                manager.typewriterScrolling = typewriter
+                load()
+                editor.textView.setSelectedRange(NSRange(location: middle, length: 0))
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                var worst: CGFloat = 0
+                var previous = editor.scrollView.contentView.bounds.origin.y
+                for _ in 0..<15 {
+                    editor.textView.insertText("y", replacementRange: editor.textView.selectedRange())
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.04))
+                    let now = editor.scrollView.contentView.bounds.origin.y
+                    worst = max(worst, abs(now - previous)); previous = now
+                }
+                check("typing with focus \(focus ? "on " : "off") and typewriter \(typewriter ? "on " : "off") does not lurch",
+                      worst < 120, String(format: "biggest jump %.0fpt", worst))
+            }
+
+            manager.focusMode = wasFocus
+            manager.typewriterScrolling = wasTypewriter
+            stage.orderOut(nil)
+            check("the combination checks put the settings back",
+                  manager.focusMode == wasFocus && manager.typewriterScrolling == wasTypewriter)
+        }
+
         // --- Room at the top, whatever the system is showing ------------------
         // Tabs are the system's now, and a tab bar takes a second band of the
         // window. The page is drawn under a transparent title bar, so the air
@@ -982,6 +1266,22 @@ enum SelfTest {
 
             check("contents: off unless it has been turned on",
                   !ThemeManager.shared.showsContents)
+
+            // It floats beside the page, and only where there is a margin to
+            // spare. A narrow window keeps its measure and drops the index,
+            // which is what documentation sites do rather than squeeze the text.
+            let wide = DocumentViewController.hasRoomForContents(
+                pageWidth: 1400, columnWidth: 700)
+            let narrow = DocumentViewController.hasRoomForContents(
+                pageWidth: 900, columnWidth: 700)
+            check("contents: a wide window has room for the index", wide)
+            check("contents: a narrow one does not, and keeps its measure", !narrow)
+            check("contents: the threshold is the margin, not the window",
+                  DocumentViewController.hasRoomForContents(pageWidth: 1200, columnWidth: 300),
+                  "a narrow column leaves margin even in a smaller window")
+            check("contents: a short document does not get an index",
+                  DocumentViewController.contentsMinimum > 3,
+                  "\(DocumentViewController.contentsMinimum) headings needed")
 
             // Opening a document puts you at the top of it, caret included.
             controller.loadText("# One\n\nBody.\n\n## Two\n\nMore body.\n")

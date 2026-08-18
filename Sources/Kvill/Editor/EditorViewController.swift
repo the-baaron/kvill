@@ -125,9 +125,38 @@ final class EditorViewController: NSViewController {
             name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
     }
 
+    /// The viewport height the caret was last centred against.
+    private var centredAgainstHeight: CGFloat = 0
+
     override func viewDidLayout() {
         super.viewDidLayout()
         updateInsets()
+
+        // Resizing the window moves the middle of it, and the line typewriter
+        // mode is holding there has to move with it. Without this the caret was
+        // left a hundred points off centre after a resize and stayed there until
+        // the next keystroke put it back.
+        //
+        // On the next turn of the run loop, not inside the layout pass: this
+        // scrolls, and scrolling from inside a pass asks a window that is laying
+        // out to lay out again.
+        let height = scrollView.contentView.bounds.height
+        guard ThemeManager.shared.typewriterScrolling,
+              abs(height - centredAgainstHeight) > 0.5 else { return }
+        centredAgainstHeight = height
+        DispatchQueue.main.async { [weak self] in
+            self?.recentreAfterResize()
+        }
+    }
+
+    /// Puts the caret back on the middle line after the window has changed size.
+    private func recentreAfterResize() {
+        guard ThemeManager.shared.typewriterScrolling else { return }
+        // The height is measured on a debounce and a resize changes it, so the
+        // slack is settled first: centring against a stale height is what put
+        // the page at the bottom when typing quickly.
+        applySlack()
+        centerCaret()
     }
 
     deinit {
@@ -218,7 +247,11 @@ final class EditorViewController: NSViewController {
         rect.origin.y += textView.textContainerOrigin.y
         let air = theme.metrics.base * 2
         let top = max(0, rect.minY - air)
-        scrollView.contentView.animator().setBoundsOrigin(NSPoint(x: 0, y: top))
+        // Set, not animated. Through the animator this depended on an animation
+        // actually running, and where one does not the scroll simply never
+        // happened: clicking a heading did nothing at all. Jumping straight
+        // there is also what a table of contents is for.
+        scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: top))
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
@@ -603,6 +636,23 @@ final class EditorViewController: NSViewController {
 
     /// Moving the selection changes which markers are revealed, so the blocks the
     /// selection just left and just entered are restyled. Nothing else is touched.
+    /// The paragraph the caret was in last time the dimming was updated, so the
+    /// one being left can be put back to full strength.
+    private var previousParagraphID: Int?
+
+    /// The lines making up a paragraph, for restyling just that paragraph.
+    private func lineRange(ofParagraph id: Int?) -> Range<Int>? {
+        guard let id else { return nil }
+        var first: Int?
+        var last: Int?
+        for (index, line) in parsed.lines.enumerated() where line.paragraphID == id {
+            if first == nil { first = index }
+            last = index
+        }
+        guard let first, let last else { return nil }
+        return first..<(last + 1)
+    }
+
     private func updateActiveBlocks() {
         let previous = activeBlockIDs
         let current = recomputeActiveBlocks()
@@ -615,11 +665,30 @@ final class EditorViewController: NSViewController {
         let context = makeContext()
 
         if ThemeManager.shared.focusMode {
-            // Focus mode re-dims the whole document, so it all has to be restyled.
-            styler.style(storage, document: parsed, lines: 0..<parsed.lines.count, context: context)
-            styler.applyFocusDimming(
-                storage, document: parsed, lines: 0..<parsed.lines.count,
-                activeParagraphID: context.activeParagraphID)
+            // Only the paragraphs whose dimming actually changes: the one being
+            // left and the one being entered. Everything else is already in the
+            // state it should be in.
+            //
+            // This used to restyle the whole document on every paragraph
+            // boundary. Restyling invalidates layout, so the caret's measured
+            // position came back from a document that was no longer laid out,
+            // and with typewriter scrolling on the page lurched by thousands of
+            // points in the middle of a sentence. It was also the whole document
+            // per keystroke, which is the thing this app does not do.
+            var scopes: [Range<Int>] = []
+            for id in current.symmetricDifference(previous) {
+                if let range = blockLineRanges[id] { scopes.append(range) }
+            }
+            for id in [previousParagraphID, context.activeParagraphID] {
+                if let range = lineRange(ofParagraph: id) { scopes.append(range) }
+            }
+            for scope in scopes {
+                styler.style(storage, document: parsed, lines: scope, context: context)
+                styler.applyFocusDimming(
+                    storage, document: parsed, lines: scope,
+                    activeParagraphID: context.activeParagraphID)
+            }
+            previousParagraphID = context.activeParagraphID
         } else {
             for id in current.symmetricDifference(previous) {
                 guard let range = blockLineRanges[id] else { continue }
@@ -879,6 +948,22 @@ final class EditorViewController: NSViewController {
 
         let visibleHeight = clip.bounds.height
         guard visibleHeight > 0 else { return false }
+
+        // The view has to be tall enough to put this line in the middle before
+        // it is asked to scroll there. Its height is recalculated on a debounce,
+        // which is right for typing but means that during a burst the number
+        // clamped against is the old one: pressing Return quickly at the end of
+        // a document clamped to the bottom, and the caret sat a third of a page
+        // below the middle rather than on it.
+        //
+        // Grown here rather than by calling the debounced measurement, which
+        // lays the whole document out and is exactly what must not happen on
+        // every keystroke. The debounce still settles the real height after.
+        let needed = fragment.midY + visibleHeight / 2
+        if textView.frame.height < needed {
+            textView.minSize = NSSize(width: 0, height: needed)
+            textView.setFrameSize(NSSize(width: textView.frame.width, height: needed))
+        }
 
         let maxY = max(0, textView.frame.height - visibleHeight)
         let target = min(max(fragment.midY - visibleHeight / 2, 0), maxY)

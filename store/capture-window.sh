@@ -29,6 +29,10 @@ restore() {
 }
 trap restore EXIT
 
+# Opened with -g throughout, so the window never comes to the front of whoever
+# is using the machine. screencapture -l photographs a window that is not
+# frontmost perfectly well.
+#
 # Wake the display and hold it awake. A sleeping display makes screencapture
 # fail on a window or a region and return solid black for the whole screen,
 # which reads as a permission problem and is not one. The demo recorder in this
@@ -60,12 +64,12 @@ await() {  # what, seconds
 }
 
 if [ -n "$document" ]; then
-  open -a "$APP" "$document"
+  open -g -a "$APP" "$document"
   await window 20 || { echo "the document never opened a window" >&2; exit 1; }
   sleep 2
-  open -a "$APP" "$folder"
+  open -g -a "$APP" "$folder"
 else
-  open -a "$APP" "$folder"
+  open -g -a "$APP" "$folder"
   await window 20 || { echo "the folder never opened a window" >&2; exit 1; }
 fi
 # The sidebar animates in, and the tree lays out after that.

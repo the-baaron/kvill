@@ -39,9 +39,6 @@ final class DocumentSplitViewController: NSSplitViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(applyTheme), name: .kvillThemeChanged, object: nil)
 
-        sidebar.contents.onJump = { [weak self] entry in
-            self?.page.editor.reveal(entry.location)
-        }
         sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
         sidebarItem.minimumThickness = 180
         sidebarItem.maximumThickness = 320
@@ -73,7 +70,6 @@ final class DocumentSplitViewController: NSSplitViewController {
     /// Shows a folder's Markdown down the side and opens the sidebar for it.
     func showFolder(_ url: URL) {
         folder = url
-        sidebar.showsTree = true
         sidebar.tree.onOpen = { [weak self] file in
             self?.open(file)
         }
@@ -93,64 +89,13 @@ final class DocumentSplitViewController: NSSplitViewController {
         }
     }
 
-    /// Whether there is anything in the sidebar worth opening it for.
+    /// Whether the open folder holds more than one file worth listing.
     ///
-    /// A sidebar listing one file is a list of the thing you are already looking
-    /// at. A contents list of a document with no headings is the same.
+    /// A sidebar listing one file is a list of the thing you are already
+    /// looking at.
     var hasSomethingToSwitchBetween: Bool {
-        if ThemeManager.shared.showsContents, !sidebar.contents.entries.isEmpty { return true }
         guard folder != nil else { return false }
         return sidebar.tree.documentCount > 1
-    }
-
-    /// Rebuilds the contents list from the page's own parse.
-    ///
-    /// Debounced by the caller and skipped entirely when the sidebar is shut:
-    /// a list nobody can see is work nobody asked for, and this is on the path
-    /// a keystroke takes.
-    func refreshContents() {
-        guard ThemeManager.shared.showsContents else { return }
-        // Computed even while the sidebar is shut, which looks like work nobody
-        // can see and is not: whether there is anything to show is the thing
-        // that decides whether to open it, and guarding on the sidebar being
-        // open meant it could never be what opened it. It costs 3ms for two
-        // thousand headings and only runs when the setting is on.
-        let editor = page.editor
-        let entries = Outline.entries(of: editor.parsed, in: editor.text)
-        sidebar.contents.show(entries)
-        sidebar.contents.select(at: editor.textView.selectedRange().location)
-
-        // Opened once, when there is first something in it. Not held open: a
-        // sidebar that reopens itself every time you shut it is not a toggle.
-        if !entries.isEmpty, !hasOfferedContents {
-            hasOfferedContents = true
-            if sidebarItem.isCollapsed { sidebarItem.animator().isCollapsed = false }
-        }
-    }
-
-    /// Whether the contents list has already been put in front of someone in
-    /// this window.
-    private var hasOfferedContents = false
-
-    /// Follows the caret without rebuilding the list.
-    func syncContentsSelection() {
-        guard ThemeManager.shared.showsContents, isShowingFileTree else { return }
-        sidebar.contents.select(at: page.editor.textView.selectedRange().location)
-    }
-
-    /// Opens or shuts the sidebar for whatever it now holds.
-    func updateSidebarForSettings() {
-        sidebar.showsTree = folder != nil
-        // Turning it off shuts the sidebar unless the folder is holding it open;
-        // turning it on offers it again.
-        hasOfferedContents = false
-        if !ThemeManager.shared.showsContents {
-            sidebar.contents.show([])
-            if folder == nil, !sidebarItem.isCollapsed {
-                sidebarItem.animator().isCollapsed = true
-            }
-        }
-        refreshContents()
     }
 
     /// Stands in for a click on a row, so the whole path can be checked rather

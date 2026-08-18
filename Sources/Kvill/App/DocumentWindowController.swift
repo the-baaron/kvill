@@ -5,6 +5,17 @@ import AppKit
 /// second window, never a tab.
 final class DocumentWindowController: NSWindowController {
 
+    /// Whether document windows are being built for the checks rather than for
+    /// a person.
+    ///
+    /// Set for the length of `--selftest`. Someone is using this machine while
+    /// the checks run, and hiding a window after AppKit has already put it on
+    /// screen still flashes it in their face for a frame or two. Built hidden,
+    /// so there is nothing to flash: off screen, transparent, and ignoring the
+    /// mouse, but still a real window that reports itself visible, because some
+    /// of what is being checked asks exactly that.
+    static var buildsHidden = false
+
     static func create() -> DocumentWindowController {
         let split = DocumentSplitViewController(page: DocumentViewController())
 
@@ -19,6 +30,11 @@ final class DocumentWindowController: NSWindowController {
         // fitting size. The editor has no intrinsic size, so restore the frame.
         window.setContentSize(NSSize(width: 900, height: 720))
         window.center()
+        if buildsHidden {
+            window.alphaValue = 0
+            window.ignoresMouseEvents = true
+            window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        }
         window.titlebarAppearsTransparent = true
         // Nothing draws a line across or down the title bar. With a translucent
         // palette there is no opaque ground under it, so a hairline reads as a
