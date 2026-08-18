@@ -955,10 +955,18 @@ enum SelfTest {
             documentController.openDocument(withContentsOf: two, display: true) { d, _, _ in second = d }
             settled()
 
-            // Left on screen deliberately for this one: openInPlace only raises
-            // the other window when that window is visible, and hiding them
-            // turns the very case being checked into the other branch. They are
-            // put away at the end.
+            // Ordering these out would turn the case being checked into the
+            // other branch: openInPlace only raises the other window when that
+            // window is visible. So they stay visible to AppKit and invisible to
+            // whoever is sitting in front of the machine, which is the only way
+            // to have both. Ordering them out was tried and quietly checked
+            // nothing; leaving them up put two windows in someone's face.
+            for document in [first, second] {
+                guard let window = document?.windowControllers.first?.window else { continue }
+                window.alphaValue = 0
+                window.ignoresMouseEvents = true
+                window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+            }
             let splitOne = first?.windowControllers.first?.window?.contentViewController
                 as? DocumentSplitViewController
             let splitTwo = second?.windowControllers.first?.window?.contentViewController
@@ -967,6 +975,13 @@ enum SelfTest {
                 splitOne.showFolder(folder)
                 splitTwo.showFolder(folder)
                 settled()
+                check("two windows: the other window counts as on screen",
+                      first?.windowControllers.first?.window?.isVisible == true,
+                      "otherwise this is checking the wrong branch")
+                check("two windows: and neither can actually be seen",
+                      [first, second].allSatisfy {
+                          ($0?.windowControllers.first?.window?.alphaValue ?? 1) == 0
+                      })
                 check("two windows: each starts on its own file",
                       splitTwo.sidebar.tree.selectedURL?.lastPathComponent == "Two.md",
                       splitTwo.sidebar.tree.selectedURL?.lastPathComponent ?? "nothing")
@@ -1266,7 +1281,7 @@ enum SelfTest {
         // window behind is a check that changed the machine it ran on.
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         let leftBehind = NSApp.windows.filter {
-            $0.isVisible && $0.frame.origin.x > -10000
+            $0.isVisible && $0.frame.origin.x > -10000 && $0.alphaValue > 0
         }
         check("the checks left no windows on screen", leftBehind.isEmpty,
               leftBehind.map {
