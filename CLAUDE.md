@@ -28,7 +28,7 @@ main claim, not just in a benchmark.
 | `./store/make-portfolio-assets.sh` | Builds all ten baars.design case-study images and the wordmark, from the app |
 | `scripts/make-portfolio.swift` | Composes a rendered page in a window at any canvas size. `--wash HEX A` flat, `--fade HEX A0 A1 HOLD [END]` graded, `--drop F` |
 | `scripts/make-motif.swift` | Draws the hanging-marker signature as an abstract. `--band F` composes inside the part that survives a centre crop |
-| `scripts/make-logo.swift` | Writes the wordmark as SVG outlines |
+| `scripts/make-logo.swift` | Writes the wordmark as SVG outlines; `--lockup` adds the icon, also as paths |
 | `node store/push-listing.mjs` | Pushes listing text and screenshots from `store/listing.md` |
 | `node store/submit.mjs` | Submits the current version for review |
 | `./store/demo-setup.sh` | Builds the demo folder and prints the shot list for a review video |

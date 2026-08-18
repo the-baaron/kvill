@@ -4,6 +4,7 @@ import CoreText
 // Writes Kvill's wordmark as an SVG of outlines.
 //
 //   swift scripts/make-logo.swift out.svg [ink] [accent]
+//   swift scripts/make-logo.swift out.svg --lockup     the icon and the word
 //
 // The mark is the app's own signature: the syntax marker hanging to the left of
 // the word, dimmed, exactly as a heading's `#` hangs in the editor's margin.
@@ -15,8 +16,16 @@ guard arguments.count >= 2 else {
     exit(2)
 }
 let output = arguments[1]
-let inkColour = arguments.count > 2 ? arguments[2] : "#221F1B"
-let accentColour = arguments.count > 3 ? arguments[3] : "#B4653A"
+/// The icon beside the word, rather than the word on its own.
+///
+/// Everything in the app icon is a rounded rectangle, a glyph and three bars,
+/// so it is drawn here as paths rather than exported as a bitmap. The result
+/// scales, prints, and can be dropped into a page or a slide without carrying a
+/// PNG at four sizes.
+let wantsLockup = arguments.contains("--lockup")
+let colourArguments = arguments.dropFirst(2).filter { !$0.hasPrefix("--") }
+let inkColour = colourArguments.first ?? "#221F1B"
+let accentColour = colourArguments.dropFirst().first ?? "#B4653A"
 
 /// The serif the app sets headings in, reached through the system design rather
 /// than by family name: asking for "New York" by name returns the UI font.
@@ -102,16 +111,81 @@ let width = maxX - minX
 let height = maxY - minY
 
 let origin = CGPoint(x: -minX, y: -minY)
+
+/// The app icon, as paths, at a given size and position.
+///
+/// The same geometry `scripts/make-icon.swift` draws into the .icns: the
+/// squircle inset inside its canvas, the hanging marker right-aligned against
+/// the text column, and one bright bar with two quieter ones. Written twice on
+/// purpose rather than shared, because that one draws pixels through AppKit and
+/// this one writes path data, and neither wants the other's machinery.
+func iconMarkup(x: CGFloat, y: CGFloat, side: CGFloat, flipAbout: CGFloat) -> String {
+    let inset = side * 0.086
+    let body = CGRect(x: x + inset, y: y + inset,
+                      width: side - inset * 2, height: side - inset * 2)
+    let radius = body.width * 0.2237
+    let columnX = body.minX + body.width * 0.46
+    let barWidth = body.width * 0.30
+
+    /// One bar. The fraction is measured from the bottom, the way the icon is
+    /// drawn in AppKit, and flipped here because SVG counts y downwards. Without
+    /// the flip the bright heading bar came out underneath the two quiet ones,
+    /// which is the icon upside down.
+    func bar(_ fromBottom: CGFloat, _ width: CGFloat, _ height: CGFloat,
+             _ opacity: String) -> String {
+        let h = body.height * height
+        let up = body.minY + body.height * fromBottom
+        return """
+          <rect x="\(num(columnX))" y="\(num(flipAbout - up - h))" \
+        width="\(num(width))" height="\(num(h))" rx="\(num(h / 2))" \
+        fill="#F2EEE8" fill-opacity="\(opacity)"/>
+        """
+    }
+
+    // The marker is set in the same monospaced face the icon uses, outlined so
+    // the file carries no font dependency, like the word beside it.
+    let markerFont = NSFont.monospacedSystemFont(ofSize: body.height * 0.40, weight: .medium)
+    let markerPath = outline("#", font: markerFont)
+    let markerBounds = markerPath.boundingBoxOfPath
+    let markerX = columnX - markerBounds.width - body.width * 0.055 - markerBounds.minX
+    let markerY = body.midY - markerBounds.height * 0.46 - markerBounds.minY
+
+    return """
+      <rect x="\(num(body.minX))" y="\(num(flipAbout - body.maxY))" width="\(num(body.width))" \
+    height="\(num(body.height))" rx="\(num(radius))" fill="#20232A"/>
+      <path fill="#D08A5D" d="\(pathData(markerPath, flipAbout: flipAbout,
+                                          offset: CGPoint(x: markerX, y: markerY)))"/>
+    \(bar(0.585, barWidth, 0.070, "1"))
+    \(bar(0.455, barWidth * 0.86, 0.045, "0.5"))
+    \(bar(0.355, barWidth * 0.62, 0.045, "0.5"))
+    """
+}
+
+func num(_ value: CGFloat) -> String { String(format: "%.2f", value) }
+
+// The lockup sets the icon at the word's own height and stands it to the left,
+// with a gap sized from the type rather than picked.
+let iconSide = wantsLockup ? height * 1.15 : 0
+let lockupGap = wantsLockup ? wordSize * 0.34 : 0
+let totalWidth = wantsLockup ? iconSide + lockupGap + width : width
+let totalHeight = wantsLockup ? max(iconSide, height) : height
+let wordShift = wantsLockup ? iconSide + lockupGap : 0
+let wordDrop = wantsLockup ? (totalHeight - height) / 2 : 0
+
 let svg = """
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(String(format: "%.2f", width)) \
-\(String(format: "%.2f", height))" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(num(totalWidth)) \(num(totalHeight))" \
+fill="none">
+\(wantsLockup ? iconMarkup(x: 0, y: (totalHeight - iconSide) / 2, side: iconSide, flipAbout: totalHeight) : "")
   <path fill="\(accentColour)" fill-opacity="0.55" d="\(pathData(
-    marker, flipAbout: height,
-    offset: CGPoint(x: origin.x + markerOffset.x, y: origin.y + markerOffset.y)))"/>
-  <path fill="\(inkColour)" d="\(pathData(word, flipAbout: height, offset: origin))"/>
+    marker, flipAbout: totalHeight,
+    offset: CGPoint(x: origin.x + markerOffset.x + wordShift,
+                    y: origin.y + markerOffset.y + wordDrop)))"/>
+  <path fill="\(inkColour)" d="\(pathData(
+    word, flipAbout: totalHeight,
+    offset: CGPoint(x: origin.x + wordShift, y: origin.y + wordDrop)))"/>
 </svg>
 
 """
 
 try? svg.write(to: URL(fileURLWithPath: output), atomically: true, encoding: .utf8)
-print("wrote \(output)  viewBox \(String(format: "%.0f x %.0f", width, height))")
+print("wrote \(output)  viewBox \(num(totalWidth)) x \(num(totalHeight))\(wantsLockup ? "  (lockup)" : "")")
