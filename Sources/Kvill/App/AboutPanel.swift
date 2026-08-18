@@ -14,13 +14,9 @@ final class AboutPanel: NSObject, NSWindowDelegate {
 
     /// Why the app is called what it is.
     ///
-    /// The facts come from the commit that did the renaming: Foldout, and every
-    /// single dictionary word tried in English and Norwegian, was already
-    /// reserved on the App Store, so the name had to be a coinage.
-    static let nameStory =
-        "Kvill is quill, carried into Norwegian, where an English qu is written kv. "
-        + "Every plain name was already taken, so this one crossed a border and kept "
-        + "its sound."
+    /// Short on purpose. The longer version explained the Norwegian spelling of
+    /// qu, which is the etymology of the joke rather than the joke.
+    static let nameStory = "Quill, but made in Norway."
 
     private var window: NSWindow?
 

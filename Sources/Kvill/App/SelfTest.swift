@@ -794,7 +794,9 @@ enum SelfTest {
             check("about: and baars.design is a real link",
                   linked == AboutPanel.siteURL, linked?.absoluteString ?? "no link")
 
-            check("about: the name is explained", AboutPanel.nameStory.contains("quill"))
+            check("about: the name is explained",
+                  AboutPanel.nameStory.lowercased().contains("quill"),
+                  AboutPanel.nameStory)
 
             // The notes ship in the bundle, so a build that forgot the file is
             // caught here rather than by someone opening the window.
