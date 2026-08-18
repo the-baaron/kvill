@@ -749,6 +749,95 @@ enum SelfTest {
             try? FileManager.default.removeItem(at: folder)
         }
 
+        // --- What something else changed gets marked --------------------------
+        // Agents and scripts rewrite these files while the window is open. The
+        // page already reloaded silently; now the part that moved is lit for a
+        // moment. The diff is pure, so it can be checked properly rather than
+        // by looking at a screenshot and hoping.
+        do {
+            func text(_ new: String, _ ranges: [NSRange]) -> [String] {
+                let s = new as NSString
+                return ranges.map { s.substring(with: $0) }
+            }
+
+            check("diff: an unchanged file has nothing to mark",
+                  ChangeDiff.changedRanges(from: "a\nb\nc\n", to: "a\nb\nc\n").isEmpty)
+
+            let edited = ChangeDiff.changedRanges(from: "a\nb\nc\n", to: "a\nB\nc\n")
+            check("diff: one changed line marks that line",
+                  text("a\nB\nc\n", edited) == ["B"], "\(text("a\nB\nc\n", edited))")
+
+            // The case the whole thing is for: an agent rewrites a few words in
+            // the middle of a long line and the rest of it should stay dark.
+            let old = "The quick brown fox jumps over the lazy dog"
+            let new = "The quick purple fox jumps over the lazy dog"
+            let words = ChangeDiff.changedRanges(from: old, to: new)
+            check("diff: a reworded line marks only the words that changed",
+                  text(new, words) == ["purple"], "\(text(new, words))")
+
+            let added = ChangeDiff.changedRanges(from: "a\nb\n", to: "a\nNEW\nb\n")
+            check("diff: an inserted line marks the insertion, not the rest",
+                  text("a\nNEW\nb\n", added) == ["NEW"], "\(text("a\nNEW\nb\n", added))")
+
+            // An insert in the middle used to drag everything below it into the
+            // answer, because the lines after it had all moved along by one.
+            let long = (1...12).map { "line \($0)" }.joined(separator: "\n")
+            let spliced = long.replacingOccurrences(of: "line 6", with: "line 6\ninserted")
+            let splice = ChangeDiff.changedRanges(from: long, to: spliced)
+            check("diff: everything below an insert is not counted as changed",
+                  text(spliced, splice) == ["inserted"], "\(text(spliced, splice))")
+
+            let two = ChangeDiff.changedRanges(from: "a\nb\nc\nd\n", to: "a\nB\nc\nD\n")
+            check("diff: two separate edits are two marks",
+                  text("a\nB\nc\nD\n", two) == ["B", "D"], "\(text("a\nB\nc\nD\n", two))")
+
+            let block = ChangeDiff.changedRanges(from: "a\nb\nc\nd\n", to: "a\nB\nC\nd\n")
+            check("diff: adjacent changed lines join into one mark",
+                  block.count == 1, "\(block.count) marks")
+
+            let deleted = ChangeDiff.changedRanges(from: "a\nb\nc\n", to: "a\nc\n")
+            check("diff: a pure deletion still marks where it went",
+                  deleted.count == 1 && deleted[0].length == 0,
+                  "\(deleted.count) marks, length \(deleted.first?.length ?? -1)")
+
+            // A whole file replaced is the case that would otherwise sit there
+            // multiplying one side by the other.
+            let big = (1...4000).map { "line \($0)" }.joined(separator: "\n")
+            let other = (1...4000).map { "other \($0)" }.joined(separator: "\n")
+            let started = Date()
+            let wholesale = ChangeDiff.changedRanges(from: big, to: other)
+            let took = Date().timeIntervalSince(started)
+            check("diff: a wholesale rewrite is answered at all",
+                  !wholesale.isEmpty, "\(wholesale.count) marks")
+            check("diff: and answered quickly, not by multiplying it out",
+                  took < 0.2, String(format: "%.0fms", took * 1000))
+
+            // The same size, but a single edit inside it: the ends are trimmed
+            // first, so this stays precise however long the file is.
+            var oneEdit = (1...4000).map { "line \($0)" }
+            oneEdit[2000] = "line 2001 changed by something else"
+            let precise = ChangeDiff.changedRanges(
+                from: big, to: oneEdit.joined(separator: "\n"))
+            check("diff: one edit in a long file is still one mark",
+                  precise.count == 1, "\(precise.count) marks")
+
+            // And the fade, which is a clock rather than a diff.
+            let flashView = controller.editor.textView
+            controller.loadText("alpha\nbeta\ngamma\n")
+            controller.view.layoutSubtreeIfNeeded()
+            flashView.flashChanges([NSRange(location: 6, length: 4)])
+            check("flash: a change starts fully lit",
+                  flashView.flashStrength == 1, "\(flashView.flashStrength)")
+            check("flash: and knows what it is lighting",
+                  flashView.flashRangesForTest.count == 1)
+            RunLoop.current.run(
+                until: Date().addingTimeInterval(
+                    EditorTextView.flashHold + EditorTextView.flashFade + 0.3))
+            check("flash: and it is gone afterwards, leaving nothing lit",
+                  flashView.flashStrength == 0 && flashView.flashRangesForTest.isEmpty,
+                  "\(flashView.flashRangesForTest.count) still lit")
+        }
+
         // --- The lit row is the file the window is showing --------------------
         // Two windows on the same folder. Clicking a file that is already open
         // in the other window raises that window and leaves this one alone,

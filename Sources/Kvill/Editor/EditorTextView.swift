@@ -212,9 +212,128 @@ final class EditorTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         fillPage(dirtyRect)
         drawDecorations(in: dirtyRect)
+        drawChangeFlash(in: dirtyRect)
         super.draw(dirtyRect)
         drawOverlays(in: dirtyRect)
         drawPlaceholder()
+    }
+
+    // MARK: - Marking what something else changed
+
+    /// How long a change stays lit, and how long it takes to go.
+    ///
+    /// Held at full first so the eye can land on it, then faded. A mark that
+    /// starts fading immediately is gone before you have looked up.
+    static let flashHold: TimeInterval = 0.5
+    static let flashFade: TimeInterval = 0.7
+
+    private var flashRanges: [NSRange] = []
+    private var flashStartedAt: Date?
+    private var flashTimer: Timer?
+
+    /// Lights the parts of the page something else just rewrote.
+    ///
+    /// Drawn rather than applied as an attribute. A temporary attribute would go
+    /// through the layout manager on every frame of the fade, and this runs
+    /// while a file is being rewritten underneath the window, which is the worst
+    /// possible moment to be making layout do more work.
+    func flashChanges(_ ranges: [NSRange]) {
+        flashTimer?.invalidate()
+        flashRanges = ranges
+        guard !ranges.isEmpty else {
+            flashTimer = nil
+            flashStartedAt = nil
+            needsDisplay = true
+            return
+        }
+        flashStartedAt = Date()
+        needsDisplay = true
+
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            guard let started = self.flashStartedAt,
+                  Date().timeIntervalSince(started) < Self.flashHold + Self.flashFade else {
+                timer.invalidate()
+                self.flashTimer = nil
+                self.flashStartedAt = nil
+                self.flashRanges = []
+                self.needsDisplay = true
+                return
+            }
+            self.needsDisplay = true
+        }
+        flashTimer = timer
+        // Common modes, or the fade freezes mid-way while a menu is open or the
+        // page is being scrolled, which is exactly when a file tends to change
+        // underneath you.
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    /// How lit the change is right now, from 1 down to 0.
+    var flashStrength: CGFloat {
+        guard let started = flashStartedAt else { return 0 }
+        let elapsed = Date().timeIntervalSince(started)
+        if elapsed <= Self.flashHold { return 1 }
+        let faded = (elapsed - Self.flashHold) / Self.flashFade
+        return CGFloat(max(0, 1 - faded))
+    }
+
+    /// The ranges currently lit, for the self test.
+    var flashRangesForTest: [NSRange] { flashRanges }
+
+    private func drawChangeFlash(in dirtyRect: NSRect) {
+        guard !flashRanges.isEmpty else { return }
+        let strength = flashStrength
+        guard strength > 0 else { return }
+
+        let colors = theme.colors
+        colors.accent.withAlphaComponent(0.22 * strength).setFill()
+        for range in flashRanges {
+            for box in flashBoxes(for: range) where box.intersects(dirtyRect) {
+                NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3).fill()
+            }
+        }
+    }
+
+    /// One box per line the range covers, so a rewritten paragraph is marked
+    /// line by line rather than as one rectangle swallowing the margins.
+    private func flashBoxes(for range: NSRange) -> [NSRect] {
+        guard let layoutManager, let textContainer, let storage = textStorage else { return [] }
+        let length = storage.length
+        guard length > 0, range.location >= 0, range.location <= length else { return [] }
+
+        let origin = textContainerOrigin
+        // A pure deletion has nothing to light, so a sliver marks the join.
+        if range.length == 0 {
+            let at = min(range.location, max(0, length - 1))
+            let glyph = layoutManager.glyphRange(
+                forCharacterRange: NSRange(location: at, length: 1), actualCharacterRange: nil)
+            guard glyph.length > 0 else { return [] }
+            var box = layoutManager.boundingRect(forGlyphRange: glyph, in: textContainer)
+            box.origin.x += origin.x
+            box.origin.y += origin.y
+            return [NSRect(x: box.minX - 1, y: box.minY, width: 2, height: box.height)]
+        }
+
+        let end = min(NSMaxRange(range), length)
+        guard end > range.location else { return [] }
+        let safe = NSRange(location: range.location, length: end - range.location)
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: safe, actualCharacterRange: nil)
+        guard glyphRange.length > 0 else { return [] }
+
+        var boxes: [NSRect] = []
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) {
+            _, _, container, lineGlyphRange, _ in
+            // Only the part of the line the change actually covers, so an edit
+            // to the end of a paragraph does not light the whole paragraph.
+            let covered = NSIntersectionRange(lineGlyphRange, glyphRange)
+            guard covered.length > 0 else { return }
+            var box = layoutManager.boundingRect(forGlyphRange: covered, in: container)
+            box.origin.x += origin.x
+            box.origin.y += origin.y
+            boxes.append(box.insetBy(dx: -2, dy: -1))
+        }
+        return boxes
     }
 
     /// Draws a page of the document into the current graphics context without

@@ -167,6 +167,11 @@ final class EditorViewController: NSViewController {
         let scroll = scrollView.contentView.bounds.origin
         let caret = textView.selectedRange().location
 
+        // Worked out before the storage is replaced, because afterwards there is
+        // nothing left to compare against. Something other than this window
+        // wrote the file, so the only clue to what moved is the difference.
+        let changes = ChangeDiff.changedRanges(from: storage.string, to: text)
+
         isStyling = true
         storage.beginEditing()
         storage.replaceCharacters(
@@ -182,6 +187,8 @@ final class EditorViewController: NSViewController {
         textView.setSelectedRange(NSRange(location: min(caret, length), length: 0))
         scrollView.contentView.setBoundsOrigin(scroll)
         scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        textView.flashChanges(changes)
     }
 
     // MARK: - Layout
