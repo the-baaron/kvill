@@ -188,6 +188,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleFocusMode(_ sender: Any?) { ThemeManager.shared.focusMode.toggle() }
     @objc func toggleTypewriter(_ sender: Any?) { ThemeManager.shared.typewriterScrolling.toggle() }
+
+    /// Turning autosave off writes out whatever was already waiting, so edits
+    /// made a moment before the setting changed are not stranded by it.
+    @objc func toggleAutosave(_ sender: Any?) {
+        let wanted = !ThemeManager.shared.autosaves
+        if !wanted {
+            for document in NSDocumentController.shared.documents
+            where document.isDocumentEdited && document.fileURL != nil {
+                document.save(withDelegate: nil, didSave: nil, contextInfo: nil)
+            }
+        }
+        ThemeManager.shared.autosaves = wanted
+    }
     @objc func toggleMarkers(_ sender: Any?) { ThemeManager.shared.alwaysShowMarkers.toggle() }
 
     // MARK: - Menu state
@@ -209,6 +222,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = manager.typewriterScrolling ? .on : .off
         case MenuTag.markers:
             item.state = manager.alwaysShowMarkers ? .on : .off
+        case MenuTag.autosave:
+            item.state = manager.autosaves ? .on : .off
         case MenuTag.followSystem:
             item.state = manager.followsSystemAppearance ? .on : .off
         default:

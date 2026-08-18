@@ -269,6 +269,13 @@ final class OptionsPalette: NSViewController {
     private let typewriterToggle = NSButton(checkboxWithTitle: "Typewriter scrolling", target: nil, action: nil)
     private let pastEndToggle = NSButton(checkboxWithTitle: "Scroll past end", target: nil, action: nil)
     private let markersToggle = NSButton(checkboxWithTitle: "Always show markers", target: nil, action: nil)
+    private let autosaveToggle = NSButton(
+        checkboxWithTitle: "Save while you type", target: nil, action: nil)
+    /// The only toggle here that changes what happens to someone's work, so it
+    /// says what turning it off actually means rather than leaving them to find
+    /// out at the moment they close a window.
+    private let autosaveNote = NSTextField(
+        labelWithString: "Off, use Cmd S. Closing an edited file will ask first")
     private let backgroundToggle = NSButton(
         checkboxWithTitle: "Open files faster", target: nil, action: nil)
     /// "Open files faster" says nothing about the cost. This says what is
@@ -357,7 +364,8 @@ final class OptionsPalette: NSViewController {
             return views
 
         case .reading:
-            for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle, backgroundToggle] {
+            for toggle in [focusToggle, typewriterToggle, pastEndToggle, markersToggle,
+                           autosaveToggle, backgroundToggle] {
                 toggle.target = self
                 toggle.font = .systemFont(ofSize: 11)
             }
@@ -366,6 +374,10 @@ final class OptionsPalette: NSViewController {
             pastEndToggle.target = self
             pastEndToggle.action = #selector(togglePastEnd)
             markersToggle.action = #selector(toggleMarkers)
+            autosaveToggle.target = self
+            autosaveToggle.action = #selector(toggleAutosave)
+            autosaveNote.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            autosaveNote.textColor = .secondaryLabelColor
             backgroundToggle.target = self
             backgroundToggle.action = #selector(toggleBackground)
             backgroundNote.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -374,6 +386,7 @@ final class OptionsPalette: NSViewController {
                 "A first document costs about 100ms, nearly all of it starting up. "
                 + "A second one, with Kvill already running, costs about 25ms."
             return [focusToggle, typewriterToggle, pastEndToggle, markersToggle,
+                    autosaveToggle, autosaveNote,
                     backgroundToggle, backgroundNote]
         }
     }
@@ -415,6 +428,8 @@ final class OptionsPalette: NSViewController {
         typewriterToggle.state = manager.typewriterScrolling ? .on : .off
         pastEndToggle.state = manager.scrollPastEnd ? .on : .off
         markersToggle.state = manager.alwaysShowMarkers ? .on : .off
+        autosaveToggle.state = manager.autosaves ? .on : .off
+        autosaveNote.isHidden = manager.autosaves
         backgroundToggle.state = BackgroundService.isEnabled ? .on : .off
     }
 
@@ -459,6 +474,23 @@ final class OptionsPalette: NSViewController {
     @objc private func selectMeasureSpecimen(_ sender: SpecimenButton) {
         guard let width = LineWidth(rawValue: sender.kind.identifier) else { return }
         ThemeManager.shared.lineWidth = width
+    }
+
+    /// Turning it off writes out whatever is already waiting.
+    ///
+    /// Those edits were going to be saved a moment later, and leaving them in
+    /// limbo because of a setting changed in between is not what anyone means by
+    /// turning autosave off.
+    @objc private func toggleAutosave() {
+        let on = autosaveToggle.state == .on
+        if !on {
+            for document in NSDocumentController.shared.documents
+            where document.isDocumentEdited && document.fileURL != nil {
+                document.save(withDelegate: nil, didSave: nil, contextInfo: nil)
+            }
+        }
+        ThemeManager.shared.autosaves = on
+        sync()
     }
 
     @objc private func toggleBackground() {

@@ -175,7 +175,13 @@ final class FileTreeView: NSView {
 
     /// Marks the file currently being edited, so the tree says where you are.
     func select(_ url: URL?) {
-        guard let url, let root else { return }
+        // Nothing showing means nothing selected. Leaving the previous row lit
+        // says the window is showing a file it is not.
+        guard let url else {
+            outline.deselectAll(nil)
+            return
+        }
+        guard let root else { return }
         let target = url.standardizedFileURL
         for row in 0..<outline.numberOfRows {
             guard let node = outline.item(atRow: row) as? Node,
@@ -188,6 +194,13 @@ final class FileTreeView: NSView {
 
     /// How many rows the outline is actually showing, for the self test.
     var rowCountForTest: Int { outline.numberOfRows }
+
+    /// The file whose row is lit, if any. Read by the checks, because a
+    /// selection that disagrees with the page is the bug worth catching.
+    var selectedURL: URL? {
+        guard outline.selectedRow >= 0 else { return nil }
+        return (outline.item(atRow: outline.selectedRow) as? Node)?.url
+    }
 
     /// How many documents the tree is listing, folders not counted. One file is
     /// not worth a sidebar: it is a list of the thing already on screen.

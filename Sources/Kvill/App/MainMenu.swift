@@ -295,6 +295,11 @@ enum MainMenu {
                 modifiers: [.command, .shift], target: appDelegate)
             markers.tag = MenuTag.markers
 
+            let autosave = add(
+                menu, "Save While You Type", #selector(AppDelegate.toggleAutosave(_:)),
+                "", target: appDelegate)
+            autosave.tag = MenuTag.autosave
+
             menu.addItem(.separator())
             // AppKit's own action. The standard item, the standard shortcut, and
             // the title flips between Show and Hide without this app doing it.
@@ -339,5 +344,6 @@ enum MenuTag {
     static let focusMode = 1005
     static let typewriter = 1006
     static let markers = 1007
+    static let autosave = 1008
     static let followSystem = 1008
 }

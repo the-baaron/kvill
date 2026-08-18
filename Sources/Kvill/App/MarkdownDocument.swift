@@ -22,7 +22,11 @@ final class MarkdownDocument: NSDocument {
     /// counts as "recent" is a race that eventually loses.
     private var lastWritten: String?
 
-    override class var autosavesInPlace: Bool { true }
+    /// On unless the setting has been turned off, in which case Kvill becomes an
+    /// ordinary Cmd-S editor and AppKit puts up its own "do you want to save"
+    /// sheet on close. Read fresh every time rather than captured once, so the
+    /// toggle takes effect on documents that are already open.
+    override class var autosavesInPlace: Bool { ThemeManager.shared.autosaves }
 
 
     override var windowNibName: NSNib.Name? { nil }

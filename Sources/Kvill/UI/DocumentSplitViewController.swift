@@ -101,7 +101,15 @@ final class DocumentSplitViewController: NSSplitViewController {
     func openFromSidebarForTest(_ url: URL) { open(url) }
 
     /// Called when a file is chosen in the sidebar.
+    ///
+    /// The row that ends up lit is whichever file this window is showing when
+    /// the dust settles, never the one that was clicked. Those are not the same
+    /// thing: a file already open in another window raises that window and
+    /// leaves this one exactly as it was, and selecting the clicked row anyway
+    /// told you this window was showing a file that was in fact on the other
+    /// screen.
     private func open(_ url: URL) {
+        defer { syncSelection() }
         guard let window = view.window,
               let current = NSDocumentController.shared.document(for: window),
               let controller = NSDocumentController.shared as? KvillDocumentController,
@@ -110,8 +118,10 @@ final class DocumentSplitViewController: NSSplitViewController {
             NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
             return
         }
-        sidebar.tree.select(url)
     }
+
+    /// Lights the row for the file this window is actually showing.
+    func syncSelection() { sidebar.tree.select(page.documentURL) }
 
     /// Puts a different document's editor in the window, keeping the sidebar.
     ///

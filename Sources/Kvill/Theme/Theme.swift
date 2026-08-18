@@ -92,6 +92,7 @@ final class ThemeManager {
         static let typewriter = "kvill.typewriterScrolling"
         static let scrollPastEnd = "kvill.scrollPastEnd"
         static let showMarkers = "kvill.showMarkers"
+        static let autosave = "kvill.autosave"
     }
 
     private let defaults = UserDefaults.standard
@@ -175,6 +176,20 @@ final class ThemeManager {
         }
     }
 
+    /// Whether a document writes itself as you type.
+    ///
+    /// On, and it stays on unless someone deliberately turns it off. Off makes
+    /// Kvill an ordinary save-with-Cmd-S editor: closing an edited window asks
+    /// what to do with it, which is AppKit's own sheet and not something written
+    /// here.
+    var autosaves: Bool {
+        didSet {
+            guard autosaves != oldValue else { return }
+            defaults.set(autosaves, forKey: Key.autosave)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
+        }
+    }
+
     /// Hides every piece of floating chrome. Deliberately not persisted: a
     /// launch should never start with the interface missing and no clue why.
     var chromeHidden = false {
@@ -212,6 +227,9 @@ final class ThemeManager {
         // On unless it has been turned off: a document you cannot scroll to the
         // end of is the odd case, not the default.
         scrollPastEnd = defaults.object(forKey: Key.scrollPastEnd) as? Bool ?? true
+        // The same shape, and for the same reason: an editor that does not save
+        // your work is the odd case, so absent an answer the answer is yes.
+        autosaves = defaults.object(forKey: Key.autosave) as? Bool ?? true
 
         theme = ThemeManager.build(
             paletteID: defaults.string(forKey: Key.palette) ?? Palettes.paper.id,

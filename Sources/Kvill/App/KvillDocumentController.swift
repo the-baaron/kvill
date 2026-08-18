@@ -97,7 +97,15 @@ final class KvillDocumentController: NSDocumentController {
 
         // An untitled document with unsaved work has nowhere to autosave to, so
         // it keeps its window and the new file gets one of its own.
+        //
+        // The same goes for any edited document once autosave is off. This path
+        // ends in `autosave` and then `close`, and with autosave off the first
+        // writes nothing to the file and the second closes without asking, so
+        // clicking through a folder would have thrown away every edit on the way
+        // past. Someone who turned autosave off did so to decide when their work
+        // is written, and answering that by writing it anyway is no better.
         guard current.fileURL != nil || !current.isDocumentEdited,
+              ThemeManager.shared.autosaves || !current.isDocumentEdited,
               let windowController = current.windowControllers.first,
               let window = windowController.window,
               let fresh = try? makeDocument(withContentsOf: url, ofType: typeName(for: url))

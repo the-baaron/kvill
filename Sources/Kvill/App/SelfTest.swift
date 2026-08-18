@@ -749,6 +749,145 @@ enum SelfTest {
             try? FileManager.default.removeItem(at: folder)
         }
 
+        // --- The lit row is the file the window is showing --------------------
+        // Two windows on the same folder. Clicking a file that is already open
+        // in the other window raises that window and leaves this one alone,
+        // which is right, but the row was lit from what had been clicked rather
+        // than from what this window ended up showing. It said this window was
+        // showing a file that was in fact on the other screen.
+        do {
+            let documentController = (NSDocumentController.shared as? KvillDocumentController)
+                ?? KvillDocumentController()
+            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kvill-twowindows-\(ProcessInfo.processInfo.processIdentifier)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let one = folder.appendingPathComponent("One.md")
+            let two = folder.appendingPathComponent("Two.md")
+            try? "# One\n".write(to: one, atomically: true, encoding: .utf8)
+            try? "# Two\n".write(to: two, atomically: true, encoding: .utf8)
+
+            var first: NSDocument?
+            var second: NSDocument?
+            documentController.openDocument(withContentsOf: one, display: true) { d, _, _ in first = d }
+            settled()
+            documentController.openDocument(withContentsOf: two, display: true) { d, _, _ in second = d }
+            settled()
+
+            // Left on screen deliberately for this one: openInPlace only raises
+            // the other window when that window is visible, and hiding them
+            // turns the very case being checked into the other branch. They are
+            // put away at the end.
+            let splitOne = first?.windowControllers.first?.window?.contentViewController
+                as? DocumentSplitViewController
+            let splitTwo = second?.windowControllers.first?.window?.contentViewController
+                as? DocumentSplitViewController
+            if let splitOne, let splitTwo {
+                splitOne.showFolder(folder)
+                splitTwo.showFolder(folder)
+                settled()
+                check("two windows: each starts on its own file",
+                      splitTwo.sidebar.tree.selectedURL?.lastPathComponent == "Two.md",
+                      splitTwo.sidebar.tree.selectedURL?.lastPathComponent ?? "nothing")
+
+                // The click that caused it: One.md is open in the other window.
+                splitTwo.openFromSidebarForTest(one)
+                settled()
+                check("two windows: the second window still shows its own file",
+                      splitTwo.page.documentURL?.lastPathComponent == "Two.md",
+                      splitTwo.page.documentURL?.lastPathComponent ?? "nothing")
+                check("two windows: and its lit row still says so",
+                      splitTwo.sidebar.tree.selectedURL?.lastPathComponent == "Two.md",
+                      splitTwo.sidebar.tree.selectedURL?.lastPathComponent ?? "nothing")
+                check("two windows: the row matches the page, whatever it is",
+                      splitTwo.sidebar.tree.selectedURL?.standardizedFileURL
+                        == splitTwo.page.documentURL?.standardizedFileURL)
+            } else {
+                check("two windows: both windows hold a split view", false)
+            }
+
+            documentController.documents.forEach { hide($0) }
+            documentController.documents.forEach {
+                $0.updateChangeCount(.changeCleared)
+                $0.close()
+            }
+            settled()
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        // --- Autosave is a setting, and turning it off keeps the work ---------
+        // Off, Kvill is an ordinary Cmd-S editor. The dangerous part is not the
+        // toggle, it is what the rest of the app assumed while it was always on:
+        // switching files in the sidebar ends in `autosave` and then `close`,
+        // and with autosave off the first writes nothing and the second closes
+        // without asking. Clicking through a folder would have dropped every
+        // edit on the way past.
+        do {
+            let documentController = (NSDocumentController.shared as? KvillDocumentController)
+                ?? KvillDocumentController()
+            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
+            let manager = ThemeManager.shared
+            let wasAutosaving = manager.autosaves
+
+            check("autosave: on unless it has been turned off", wasAutosaving)
+            check("autosave: the document class asks the setting",
+                  MarkdownDocument.autosavesInPlace)
+            manager.autosaves = false
+            check("autosave: turning it off reaches NSDocument",
+                  !MarkdownDocument.autosavesInPlace)
+
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kvill-autosave-\(ProcessInfo.processInfo.processIdentifier)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let one = folder.appendingPathComponent("One.md")
+            let two = folder.appendingPathComponent("Two.md")
+            try? "# One\n".write(to: one, atomically: true, encoding: .utf8)
+            try? "# Two\n".write(to: two, atomically: true, encoding: .utf8)
+
+            var opened: NSDocument?
+            documentController.openDocument(withContentsOf: one, display: true) { d, _, _ in
+                opened = d
+                hide(d)
+            }
+            settled()
+            if let first = opened, let host = first.windowControllers.first?.window {
+                (host.contentViewController as? DocumentSplitViewController)?.page
+                    .editor.textView.insertText(
+                        "UNSAVED-WORK\n", replacementRange: NSRange(location: 0, length: 0))
+                first.updateChangeCount(.changeDone)
+                settled()
+
+                let reused = documentController.openInPlace(two, replacing: first)
+                settled()
+                check("autosave off: an edited file does not give up its window",
+                      !reused)
+                check("autosave off: and it is still open with its edit",
+                      documentController.documents.contains { $0 === first }
+                        && first.isDocumentEdited)
+
+                // The same click with autosave on is the normal path, and has to
+                // keep working: this is the only thing stopping a folder full of
+                // notes opening a window each.
+                manager.autosaves = true
+                first.updateChangeCount(.changeCleared)
+                settled()
+                check("autosave on: the window is handed over as before",
+                      documentController.openInPlace(two, replacing: first))
+                settled()
+            } else {
+                check("autosave: a document opened to edit", false)
+            }
+
+            documentController.documents.forEach {
+                $0.updateChangeCount(.changeCleared)
+                $0.close()
+            }
+            settled()
+            manager.autosaves = wasAutosaving
+            check("autosave: the checks put the setting back", manager.autosaves)
+            try? FileManager.default.removeItem(at: folder)
+        }
+
         // --- A launch that opens a file leaves no blank window behind ---------
         // Double-clicking a file in the Finder put up two windows stacked
         // exactly on top of each other, an empty one and the file. AppKit asks

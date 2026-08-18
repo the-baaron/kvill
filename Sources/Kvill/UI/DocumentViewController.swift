@@ -323,12 +323,20 @@ final class DocumentViewController: NSViewController {
     /// Squares up every table in the document. Used on save.
     func formatTables() { editor.formatAllTables() }
 
-    /// Answers Cmd S. There is nothing to confirm, because the document has been
-    /// saving itself all along, so the toast says that rather than pretending
-    /// the keystroke did the work.
+    /// Answers Cmd S.
+    ///
+    /// With autosave on there is nothing to confirm, because the document has
+    /// been saving itself all along, so the toast says that rather than
+    /// pretending the keystroke did the work. With it off the keystroke really
+    /// did the work, and saying "don't worry" would be worse than saying
+    /// nothing: it is the one setting where the reassurance is not true.
     func confirmSaved() {
-        makeToast().show("Your files are auto-saved, don't worry",
-                         symbol: "checkmark.circle.fill")
+        if ThemeManager.shared.autosaves {
+            makeToast().show("Your files are auto-saved, don't worry",
+                             symbol: "checkmark.circle.fill")
+        } else {
+            makeToast().show("Saved", symbol: "square.and.arrow.down.fill")
+        }
     }
 
     private func makeToast() -> ToastView {
