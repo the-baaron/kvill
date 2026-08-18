@@ -28,20 +28,29 @@ user list and takes the account holder, so no address is written down.
 ## Description
 
 Kvill is a Markdown editor for macOS. One file, one window, no account, no
-network. This build is the same one that shipped as 1.0.
+network.
 
-What to test:
+What to test in this build:
 
-1. Double-click a .md file in the Finder and count how long it is before you can
-   type. It should be about a tenth of a second, and that is the whole product.
-2. Click into a line. Its Markdown symbols appear in the left margin and fade
-   again when you click elsewhere. The file on disk never changes.
-3. Press / on an empty line for the insert menu: headings, tables, code blocks,
-   callouts, lists.
-4. File > Open Folder puts the Markdown files in that folder down the side of
-   the window.
-5. Control-Command-] changes the colour scheme, Command-+ the text size,
-   Command-. hides every piece of interface.
+1. Double-click a .md file in the Finder. It should be a page and nothing else,
+   no sidebar and no panels, in about a tenth of a second. That is the product,
+   and anything appearing on its own is a bug.
+2. Settings, then "Show document index". Open something long in a wide window:
+   its headings appear in the right margin and the page shifts left to make room.
+   Narrow the window and the index gets out of the way rather than squeezing the
+   text. Click a heading to jump to it.
+3. Turn on typewriter scrolling and press Return quickly at the end of a long
+   document. The line you are typing should stay in the middle of the window.
+   It used to pin itself to the bottom, and with focus mode on as well the page
+   jumped by thousands of points mid-sentence.
+4. Select a phrase and press Shift-Command-A. It becomes a highlight with a
+   footnote at the end of the file, ready to type the note into. Open the same
+   file anywhere else and it is ordinary Markdown.
+5. If you have "Prefer tabs when opening documents" set in System Settings,
+   documents open as tabs. If you have not, they open as windows, as before.
+6. Live mode, in Settings. On, edits are written as you type and anything
+   another program writes appears with the changed words lit. Off, Command-S
+   saves and Command-R reloads, and saving over a file that changed asks first.
 
 Editing saves itself. Anything that makes opening a file feel slow is worth
 reporting even if nothing looks broken.

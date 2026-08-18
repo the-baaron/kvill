@@ -36,14 +36,17 @@ and the five GitHub alerts:
 > Rendered as a tinted panel with an icon and a proper title, not as raw
 > `[!NOTE]` text.
 
-**Eight colour themes, five typefaces.** Paper, Ink, Sepia, Nord, the glass pair
-Frost and Onyx, which put the page on the system's `.sidebar` material so the
-desktop shows through the way it does in any other translucent macOS window, and
-a high contrast pair for light and dark. The typefaces are Editorial (New
-York), Grotesk (SF Pro),
-Contrast (serif headings over a sans body), Typewriter (SF Mono) and Soft
-(SF Rounded). Four text sizes, three measures. All of it app-wide and
-remembered between launches, never per document.
+**Six colour themes, five typefaces.** Paper, Ink, Sepia, Nord, and a high
+contrast pair for light and dark. The typefaces are Editorial (New York),
+Grotesk (SF Pro), Contrast (serif headings over a sans body), Typewriter
+(SF Mono) and Soft (SF Rounded). Four text sizes, three measures. All of it
+app-wide and remembered between launches, never per document.
+
+There were eight. A translucent pair put the page on the system's `.sidebar`
+material, and they were removed: on a translucent palette the window has no
+opaque ground, so every hairline, divider and inset panel had to be special
+cased against the desktop showing through behind it. They cost more than they
+were worth.
 
 **Chrome that stays out of the way.** A single glass dot in the top-right corner
 springs open into three buttons as the pointer nears it, each holding a small
@@ -59,6 +62,25 @@ one cost several milliseconds every frame and never matched it.
 **Focus mode** dims every paragraph but the one you are in. **Typewriter
 scrolling** keeps the caret centred, and the view scrolls past the end of the
 document so the last line is never pinned to the bottom edge.
+
+**A folder down the side, when you ask for one.** Open a folder and its Markdown
+files sit in a sidebar; clicking one shows it in the same window rather than
+opening another. Double-clicking a single file still gets a page and nothing
+else, which is the whole point of the app.
+
+**An index in the margin, when there is room for one.** A long document's
+headings float beside the page the way a documentation site puts them there,
+appearing only when the window is wide enough to have a margin to spare. Off
+until you turn it on.
+
+**Live mode** keeps the file and the page in step both ways: edits are written
+as you type, and anything another program writes to the file appears straight
+away with the words it changed lit for a moment. Turn it off and Kvill is an
+ordinary editor, where `⌘S` saves, `⌘R` reloads, and saving over a file that
+changed in the meantime asks first and offers to show you what would go.
+
+**Annotate a passage** with `⇧⌘A`. It writes a highlight and a footnote, both
+ordinary Markdown, so the note reads in any other editor and shows up in a diff.
 
 ## Getting it
 
