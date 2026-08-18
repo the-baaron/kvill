@@ -21,6 +21,9 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 cp "$BINARY" "$CONTENTS/MacOS/Kvill"
 cp Resources/Info.plist "$CONTENTS/Info.plist"
+# Read at runtime by the About window. Bundled rather than compiled in so a
+# note can be corrected without touching Swift.
+cp Resources/ReleaseNotes.md "$CONTENTS/Resources/ReleaseNotes.md"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
 echo "==> Rendering icon"

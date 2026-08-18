@@ -44,7 +44,7 @@ enum MainMenu {
 
     private static func appMenu() -> NSMenuItem {
         submenu("Kvill") { menu in
-            add(menu, "About Kvill", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+            add(menu, "About Kvill", #selector(AppDelegate.showAbout(_:)))
             menu.addItem(.separator())
             add(menu, "Settings…", #selector(DocumentViewController.toggleThemePanel(_:)), ",")
             menu.addItem(.separator())

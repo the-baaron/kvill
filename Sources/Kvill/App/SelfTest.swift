@@ -749,6 +749,111 @@ enum SelfTest {
             try? FileManager.default.removeItem(at: folder)
         }
 
+        // --- The About window ------------------------------------------------
+        // Two columns: what the app is, and what is new. The real view tree is
+        // built and interrogated, because a window that lays out wrong looks
+        // exactly like a window that lays out right until someone opens it.
+        do {
+            let about = AboutPanel.makeContent()
+            about.frame = NSRect(x: 0, y: 0, width: 680, height: 400)
+            about.layoutSubtreeIfNeeded()
+
+            func every(_ view: NSView) -> [NSView] {
+                view.subviews + view.subviews.flatMap(every)
+            }
+            let all = every(about)
+            let columns = all.compactMap { $0 as? NSStackView }
+            check("about: it has two columns", columns.count >= 2, "\(columns.count)")
+
+            let labels = all.compactMap { $0 as? NSTextField }.map(\.stringValue)
+            check("about: it says what the app is called", labels.contains("Kvill"))
+            check("about: and which version this is",
+                  labels.contains { $0.hasPrefix("Version ") },
+                  labels.first { $0.hasPrefix("Version ") } ?? "no version line")
+            check("about: the new column is headed What's new",
+                  labels.contains("What\'s new"))
+
+            // Side by side, not stacked. Two columns that overlap are one column
+            // with a layout bug.
+            if columns.count >= 2 {
+                let frames = columns.map { $0.convert($0.bounds, to: about) }
+                    .sorted { $0.minX < $1.minX }
+                check("about: the columns sit beside each other",
+                      frames[0].maxX <= frames[1].minX + 1,
+                      "\(Int(frames[0].maxX)) then \(Int(frames[1].minX))")
+            }
+
+            // The link, which is the part someone actually clicks.
+            let made = AboutPanel.madeWithLove()
+            var linked: URL?
+            made.enumerateAttribute(.link, in: NSRange(location: 0, length: made.length)) {
+                value, _, _ in
+                if let url = value as? URL { linked = url }
+            }
+            check("about: made with love is credited", made.string.contains("Made with love by"))
+            check("about: and baars.design is a real link",
+                  linked == AboutPanel.siteURL, linked?.absoluteString ?? "no link")
+
+            check("about: the name is explained", AboutPanel.nameStory.contains("quill"))
+
+            // The notes ship in the bundle, so a build that forgot the file is
+            // caught here rather than by someone opening the window.
+            let raw = AboutPanel.raw()
+            check("about: the notes are in the bundle",
+                  !raw.contains("not in it"),
+                  raw.contains("not in it") ? "the file is missing from the app" : "")
+            let entries = raw.components(separatedBy: "\n\n")
+                .filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("**") }
+            check("about: there is something new to read", !entries.isEmpty, "\(entries.count) entries")
+
+            for entry in entries {
+                let lines = entry.split(separator: "\n").map(String.init)
+                let title = lines.first ?? ""
+                let name = title.replacingOccurrences(of: "**", with: "")
+                    .components(separatedBy: " - ").first ?? ""
+                check("about: \"\(name)\" carries a date",
+                      title.contains(" - "), title)
+                check("about: \"\(name)\" is two lines at most",
+                      lines.count <= 3, "\(lines.count - 1) lines of text")
+            }
+
+            // The heading is a label and the notes are a text view, which pads
+            // its lines by five points unless stopped. They looked aligned in
+            // the code and were not on screen.
+            let notesColumn = all.compactMap { $0 as? NSStackView }
+                .first { column in
+                    column.arrangedSubviews.contains { $0 is NSScrollView }
+                }
+            if let notesColumn,
+               let headingLabel = notesColumn.arrangedSubviews.compactMap({ $0 as? NSTextField }).first,
+               let scroller = notesColumn.arrangedSubviews.compactMap({ $0 as? NSScrollView }).first,
+               let body = scroller.documentView as? NSTextView {
+                // Measured from the alignment rect, not the frame. A stack view
+                // lays an NSTextField out two points left of everything else on
+                // purpose, because a label's alignment rect is inset from its
+                // frame by exactly that much, so the text lands on the shared
+                // edge. Comparing frames reported a two point gap that was not
+                // on screen, and chasing it went looking for causes in the
+                // scroll view twice.
+                let headingFrame = headingLabel.convert(headingLabel.bounds, to: about)
+                let headingX = headingLabel.alignmentRect(forFrame: headingFrame).origin.x
+                let inset = body.textContainerInset.width
+                    + (body.textContainer?.lineFragmentPadding ?? 0)
+                let bodyX = body.convert(NSPoint.zero, to: about).x + inset
+                check("about: the heading and the notes share a left edge",
+                      abs(headingX - bodyX) < 0.5,
+                      "heading \(headingX), notes \(bodyX)")
+            } else {
+                check("about: the notes column holds a heading and a body", false)
+            }
+
+            let rendered = AboutPanel.notes().string
+            check("about: the notes render with their names",
+                  rendered.contains("Live mode"), "")
+            check("about: and their dates",
+                  rendered.contains("August 2026"), "")
+        }
+
         // --- Live mode governs whether anything moves on its own --------------
         // One switch over both directions. On, the page follows the file and the
         // file follows the page. Off, neither moves unless asked, and saving

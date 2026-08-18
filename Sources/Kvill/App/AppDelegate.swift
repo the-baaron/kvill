@@ -148,6 +148,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         (NSDocumentController.shared as? KvillDocumentController)?.openFolder(folder)
     }
 
+    /// The standard About panel, with the credits filled in.
+    @objc func showAbout(_ sender: Any?) { AboutPanel.show(sender) }
+
     // MARK: - Theme commands
 
     @objc func selectPalette(_ sender: NSMenuItem) {
