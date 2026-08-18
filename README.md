@@ -145,6 +145,60 @@ the size the rest of the code is set at. Rows never wrap: a wrapped row would
 put its cells under the wrong columns, so a row that still will not fit is
 truncated instead.
 
+## The command line
+
+Kvill's binary does more than open windows. Every one of these draws or measures
+the real app rather than a description of it, which is what makes them worth
+pointing something else at.
+
+    /Applications/Kvill.app/Contents/MacOS/Kvill --render notes.md out.png
+
+**These are useful to an assistant working alongside you.** If you have asked an
+agent to write or edit Markdown, it can render the result as an image and show
+you what the page will actually look like, in the typeface and colours you read
+in, without opening a window or touching what you have on screen. It can also
+draw a folder's tree, or a specimen sheet of the typefaces, to ask which you
+want. A render is a read: it puts every display setting back afterwards, in
+memory and on disk, so taking a picture never changes your editor.
+
+| Command | What it does |
+| --- | --- |
+| `--render in.md out.png` | Draws a page headlessly and writes a PNG |
+| `--tree folder out.png` | Draws the folder sidebar for a real folder |
+| `--specimens out.png` | Draws the typeface, size and width specimens |
+| `--benchmark file.md` | Startup, per-keystroke and second-window timings |
+| `--selftest` | Runs every runtime check and exits non-zero on failure |
+| `--login-item [status\|on\|off]` | Reads or sets what macOS thinks of the login item |
+| `--demo` | Drives the app through a scripted demonstration |
+
+### Options for `--render`
+
+| Option | Values | Default |
+| --- | --- | --- |
+| `--theme` | `paper`, `ink`, `sepia`, `nord`, `contrast-light`, `contrast-dark` | your current one |
+| `--typography` | `editorial`, `grotesk`, `contrast`, `typewriter`, `soft` | your current one |
+| `--size` | `small`, `medium`, `large` | your current one |
+| `--geometry` | `WIDTHxHEIGHT` in points, e.g. `1010x708` | the window's size |
+| `--scale` | a number, `2` for Retina | `2` |
+| `--offset` | points to scroll down before drawing | `0` |
+
+`--tree` takes `--theme` and `--size WxH`.
+
+### Worth knowing before pointing a script at it
+
+**Build without the sandbox for any of these.** The App Sandbox refuses to read
+a path handed to the app on the command line, so `QUILL_SANDBOX=0 ./build.sh`
+is required for a development build. The copy from the App Store is sandboxed
+and will not read your file.
+
+**A render draws the page, not the interface.** The floating chrome is glass,
+and glass renders as nothing in a window that was never on screen, so an options
+panel comes out empty. `--specimens` draws the parts of it that are ordinary
+views, and `--selftest` interrogates the rest.
+
+**Errors go to stderr and the exit code means something.** Nothing prints a
+plausible-looking result when it failed to read its input.
+
 ## Known limits
 
 - Images referenced beside a document need the folder to have been opened at

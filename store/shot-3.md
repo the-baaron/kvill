@@ -1,12 +1,14 @@
-# Just edit local files
+# Carbonara
 
-Markdown on your own disk, changed in place. Nothing to sign into, no library to import into, and no copy kept anywhere else.
+Serves two, and it is finished in the time the pasta takes, so read it once before starting rather than halfway through.
 
-## It stays readable
+| | |
+| --- | --- |
+| Guanciale | 120 g, cut into short batons |
+| Pecorino | 60 g, grated fine |
+| Egg yolks | 4, plus one whole egg |
+| Spaghetti | 200 g |
 
-The file is exactly what you typed. Every other editor you own can open it, and so can `cat`.
+Render the guanciale slowly in a cold dry pan until the fat runs clear and the edges catch. Beat the yolks with the pecorino and a great deal of black pepper until it is a stiff paste.
 
-> [!TIP]
-> There is no analytics either, and that part is not a promise: the app ships without a network entitlement, so macOS will not let it connect at all.
-
-Free, nothing to buy, source on GitHub.
+> [!IMPORTANT] Off the heat before the eggs go in. The residual heat in the pan is enough, and the flame is what turns it into scrambled eggs.

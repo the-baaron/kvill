@@ -3,7 +3,7 @@ import AppKit
 // Composes an App Store screenshot: some words, and the rendered page inside a
 // window drawn to look like the real one.
 //
-//   swift scripts/make-shot.swift out.png page.png layout light|dark "Headline" "Sub line"
+//   swift scripts/make-shot.swift out.png page.png layout light|dark "Headline" "Sub line" [sidebar.png]
 //
 //   layout: centre | right | left
 //     centre  window in the middle, words above it
@@ -28,6 +28,10 @@ let layout = arguments[3]
 let dark = arguments[4] == "dark"
 let headline = arguments[5]
 let subline = arguments[6]
+// A folder open down the side of the window. Rendered separately by --tree,
+// because the sidebar is a view and the page is a document, and the app has no
+// one command that draws both.
+let sidebarPath = arguments.count > 7 ? arguments[7] : nil
 
 // Apple takes 2880x1800 for macOS. Everything below is in points at half that.
 let scale: CGFloat = 2
@@ -51,6 +55,30 @@ let bottom = dark ? colour("#0B0C0E") : colour("#E6DFD1")
 guard let page = NSImage(contentsOfFile: pagePath) else {
     FileHandle.standardError.write(Data("cannot read \(pagePath)\n".utf8))
     exit(1)
+}
+// A missing sidebar is a broken shot, not a shot without a sidebar: the point
+// of the picture would be gone and nothing would say so.
+var sidebar: NSImage?
+if let sidebarPath {
+    guard let image = NSImage(contentsOfFile: sidebarPath) else {
+        FileHandle.standardError.write(Data("cannot read \(sidebarPath)\n".utf8))
+        exit(1)
+    }
+    sidebar = image
+}
+/// How wide the sidebar sits in the window, matching the app's own default.
+let sidebarWidth: CGFloat = 232
+
+/// The sidebar's background, taken from the render rather than written down, so
+/// it follows whichever palette the shot was rendered in.
+func sampledSidebarColour(_ image: NSImage) -> NSColor {
+    guard let tiff = image.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          // Top right, which is past the folder name and above the first row,
+          // so it is the sidebar's own ground and nothing drawn on it.
+          let colour = rep.colorAt(x: rep.pixelsWide - 4, y: 3)
+    else { return dark ? colour("#1B1E23") : colour("#F3F0EA") }
+    return colour.usingColorSpace(.deviceRGB) ?? colour
 }
 
 /// Where the window sits, and where the words sit, for each layout. The window
@@ -81,6 +109,16 @@ default:
         centred: true)
 }
 
+// A window with a sidebar in it is showing two things, so it keeps more of
+// itself on the canvas. The usual deep bleed would cut the page's text down the
+// middle of a sentence, which reads as a mistake rather than as a page that
+// carries on.
+var card = plan.card
+if sidebar != nil {
+    card.size.width = min(card.width, size.width - card.minX)
+}
+let plannedCard = card
+
 guard let rep = NSBitmapImageRep(
     bitmapDataPlanes: nil,
     pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
@@ -98,7 +136,7 @@ NSGradient(starting: top, ending: bottom)?
 
 // --- The window -----------------------------------------------------------
 let radius: CGFloat = 16
-let frame = NSBezierPath(roundedRect: plan.card, xRadius: radius, yRadius: radius)
+let frame = NSBezierPath(roundedRect: plannedCard, xRadius: radius, yRadius: radius)
 
 if let context = NSGraphicsContext.current?.cgContext {
     context.saveGState()
@@ -113,21 +151,45 @@ if let context = NSGraphicsContext.current?.cgContext {
 // The page fills the window. No title bar: there isn't one in the app.
 NSGraphicsContext.saveGraphicsState()
 frame.addClip()
-page.draw(in: plan.card, from: .zero, operation: .sourceOver, fraction: 1,
-          respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+if let sidebar {
+    // Sidebar down the left, page beside it, and a divider between them the way
+    // the split view draws one.
+    let left = NSRect(x: plannedCard.minX, y: plannedCard.minY,
+                      width: sidebarWidth, height: plannedCard.height)
+    let right = NSRect(x: left.maxX, y: plannedCard.minY,
+                       width: plannedCard.width - sidebarWidth, height: plannedCard.height)
+    // The strip the traffic lights sit in. The app runs the sidebar full height
+    // under a transparent title bar, so the lights are over the sidebar's own
+    // colour rather than over the first row of the tree.
+    let lightsStrip: CGFloat = 44
+    sampledSidebarColour(sidebar).setFill()
+    left.fill()
+    let treeArea = NSRect(x: left.minX, y: left.minY,
+                          width: left.width, height: left.height - lightsStrip)
+    sidebar.draw(in: treeArea, from: .zero, operation: .sourceOver, fraction: 1,
+                 respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+    // Rendered at this width already, so drawn one to one.
+    page.draw(in: right, from: .zero, operation: .sourceOver, fraction: 1,
+              respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+    (dark ? NSColor.white.withAlphaComponent(0.10) : NSColor.black.withAlphaComponent(0.09)).setFill()
+    NSRect(x: left.maxX - 0.5, y: left.minY, width: 1, height: left.height).fill()
+} else {
+    page.draw(in: plannedCard, from: .zero, operation: .sourceOver, fraction: 1,
+              respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+}
 NSGraphicsContext.restoreGraphicsState()
 
 // Traffic lights, sitting in the margin the page already leaves at the top.
 for (index, light) in [colour("#FF5F57"), colour("#FEBC2E"), colour("#28C840")].enumerated() {
     light.setFill()
     NSBezierPath(ovalIn: NSRect(
-        x: plan.card.minX + 22 + CGFloat(index) * 20,
-        y: plan.card.maxY - 27, width: 12, height: 12)).fill()
+        x: plannedCard.minX + 22 + CGFloat(index) * 20,
+        y: plannedCard.maxY - 27, width: 12, height: 12)).fill()
 }
 
 // A hairline, so the window reads as an object rather than a hole.
 (dark ? NSColor.white.withAlphaComponent(0.11) : NSColor.black.withAlphaComponent(0.08)).setStroke()
-let edge = NSBezierPath(roundedRect: plan.card.insetBy(dx: 0.5, dy: 0.5),
+let edge = NSBezierPath(roundedRect: plannedCard.insetBy(dx: 0.5, dy: 0.5),
                         xRadius: radius, yRadius: radius)
 edge.lineWidth = 1
 edge.stroke()

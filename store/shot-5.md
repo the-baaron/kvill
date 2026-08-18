@@ -1,15 +1,22 @@
-## Everything, without the mouse
+# Standup, Thursday
 
-Press / anywhere and an insert menu opens under the cursor, filtering as you type. A heading, a table, a callout or a code block is three keystrokes away.
+Kept short on purpose. Anything that needs a discussion gets a line here and a meeting later, never the other way around.
 
-| Do this        | Press        |
-| -------------- | ------------ |
-| Insert menu    | /            |
-| Bold           | Cmd B        |
-| Link           | Cmd K        |
-| Heading 1 to 6 | Cmd 1 to 6   |
-| Task list      | Shift Cmd 9  |
-| Focus mode     | Shift Cmd F  |
-| Hide interface | Cmd .        |
+## Yesterday
 
-Tables square their own columns up as you leave them, so the file stays tidy in a diff and on GitHub, not only here.
+Finished the retry logic in the sync worker. It now backs off exponentially and gives up after an hour instead of hammering a dead endpoint all night.
+
+```swift
+// Every command has a key. The insert menu opens on /
+func delay(for attempt: Int) -> Duration {
+    .seconds(min(3600, 1 << attempt))
+}
+```
+
+## Today
+
+Writing the migration note. Blocked on nothing.
+
+## In the way
+
+The staging certificate expires on Sunday and nobody owns renewing it.

@@ -36,6 +36,26 @@ main claim, not just in a benchmark.
 | `node store/push-review-notes.mjs` | Fills App Review Information from `store/review-notes.md`; add `--apply` to send |
 | `node store/push-testflight.mjs` | Sets up TestFlight **internal** testing from `store/testflight.md`; add `--apply` to send |
 
+## What's new, in the About window
+
+`Resources/ReleaseNotes.md` is what the About window's right column shows, and
+it ships inside the bundle. **Add an entry whenever a feature lands**, in the
+same sitting, because a feature nobody is told about may as well not have
+shipped and nobody reconstructs this list later.
+
+The format is fixed and the checks enforce it:
+
+    **Feature name** - 18 August 2026
+    Two lines at most, in plain language, about what it does for someone.
+    Not how it works.
+
+Newest first. The date is the day it landed, taken from the commit rather than
+guessed. `--selftest` fails if an entry has no date, if one runs past two lines,
+or if the file is missing from the built app.
+
+It is a list of features and dates on purpose, not a list of version numbers. A
+version number says nothing to anyone who was not watching the version numbers.
+
 ## Releasing
 
 Bump `CFBundleVersion` in `Resources/Info.plist` (Apple refuses a repeated build

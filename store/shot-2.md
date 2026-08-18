@@ -1,19 +1,18 @@
-## Written to be read
+# Launch checklist
 
-Prose is set on a measure that stays comfortable, in a face chosen for long stretches rather than for screenshots, with the line height and the spacing that go with it.
+Target date: **1 September**. Everything below has to be done or deliberately dropped before then, and dropped counts as done if it is written down.
 
-```swift
-// Code keeps its own panel and its own face.
-func greet(_ name: String) -> String {
-    let count = 42
-    return "Hello, \(name) and \(count)"
-}
-```
+## Engineering
 
-Tables square themselves up as you leave them, so the file stays tidy in a diff and on GitHub, not only here.
+- [x] Migrate the staging database to the new schema
+- [x] Set up error reporting on the production project
+- [ ] Add rate limiting to the public endpoints
+- [ ] Load test at three times expected peak traffic
 
-| Feature     | Shortcut    | Notes                          |
-| ----------- | ----------- | ------------------------------ |
-| Bold        | Cmd B       | Wraps the word under the caret |
-| Insert menu | /           | Everything, without the mouse  |
-| Focus mode  | Shift Cmd F | Dims all but this paragraph    |
+> [!NOTE] The rollback runbook is the one thing nobody has written yet. It is also the only thing that matters at two in the morning.
+
+## Design
+
+- [x] Final pass on the onboarding flow
+- [ ] Dark mode audit across all screens
+- [ ] Export the icon set at 1x, 2x and 3x

@@ -1,11 +1,13 @@
-# Eight colour schemes and five typefaces
+# Iceland, day three
 
-Each one comes with the line height, measure and spacing that suit it, rather than one set of numbers stretched over everything.
+Left Vík before it was light and drove east with the heater on full. The road runs between the sea and the glacier for an hour with nothing else in it, and then the sand turns black and stays black for forty kilometres.
 
-## Reading a long document
+## Jökulsárlón
 
-Focus mode dims everything except the paragraph you are working in.
+Icebergs come down the lagoon at walking pace and go out with the tide. They are blue where they have rolled and the ice underneath has never seen the sun.
 
-> A blockquote keeps its bar out in the margin, and quiet text stays quiet.
+> A seal surfaced three metres away, looked at us for a while, and went back down. Neither of us got a photograph and it was better that way.
 
-Typewriter scrolling holds the line you are writing at eye level instead of leaving it at the bottom edge of the window.
+## Tomorrow
+
+Höfn, then the fjords. Six hours if the pass is open, nine if it is not.
