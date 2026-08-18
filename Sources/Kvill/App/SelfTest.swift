@@ -220,6 +220,13 @@ enum SelfTest {
         do {
             let editor = controller.editor
             controller.loadText("- [ ] An open task\n- [x] A finished one\n")
+            // The caret out of both lines, explicitly. Markers are revealed for
+            // whichever element the caret is in, so a line holding the caret is
+            // showing its source and is not the thing being measured. This used
+            // to pass by accident, because loading a document left the caret at
+            // the very end, and it started failing the day that was fixed.
+            controller.editor.textView.setSelectedRange(
+                NSRange(location: (controller.editor.text as NSString).length, length: 0))
             controller.view.layoutSubtreeIfNeeded()
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
 
@@ -870,6 +877,88 @@ enum SelfTest {
                   rendered.contains("Live mode"), "")
             check("about: and their dates",
                   rendered.contains("August 2026"), "")
+        }
+
+        // --- The contents list ------------------------------------------------
+        // Headings down the side, so a long document can be moved around in.
+        // Off by default: double-clicking a file gets a page and nothing else.
+        // The extraction is pure, so the awkward documents are checked here
+        // rather than by opening a sidebar and looking at it.
+        do {
+            func outline(_ text: String) -> [Outline.Entry] {
+                Outline.entries(of: MarkdownParser.parse(text as NSString), in: text)
+            }
+
+            check("contents: off unless it has been turned on",
+                  !ThemeManager.shared.showsContents)
+
+            // Opening a document puts you at the top of it, caret included.
+            controller.loadText("# One\n\nBody.\n\n## Two\n\nMore body.\n")
+            controller.view.layoutSubtreeIfNeeded()
+            check("contents: a freshly opened document has the caret at the start",
+                  controller.editor.textView.selectedRange().location == 0,
+                  "caret at \(controller.editor.textView.selectedRange().location)")
+
+            let simple = outline("# One\n\nBody.\n\n## Two\n\nBody.\n\n### Three\n")
+            check("contents: every heading is listed",
+                  simple.map(\.title) == ["One", "Two", "Three"],
+                  "\(simple.map(\.title))")
+            check("contents: nesting is by depth used, not by level",
+                  simple.map(\.indent) == [0, 1, 2], "\(simple.map(\.indent))")
+
+            // A document that never uses `#` should not be indented for one.
+            let starts = outline("## A\n\nBody.\n\n## B\n\n### C\n")
+            check("contents: a document starting at ## is not indented for a # it lacks",
+                  starts.map(\.indent) == [0, 0, 1], "\(starts.map(\.indent))")
+
+            // A jump from ## straight to #### is one step in, not two.
+            let jump = outline("## A\n\n#### B\n")
+            check("contents: a skipped level indents one step",
+                  jump.map(\.indent) == [0, 1], "\(jump.map(\.indent))")
+
+            check("contents: a bare marker being typed is not a row",
+                  outline("# Real\n\n##\n").map(\.title) == ["Real"],
+                  "\(outline("# Real\n\n##\n").map(\.title))")
+
+            check("contents: closed ATX loses its trailing hashes",
+                  outline("## Middle ##\n").map(\.title) == ["Middle"],
+                  "\(outline("## Middle ##\n").map(\.title))")
+
+            check("contents: setext headings count too",
+                  outline("Title\n=====\n\nBody.\n").map(\.title) == ["Title"],
+                  "\(outline("Title\n=====\n\nBody.\n").map(\.title))")
+
+            check("contents: a document with no headings lists nothing",
+                  outline("Just prose.\n\nMore prose.\n").isEmpty)
+
+            // A `#` inside a fence is code, not a heading.
+            let fenced = outline("# Real\n\n```\n# not a heading\n```\n")
+            check("contents: a hash inside a code fence is not a heading",
+                  fenced.map(\.title) == ["Real"], "\(fenced.map(\.title))")
+
+            // Where the caret is, so the list can light the section being worked
+            // on. The last heading at or before it.
+            let doc = "# One\n\nBody.\n\n## Two\n\nBody.\n"
+            let entries = outline(doc)
+            let secondAt = (doc as NSString).range(of: "## Two").location
+            check("contents: the caret in the first section lights the first",
+                  Outline.entry(at: 3, in: entries)?.title == "One")
+            check("contents: and in the second lights the second",
+                  Outline.entry(at: secondAt + 2, in: entries)?.title == "Two")
+            check("contents: before any heading, nothing is lit",
+                  Outline.entry(at: 0, in: outline("Prose first.\n\n# Later\n")) == nil)
+
+            // The cost, because this runs on the same debounce as the word count
+            // and a document can be large.
+            let long = (1...2000).map { "## Section \($0)\n\nProse.\n" }.joined()
+            let parsedLong = MarkdownParser.parse(long as NSString)
+            let began = Date()
+            let many = Outline.entries(of: parsedLong, in: long)
+            let took = Date().timeIntervalSince(began)
+            check("contents: two thousand headings are listed",
+                  many.count == 2000, "\(many.count)")
+            check("contents: and listed quickly enough to sit on the debounce",
+                  took < 0.05, String(format: "%.1fms", took * 1000))
         }
 
         // --- Live mode governs whether anything moves on its own --------------

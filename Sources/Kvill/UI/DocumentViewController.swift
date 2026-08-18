@@ -98,7 +98,12 @@ final class DocumentViewController: NSViewController {
             self?.updateStats()
             self?.onTextChange?()
         }
-        editor.onSelectionChange = { [weak self] in self?.updateSelectionToolbar() }
+        editor.onSelectionChange = { [weak self] in
+            self?.updateSelectionToolbar()
+            // Cheap: it moves a selection in a list already built. Rebuilding
+            // the list is the expensive half and that is debounced below.
+            self?.split?.syncContentsSelection()
+        }
         editor.onScroll = { [weak self] _, _ in
         }
         editor.textView.onSelectionGestureEnded = { [weak self] in self?.updateSelectionToolbar() }
@@ -297,11 +302,19 @@ final class DocumentViewController: NSViewController {
     /// once typing stops rather than on every key.
     private var statsWork: DispatchWorkItem?
 
+    /// The split view this page is in, if it is in one.
+    var split: DocumentSplitViewController? {
+        view.window?.contentViewController as? DocumentSplitViewController
+    }
+
     private func updateStats() {
         statsWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.stats.update(text: self.editor.text)
+            // Rides the word count's debounce rather than adding a second one.
+            // Both want the same thing: the document has stopped moving.
+            self.split?.refreshContents()
         }
         statsWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)

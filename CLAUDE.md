@@ -36,6 +36,134 @@ main claim, not just in a benchmark.
 | `node store/push-review-notes.mjs` | Fills App Review Information from `store/review-notes.md`; add `--apply` to send |
 | `node store/push-testflight.mjs` | Sets up TestFlight **internal** testing from `store/testflight.md`; add `--apply` to send |
 
+## Staying small
+
+Kvill is 1.7MB, 52 Swift files, 13,558 lines and **no dependencies at all**.
+That is the product, not an accident of it: the pitch is that a document opens
+before you have finished letting go of the mouse, and every one of those numbers
+is why it can.
+
+### The budget
+
+Measured on this machine, and worth re-measuring rather than trusting:
+
+| | |
+|---|---|
+| Bundle | 1.7MB, binary 1.5MB |
+| Source | 52 files, ~13,600 lines |
+| Dependencies | none, and adding one is a decision rather than a convenience |
+| Cold launch to a window on screen | ~280ms |
+| Warm open, app already running | ~100ms |
+| `--benchmark` to first screen | 65-85ms |
+| `--benchmark` per keystroke | 32ms at 2KB, 94ms at 180KB |
+
+**Anything that moves these is a change to the product.** A feature that adds a
+megabyte, or ten milliseconds to a keystroke, has to be worth that on its own
+terms, and the number goes in the commit message.
+
+### How to know, rather than think
+
+    ./build.sh && ./build/Kvill.app/Contents/MacOS/Kvill --benchmark file.md
+
+Run it three times: the figures are stable to a few tenths, so a difference of
+more than about a millisecond is real and anything smaller is not.
+
+**To find out whether a change cost anything, build both.** A worktree at the
+commit before it, built and benchmarked beside the current one, answers in two
+minutes what an afternoon of reasoning will not:
+
+    git worktree add /tmp/before <commit>
+    cd /tmp/before && QUILL_SANDBOX=0 ./build.sh
+    /tmp/before/build/Kvill.app/Contents/MacOS/Kvill --benchmark file.md
+    git worktree remove --force /tmp/before
+
+### The rules that keep it this size
+
+**Nothing whole-document runs per keystroke.** This is the one that has actually
+bitten: the word count split the entire document into substrings on every
+keypress and cost 77ms in a large file. Work that scales with the document is
+debounced, and `DocumentViewController.updateStats` is the pattern to copy, at
+0.35 seconds. Anything hanging off `onTextChange` is suspect until it is shown
+to be cheap.
+
+**Parse once.** `EditorViewController.parsed` is already the document, in order,
+with kinds and ranges. A feature that needs structure reads that. A feature that
+re-scans the text has bought a second parser and will disagree with the first
+one eventually.
+
+**Reach for the AppKit component before writing one.** The sidebar was written by
+hand once, with its own width, animation, collapsed state and hover tracking,
+and every one of those is something `NSSplitViewItem` already does. Deleting it
+removed more code than it added and fixed three bugs.
+
+**A view that is not on screen does no work.** The contents list rebuilds when
+the sidebar is open, not when it is collapsed.
+
+**No dependency without a reason that survives being said out loud.** Every
+library is bundle size, launch time, a supply chain and a thing to keep current.
+The syntax highlighter here is language-agnostic on purpose: a real grammar per
+language is a megabyte and a maintenance burden for a panel most documents do
+not have.
+
+**Features are refused, not deferred.** No preview pane, no tabs, no plugins, no
+sync, no accounts. Each of those is defensible on its own and none of them is
+why anyone opens this app. `README.md` keeps the list, and the list is a feature.
+
+## What the interface is allowed to do
+
+**Double-clicking a file gets a page and nothing else.** That is the product and
+it is not up for negotiation by a feature. No sidebar, no index, no minimap, no
+bar of any kind on a plain open.
+
+**Everything else is off until asked for, and every one of them can be turned
+off again.** A folder opened deliberately shows its files, because that is what
+opening a folder means. Nothing else appears on its own.
+
+**Native components, no custom rendering.** The sidebar is `NSSplitViewItem`,
+the lists are `NSOutlineView` and `NSTableView` in `.sourceList` style, the find
+bar is `NSTextFinder`, tabs are the system's window tabbing. Drawing is for the
+page itself, where the typography is the product. Anywhere else, a hand-drawn
+control is a bug waiting for the next macOS release.
+
+**Written to the current Swift and AppKit**, targeting the macOS in
+`Package.swift` rather than the oldest one that might work.
+
+## Feature parity, and what we refuse
+
+MarkViewer is the nearest thing to this app: free, native, macOS, aimed at
+reading and reviewing Markdown, and closed source. Its list is worth answering
+one item at a time rather than as a whole.
+
+| Theirs | Ours |
+|---|---|
+| WYSIWYG editing | Yes, and the source is never rewritten |
+| GitHub-flavoured Markdown | Yes, every construct GitHub renders |
+| Runs offline | Yes, and no network entitlement exists to remove |
+| Launches instantly | Yes, measured: see the budget above |
+| Native app | Yes |
+| Search highlighting | Yes, `NSTextFinder` |
+| File explorer | Yes, the folder sidebar |
+| Detects external changes | Yes, and marks the words that changed |
+| Auto table of contents | **To build**, in the sidebar, off by default |
+| Multi-tab | **To build**, through the system's own window tabbing |
+| Inline annotations | **To build**, as Markdown, never as a sidecar file |
+| Built-in terminal | **Refused**, see below |
+| Diff view | Ours marks changes in place; theirs is a panel |
+
+**The terminal is not a preference, it is not possible.** This app is sandboxed
+for the App Store and the sandbox has no entitlement that lets it run another
+program. Anyone who wants a terminal has one.
+
+**Annotations go in the file, in Markdown.** `==highlight==` already parses, so
+an annotation is text the user can read in any other editor, in a diff and on
+GitHub. A sidecar file of comments would be a private format that only this app
+understands, which is the thing this app exists not to be.
+
+**Tabs are the system's.** `window.tabbingMode` moves from `.disallowed` to
+`.automatic`, which respects the "Prefer tabs" setting in System Settings, so
+tabs are off unless someone has asked the whole system for them. Nothing is
+drawn and nothing is maintained.
+
 ## What's new, in the About window
 
 `Resources/ReleaseNotes.md` is what the About window's right column shows, and
@@ -192,7 +320,12 @@ view's frame is forcing layout.
 **Whole-document work per keystroke.** Typing in a 556KB file cost 77ms, almost
 none of it in the editor: the word count split the entire document into
 substrings, and the document copied the whole string into a cache. Both were
-outside the editor and neither was on anyone's list of suspects. It is 4ms now.
+outside the editor and neither was on anyone's list of suspects. That fix was
+real and the styling step is cheap now, but **4ms was the wrong number to write
+down**: measured end to end with `--benchmark`, a keystroke costs 32ms on a 2KB
+document and 94ms at 180KB. Both figures are the same on the commit before a
+day's work as after it, so they are the standing cost of the edit path, not a
+regression. Quote the number the tool prints, not the one the fix felt like.
 Profile before optimising; the answer was not where it looked.
 
 **`NSString.character(at:)` in the parser.** An Objective-C message per

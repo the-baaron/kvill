@@ -143,6 +143,13 @@ final class EditorViewController: NSViewController {
         storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: text)
         storage.endEditing()
         textView.undoManager?.removeAllActions()
+        // Replacing the whole storage leaves the selection at the end of it, so
+        // a freshly opened document showed its first page with the caret parked
+        // on the last line: typing straight away appended to the bottom of a
+        // file you were looking at the top of. Only visible once the contents
+        // list started lighting the heading the caret is under, and it lit the
+        // last one every time.
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
         refresh(fullRestyle: true)
         // Measuring lays the whole document out, which on a large file is most
         // of the time between opening it and seeing it. A turn of the run loop
@@ -189,6 +196,30 @@ final class EditorViewController: NSViewController {
         scrollView.reflectScrolledClipView(scrollView.contentView)
 
         textView.flashChanges(changes)
+    }
+
+    /// Puts a position on screen and the caret in it.
+    ///
+    /// `scrollRangeToVisible` alone leaves a heading pinned to whichever edge it
+    /// came in from, so the line arrives near the top with a little air above
+    /// it, which is where you would have scrolled it to yourself.
+    func reveal(_ location: Int) {
+        let length = (textView.string as NSString).length
+        let safe = min(max(0, location), length)
+        textView.setSelectedRange(NSRange(location: safe, length: 0))
+        guard let layoutManager = textView.layoutManager,
+              let container = textView.textContainer else {
+            textView.scrollRangeToVisible(NSRange(location: safe, length: 0))
+            return
+        }
+        let glyphs = layoutManager.glyphRange(
+            forCharacterRange: NSRange(location: safe, length: 0), actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: container)
+        rect.origin.y += textView.textContainerOrigin.y
+        let air = theme.metrics.base * 2
+        let top = max(0, rect.minY - air)
+        scrollView.contentView.animator().setBoundsOrigin(NSPoint(x: 0, y: top))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     // MARK: - Layout

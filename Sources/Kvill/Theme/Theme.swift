@@ -93,6 +93,7 @@ final class ThemeManager {
         static let scrollPastEnd = "kvill.scrollPastEnd"
         static let showMarkers = "kvill.showMarkers"
         static let liveMode = "kvill.liveMode"
+        static let showContents = "kvill.showContents"
         /// What live mode was called when it only governed saving.
         static let legacyAutosave = "kvill.autosave"
     }
@@ -178,6 +179,19 @@ final class ThemeManager {
         }
     }
 
+    /// Whether the document's headings are listed down the side.
+    ///
+    /// Off. Double-clicking a file gets a page and nothing else, and an index
+    /// that appears on its own is exactly the sort of furniture this app does
+    /// not put in front of someone who only wanted to read a file.
+    var showsContents: Bool {
+        didSet {
+            guard showsContents != oldValue else { return }
+            defaults.set(showsContents, forKey: Key.showContents)
+            NotificationCenter.default.post(name: .kvillPreferencesChanged, object: nil)
+        }
+    }
+
     /// Whether the file and the page keep themselves in step on their own.
     ///
     /// One switch over the whole question of movement, in both directions. On,
@@ -221,6 +235,7 @@ final class ThemeManager {
             Key.focusMode: false,
             Key.typewriter: false,
             Key.showMarkers: false,
+            Key.showContents: false,
         ])
 
         followsSystemAppearance = defaults.bool(forKey: Key.followSystem)
@@ -232,6 +247,7 @@ final class ThemeManager {
         focusMode = defaults.bool(forKey: Key.focusMode)
         typewriterScrolling = defaults.bool(forKey: Key.typewriter)
         alwaysShowMarkers = defaults.bool(forKey: Key.showMarkers)
+        showsContents = defaults.bool(forKey: Key.showContents)
         // On unless it has been turned off: a document you cannot scroll to the
         // end of is the odd case, not the default.
         scrollPastEnd = defaults.object(forKey: Key.scrollPastEnd) as? Bool ?? true

@@ -298,6 +298,11 @@ enum MainMenu {
                 modifiers: [.command, .shift], target: appDelegate)
             markers.tag = MenuTag.markers
 
+            let contents = add(
+                menu, "Show Contents", #selector(AppDelegate.toggleContents(_:)), "l",
+                modifiers: [.command, .shift], target: appDelegate)
+            contents.tag = MenuTag.contents
+
             let autosave = add(
                 menu, "Live Mode", #selector(AppDelegate.toggleAutosave(_:)),
                 "", target: appDelegate)
@@ -348,5 +353,6 @@ enum MenuTag {
     static let typewriter = 1006
     static let markers = 1007
     static let autosave = 1008
+    static let contents = 1009
     static let followSystem = 1008
 }
