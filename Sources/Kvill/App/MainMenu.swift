@@ -171,6 +171,8 @@ enum MainMenu {
         submenu("Format") { menu in
             add(menu, "Bold", #selector(EditorViewController.toggleBold(_:)), "b")
             add(menu, "Italic", #selector(EditorViewController.toggleItalic(_:)), "i")
+            add(menu, "Annotate", #selector(EditorViewController.annotate(_:)), "a",
+                modifiers: [.command, .shift])
             add(menu, "Strikethrough", #selector(EditorViewController.toggleStrikethrough(_:)), "s",
                 modifiers: [.command, .control])
             add(menu, "Highlight", #selector(EditorViewController.toggleHighlight(_:)), "h",

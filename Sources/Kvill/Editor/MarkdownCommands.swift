@@ -13,6 +13,49 @@ extension EditorViewController {
     @objc func toggleInlineCode(_ sender: Any?) { wrap("`") }
     @objc func toggleMath(_ sender: Any?) { wrap("$") }
 
+    /// Annotating a passage: a note attached to the words it is about.
+    ///
+    /// MarkViewer keeps annotations in the app. This puts them in the file, because
+    /// a note only this app can read is a private format, and a private format is
+    /// the thing this app exists not to be.
+    ///
+    /// The construct is a highlight and a footnote, both of which are ordinary
+    /// Markdown and both of which Kvill already renders:
+    ///
+    ///     The ==rollback plan==[^1] is the one thing nobody has written.
+    ///
+    ///     [^1]: Ask whoever owns staging before Friday.
+    ///
+    /// It survives in every other editor, reads sensibly as plain text, renders on
+    /// GitHub, and shows up in a diff as the words that changed.
+
+
+    @objc func annotate(_ sender: Any?) {
+        let text = textView.string as NSString
+        let range = selectionOrWord()
+        guard range.length > 0 else { return }
+
+        let marker = Annotations.nextMarker(in: textView.string)
+        let passage = text.substring(with: range)
+        // Not wrapped again if it already is: annotating the same words twice
+        // should add a second note, not a second pair of equals signs.
+        let highlighted = passage.hasPrefix("==") && passage.hasSuffix("==")
+            ? passage : "==\(passage)=="
+        replace(range, with: "\(highlighted)[^\(marker)]")
+
+        // The definition goes at the end, which is where a footnote belongs and
+        // where every other Markdown tool looks for it.
+        let body = "[^\(marker)]: "
+        let separator = Annotations.separator(endingIn: textView.string)
+        let end = (textView.string as NSString).length
+        replace(NSRange(location: end, length: 0), with: separator + body)
+
+        // Caret in the note, ready to type it.
+        let caret = (textView.string as NSString).length
+        textView.setSelectedRange(NSRange(location: caret, length: 0))
+        textView.scrollRangeToVisible(NSRange(location: caret, length: 0))
+    }
+
     @objc func insertLink(_ sender: Any?) {
         let text = textView.string as NSString
         var range = selectionOrWord()

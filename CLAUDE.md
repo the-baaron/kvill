@@ -49,8 +49,8 @@ Measured on this machine, and worth re-measuring rather than trusting:
 
 | | |
 |---|---|
-| Bundle | 1.7MB, binary 1.5MB |
-| Source | 52 files, ~13,600 lines |
+| Bundle | 1.8MB, binary 1.57MB |
+| Source | 55 files, ~14,200 lines |
 | Dependencies | none, and adding one is a decision rather than a convenience |
 | Cold launch to a window on screen | ~280ms |
 | Warm open, app already running | ~100ms |
@@ -144,9 +144,9 @@ one item at a time rather than as a whole.
 | Search highlighting | Yes, `NSTextFinder` |
 | File explorer | Yes, the folder sidebar |
 | Detects external changes | Yes, and marks the words that changed |
-| Auto table of contents | **To build**, in the sidebar, off by default |
-| Multi-tab | **To build**, through the system's own window tabbing |
-| Inline annotations | **To build**, as Markdown, never as a sidecar file |
+| Auto table of contents | Yes, in the sidebar, off by default |
+| Multi-tab | Yes, the system's own window tabbing |
+| Inline annotations | Yes, as a highlight and a footnote, in the file |
 | Built-in terminal | **Refused**, see below |
 | Diff view | Ours marks changes in place; theirs is a panel |
 

@@ -24,6 +24,8 @@ final class SelectionToolbarView: NSView {
                 selector: #selector(EditorViewController.toggleHighlight(_:))),
         Command(symbol: "chevron.left.forwardslash.chevron.right", label: "Inline code",
                 selector: #selector(EditorViewController.toggleInlineCode(_:))),
+        Command(symbol: "bubble.left.and.text.bubble.right", label: "Annotate",
+                selector: #selector(EditorViewController.annotate(_:))),
         Command(symbol: "link", label: "Link",
                 selector: #selector(EditorViewController.insertLink(_:))),
         Command(symbol: "", label: "Heading 1",

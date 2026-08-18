@@ -224,6 +224,18 @@ final class EditorViewController: NSViewController {
 
     // MARK: - Layout
 
+    /// Air above the first line, given what the system has taken at the top.
+    ///
+    /// Separated out because the window is the awkward part to arrange in a
+    /// check and this arithmetic is the part that was wrong: the page is drawn
+    /// under a transparent title bar, so 56 points was right until tabs were
+    /// allowed and the first heading ended up behind the tab bar.
+    static func topInset(systemChrome: CGFloat, firstLine: CGFloat) -> CGFloat {
+        // 28 points of air under whatever the system is showing, and never less
+        // than the 56 a plain window has always had.
+        max(56, systemChrome + 28) + firstLine
+    }
+
     /// The least space kept either side of the text in a narrow window.
     ///
     /// Wide enough for the widest decoration padding, 18 points for a callout,
@@ -248,8 +260,18 @@ final class EditorViewController: NSViewController {
         // into the paragraph style. Front matter is the exception, being a panel
         // that wants the margin a table gets rather than a page's worth of air.
         let opensWithFrontMatter = parsed.lines.first?.kind == .frontMatterDelimiter
-        let vertical: CGFloat = 56
-            + (opensWithFrontMatter ? metrics.base * 1.1 : metrics.firstLineMargin)
+        // How much of the window the system has taken at the top. Normally the
+        // title bar; with tabs showing, the tab bar as well. Asked for rather
+        // than assumed: the page is drawn under a transparent title bar, so a
+        // fixed number was right until the day tabs were allowed and then the
+        // first heading sat behind the tab bar.
+        var systemChrome: CGFloat = 0
+        if let window = view.window, let content = window.contentView {
+            systemChrome = max(0, content.bounds.height - window.contentLayoutRect.height)
+        }
+        let vertical = Self.topInset(
+            systemChrome: systemChrome,
+            firstLine: opensWithFrontMatter ? metrics.base * 1.1 : metrics.firstLineMargin)
 
         if textView.textContainerInset.width != horizontal
             || textView.textContainerInset.height != vertical {

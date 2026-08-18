@@ -27,7 +27,13 @@ final class DocumentWindowController: NSWindowController {
         // The name is drawn in the page instead, centred and only at the top of
         // the document, so the title bar itself stays empty.
         window.titleVisibility = .hidden
-        window.tabbingMode = .disallowed
+        // The system's tabs, and the system's decision about them. `.automatic`
+        // follows "Prefer tabs when opening documents" in System Settings, which
+        // is off for most people, so a plain double-click still gets a window of
+        // its own. Nothing here is drawn or maintained: the tab bar, the Window
+        // menu items and the merge command are all AppKit's.
+        window.tabbingMode = .automatic
+        window.tabbingIdentifier = "design.baars.Kvill.document"
         window.minSize = NSSize(width: 520, height: 420)
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("KvillDocument")

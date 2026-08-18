@@ -879,6 +879,97 @@ enum SelfTest {
                   rendered.contains("August 2026"), "")
         }
 
+        // --- Room at the top, whatever the system is showing ------------------
+        // Tabs are the system's now, and a tab bar takes a second band of the
+        // window. The page is drawn under a transparent title bar, so the air
+        // above the first line was a fixed number, and the first heading ended
+        // up behind the tab bar the day tabs were allowed.
+        do {
+            let plain = EditorViewController.topInset(systemChrome: 28, firstLine: 20)
+            let tabbed = EditorViewController.topInset(systemChrome: 56, firstLine: 20)
+            check("top inset: a plain window keeps the margin it always had",
+                  plain == 76, "\(plain)")
+            check("top inset: a tab bar pushes the first line down",
+                  tabbed > plain, "\(plain) then \(tabbed)")
+            check("top inset: by the height the tab bar actually takes",
+                  tabbed - plain == 28, "\(tabbed - plain)")
+            check("top inset: a window that reports nothing still has a margin",
+                  EditorViewController.topInset(systemChrome: 0, firstLine: 0) == 56,
+                  "\(EditorViewController.topInset(systemChrome: 0, firstLine: 0))")
+        }
+
+        // --- Annotating a passage ---------------------------------------------
+        // MarkViewer keeps annotations in the app. These go in the file, as a
+        // highlight and a footnote, so the note is readable in any other editor
+        // and shows up in a diff. The arithmetic is checked here; the text view
+        // only carries it out.
+        do {
+            check("annotate: the first note in a document is one",
+                  Annotations.nextMarker(in: "Plain prose.\n") == 1)
+            check("annotate: numbering continues from what the file uses",
+                  Annotations.nextMarker(in: "A[^1] and B[^2]\n\n[^1]: x\n[^2]: y\n") == 3)
+
+            // Numbered from the highest in use, not from how many there are:
+            // deleting the middle note must not reissue a marker still in play.
+            check("annotate: a deleted note does not get its number reused",
+                  Annotations.nextMarker(in: "A[^1] and C[^3]\n\n[^1]: x\n[^3]: z\n") == 4,
+                  "\(Annotations.nextMarker(in: "A[^1] and C[^3]\n\n[^1]: x\n[^3]: z\n"))")
+
+            check("annotate: a footnote-looking thing in prose still counts",
+                  Annotations.nextMarker(in: "See [^7] somewhere.\n") == 8)
+
+            // Where the definition lands, so notes gather in one block instead
+            // of opening a new one each time or piling up blank lines.
+            check("annotate: a document with no trailing newline gets a blank line",
+                  Annotations.separator(endingIn: "Body.") == "\n\n",
+                  Annotations.separator(endingIn: "Body.").debugDescription)
+            check("annotate: one trailing newline gets one more",
+                  Annotations.separator(endingIn: "Body.\n") == "\n")
+            check("annotate: a blank line already there is enough",
+                  Annotations.separator(endingIn: "Body.\n\n") == "")
+            check("annotate: a second note joins the block above it",
+                  Annotations.separator(endingIn: "Body.\n\n[^1]: first\n") == "",
+                  Annotations.separator(endingIn: "Body.\n\n[^1]: first\n").debugDescription)
+            check("annotate: an empty document needs no separator",
+                  Annotations.separator(endingIn: "") == "")
+
+            // And the whole thing through the editor, because the arithmetic
+            // being right is not the same as the command working.
+            controller.loadText("The rollback plan is the one thing nobody has written.\n")
+            controller.view.layoutSubtreeIfNeeded()
+            let passage = (controller.editor.text as NSString).range(of: "rollback plan")
+            controller.editor.textView.setSelectedRange(passage)
+            controller.editor.annotate(nil)
+            controller.view.layoutSubtreeIfNeeded()
+            let after = controller.editor.text
+            check("annotate: the passage is highlighted and marked",
+                  after.contains("==rollback plan==[^1]"), after.prefix(60).description)
+            check("annotate: the note is defined at the end",
+                  after.hasSuffix("[^1]: "), after.suffix(20).debugDescription)
+            check("annotate: and the caret is in the note, ready to type",
+                  controller.editor.textView.selectedRange().location
+                    == (after as NSString).length)
+
+            // A second one on the same document.
+            let second = (controller.editor.text as NSString).range(of: "nobody")
+            controller.editor.textView.setSelectedRange(second)
+            controller.editor.annotate(nil)
+            let twice = controller.editor.text
+            check("annotate: a second note takes the next number",
+                  twice.contains("==nobody==[^2]"), "")
+            check("annotate: and joins the block rather than starting another",
+                  !twice.contains("\n\n\n"),
+                  twice.contains("\n\n\n") ? "it left a run of blank lines" : "")
+
+            // It has to still parse as what it claims to be.
+            let parsedNotes = MarkdownParser.parse(twice as NSString)
+            check("annotate: what it wrote is still Markdown the app renders",
+                  parsedNotes.lines.contains { if case .footnoteDefinition = $0.kind { return true }
+                                               return false },
+                  parsedNotes.lines.contains { if case .footnoteDefinition = $0.kind { return true }
+                                               return false } ? "" : "none was parsed")
+        }
+
         // --- The contents list ------------------------------------------------
         // Headings down the side, so a long document can be moved around in.
         // Off by default: double-clicking a file gets a page and nothing else.
