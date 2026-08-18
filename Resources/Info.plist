@@ -72,6 +72,8 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>MIT licensed. Source at github.com/the-baaron/kvill</string>
+	<key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
+	<false/>
 	<key>NSQuitAlwaysKeepsWindows</key>
 	<false/>
 	<key>NSSupportsAutomaticTermination</key>
