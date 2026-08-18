@@ -69,6 +69,15 @@ let accents = [
 ]
 let accent = colour(accents[theme] ?? (dark ? "#D08A5D" : "#A65D3A"))
 
+/// The mark's own colour, the one in the app icon and the wordmark.
+///
+/// The ornaments used the palette's accent, which is right for a wash of light
+/// off the page and wrong for a drawn mark: on the blue palette it put a bright
+/// blue marker next to the warm icon in the same picture, and the two argued.
+/// The icon in the corner is this colour whatever palette the page is in, so
+/// the marker beside it is too.
+let brand = colour(dark ? "#D08A5D" : "#B4653A")
+
 let ink = dark ? colour("#F4F1EB") : colour("#221F1B")
 let quiet = dark ? colour("#9C958A") : colour("#756E66")
 let top = dark ? colour("#16181C") : colour("#F5F1E9")
@@ -209,7 +218,7 @@ func drawDots(at origin: NSPoint, columns: Int, rows: Int) {
 func drawBigMarker(at point: NSPoint, size markerSize: CGFloat) {
     NSAttributedString(string: "#", attributes: [
         .font: NSFont.monospacedSystemFont(ofSize: markerSize, weight: .medium),
-        .foregroundColor: accent.withAlphaComponent(0.9),
+        .foregroundColor: brand.withAlphaComponent(0.9),
     ]).draw(at: point)
 }
 
