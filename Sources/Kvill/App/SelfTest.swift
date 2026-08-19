@@ -637,6 +637,17 @@ enum SelfTest {
         // The sidebar holds room at the top for the traffic lights. In full
         // screen they are in the strip rather than over the sidebar, so that
         // room is 44 points of nothing above the first file.
+        // The sidebar is the same material as the floating buttons, which means
+        // the list has to be the glass's own content. A glass with nothing in it
+        // draws nothing, and a sidebar that draws nothing looks like a plain
+        // fill rather than like a bug.
+        do {
+            let bar = SidebarViewController()
+            _ = bar.view
+            check("sidebar: the list is inside the glass, not on top of it",
+                  bar.listIsInsideTheGlassForTest)
+        }
+
         check("sidebar: room for the traffic lights in a window",
               SidebarViewController.listTop(inFullScreen: false) == WindowDragArea.height)
 
