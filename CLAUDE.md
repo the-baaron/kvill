@@ -55,7 +55,13 @@ Measured on this machine, and worth re-measuring rather than trusting:
 | Cold launch to a window on screen | ~280ms |
 | Warm open, app already running | ~100ms |
 | `--benchmark` to first screen | 65-85ms |
-| `--benchmark` per keystroke | 32ms at 2KB, 94ms at 180KB |
+| `--benchmark` per keystroke | 7ms on plain prose, 79ms on a dense page, 94ms at 180KB |
+
+**The keystroke cost scales with decorations, not with bytes.** 167 bytes of
+plain prose costs 7ms. A 1.8KB page holding six heading levels, four lists, five
+callouts, three code blocks and a table costs 79ms. Both measured on the same
+build in the same minute. Quoting a per-keystroke figure without saying what was
+in the file says nothing at all.
 
 **Anything that moves these is a change to the product.** A feature that adds a
 megabyte, or ten milliseconds to a keystroke, has to be worth that on its own

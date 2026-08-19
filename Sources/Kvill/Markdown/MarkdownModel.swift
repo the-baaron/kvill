@@ -50,6 +50,19 @@ enum BlockKind: Equatable {
         default: return false
         }
     }
+
+    /// Whether this line is the top or bottom edge of a block the editor draws a
+    /// panel around.
+    ///
+    /// Its marker stays inside the panel rather than hanging in the gutter. The
+    /// panel starts left of the text column, so a hanging ``` or --- lands on
+    /// the panel's border and, at the corners, through the curve of it.
+    var opensADrawnPanel: Bool {
+        switch self {
+        case .fenceDelimiter, .frontMatterDelimiter: return true
+        default: return false
+        }
+    }
 }
 
 enum TaskState: Equatable {

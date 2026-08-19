@@ -9,7 +9,8 @@ final class DocumentViewController: NSViewController {
 
     let editor = EditorViewController()
     private let stats = StatsPillView()
-    private let optionsBar = DisplayOptionsBar()
+    /// The display options pill. Reachable so the audit shots can open it.
+    let optionsBar = DisplayOptionsBar()
     /// Opens and closes the sidebar. Mirrors the options button on the other
     /// side, at the same height, so the two top corners match.
     private let sidebarToggle = SidebarToggleButton()

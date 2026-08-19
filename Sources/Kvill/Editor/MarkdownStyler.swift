@@ -98,6 +98,16 @@ final class MarkdownStyler {
         var markerX = contentX - effectiveGap - markerWidth
         if markerX < 0 { markerX = 0 }
 
+        // A delimiter that opens or closes a drawn panel stays inside it.
+        //
+        // Hanging it in the gutter is right for a heading's # or a list's -,
+        // which sit in the margin beside their text. It is wrong for ``` and
+        // for front matter's ---, because the panel starts left of the text
+        // column and the marker lands on its border: with the caret in the
+        // first block, which is where it is the moment a document opens, every
+        // front matter panel had --- struck through its rounded corner.
+        if line.kind.opensADrawnPanel { markerX = contentX }
+
         // A line that is only an image becomes the picture itself, with whatever
         // text the line holds falling to the bottom of the block as its caption.
         let image = imageDisplay(for: line)

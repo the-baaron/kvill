@@ -209,6 +209,26 @@ final class EditorTextView: NSTextView {
 
     // MARK: - Drawing
 
+    /// Stays where the reader left it when the text reflows.
+    ///
+    /// `NSTextView` scrolls to the insertion point from inside its private
+    /// `_setFrameSize:forceScroll:`, and a width change is what triggers it.
+    /// Every reflow therefore moved the page: turning the index on scrolled a
+    /// freshly opened document 68 points down, which read as the page having
+    /// been left half way through.
+    ///
+    /// Only on a width change. A height change is the document growing as
+    /// someone types, and following the caret there is exactly right.
+    override func setFrameSize(_ newSize: NSSize) {
+        let reflowed = abs(newSize.width - frame.width) > 0.5
+        let clip = enclosingScrollView?.contentView
+        let origin = clip?.bounds.origin
+        super.setFrameSize(newSize)
+        guard reflowed, let clip, let origin, clip.bounds.origin != origin else { return }
+        clip.setBoundsOrigin(origin)
+        enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
     /// Stays where the reader left it when the window changes size.
     ///
     /// `NSTextView` scrolls to the insertion point at the end of a live resize,
