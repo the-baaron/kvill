@@ -161,8 +161,19 @@ final class DocumentViewController: NSViewController {
     /// button can sit at the page's own margin. With it collapsed the page fills
     /// the window and that margin is exactly where the traffic lights are: the
     /// button landed on top of them.
-    private static let toggleBesideText: CGFloat = 18
-    private static let toggleClearOfLights: CGFloat = 88
+    static let toggleBesideText: CGFloat = 18
+    static let toggleClearOfLights: CGFloat = 88
+
+    /// Where the sidebar button sits, given where the page starts.
+    ///
+    /// In full screen there are no traffic lights to clear, so the button goes
+    /// to the page's own margin like everything else in that corner. Anywhere
+    /// else it keeps its distance from the window's left edge, which shrinks
+    /// smoothly as the sidebar slides in and the page moves right.
+    static func toggleLeading(pageStartsAt: CGFloat, inFullScreen: Bool) -> CGFloat {
+        guard !inFullScreen else { return toggleBesideText }
+        return max(toggleBesideText, toggleClearOfLights - pageStartsAt)
+    }
     /// The buttons sit as far from the top as the options button sits from the
     /// side, so the corner reads as one measurement rather than two.
     ///
@@ -193,7 +204,9 @@ final class DocumentViewController: NSViewController {
         // instant the collapse began, so the button jumped while the sidebar was
         // still sliding.
         let pageStartsAt = view.convert(NSPoint.zero, to: nil).x
-        let wanted = max(Self.toggleBesideText, Self.toggleClearOfLights - pageStartsAt)
+        let wanted = Self.toggleLeading(
+            pageStartsAt: pageStartsAt,
+            inFullScreen: view.window?.styleMask.contains(.fullScreen) ?? false)
         if abs(sidebarToggleLeading.constant - wanted) > 0.5 {
             sidebarToggleLeading.constant = wanted
         }

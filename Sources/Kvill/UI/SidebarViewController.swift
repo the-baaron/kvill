@@ -53,14 +53,23 @@ final class SidebarViewController: NSViewController {
     /// The room the traffic lights need at the top of the sidebar.
     static let roomForTrafficLights = WindowDragArea.height
 
+    /// The height of a plain title bar, which in full screen is exactly the
+    /// strip that slides down when the pointer reaches the top edge. Asked for
+    /// rather than written down: it measures 32 on this machine and that is not
+    /// a number to hard code.
+    static let revealedStrip = NSWindow.frameRect(
+        forContentRect: .zero, styleMask: [.titled]).height
+
     /// What that room should be for a given window.
     ///
-    /// None in full screen. The lights are in the strip that slides down from
-    /// the top edge, not over the sidebar, so holding 44 points open for them
-    /// leaves the folder's first file a long way down an otherwise empty
-    /// column.
+    /// Less in full screen, and for a different reason. Windowed, the room is
+    /// for the traffic lights, which sit over the sidebar the way they do in
+    /// Finder. In full screen they are not there, so 44 points would be a long
+    /// empty column above the first file, and none at all puts the folder's
+    /// name against the top edge of the screen and under the strip whenever it
+    /// slides down. The strip's own height is the answer to both.
     static func listTop(inFullScreen: Bool) -> CGFloat {
-        inFullScreen ? 0 : roomForTrafficLights
+        inFullScreen ? revealedStrip : roomForTrafficLights
     }
 
     override func viewDidLayout() {

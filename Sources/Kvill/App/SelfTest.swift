@@ -625,8 +625,31 @@ enum SelfTest {
         // room is 44 points of nothing above the first file.
         check("sidebar: room for the traffic lights in a window",
               SidebarViewController.listTop(inFullScreen: false) == WindowDragArea.height)
-        check("sidebar: and none in full screen, where they are not there",
-              SidebarViewController.listTop(inFullScreen: true) == 0)
+
+        // The button that opens the sidebar keeps clear of the traffic lights,
+        // and in full screen there are none to keep clear of.
+        do {
+            let collapsed = DocumentViewController.toggleLeading(
+                pageStartsAt: 0, inFullScreen: false)
+            let open = DocumentViewController.toggleLeading(
+                pageStartsAt: 200, inFullScreen: false)
+            let full = DocumentViewController.toggleLeading(
+                pageStartsAt: 0, inFullScreen: true)
+            check("toggle: clear of the traffic lights with the sidebar shut",
+                  collapsed == DocumentViewController.toggleClearOfLights, "\(collapsed)")
+            check("toggle: at the page's own margin once the sidebar is open",
+                  open == DocumentViewController.toggleBesideText, "\(open)")
+            check("toggle: and in the corner in full screen, where there are no lights",
+                  full == DocumentViewController.toggleBesideText, "\(full)")
+        }
+        // In full screen there are no traffic lights over the sidebar, but the
+        // strip that slides down from the top edge would cover the folder's
+        // name, so the list starts where the strip ends.
+        check("sidebar: in full screen it clears the strip instead",
+              SidebarViewController.listTop(inFullScreen: true)
+                  == SidebarViewController.revealedStrip
+              && SidebarViewController.revealedStrip > 0,
+              "\(SidebarViewController.listTop(inFullScreen: true))")
 
         // --- What full screen does to the chrome --------------------------------
         // The strip that slides down when the pointer reaches the top edge is
@@ -675,8 +698,31 @@ enum SelfTest {
         // room is 44 points of nothing above the first file.
         check("sidebar: room for the traffic lights in a window",
               SidebarViewController.listTop(inFullScreen: false) == WindowDragArea.height)
-        check("sidebar: and none in full screen, where they are not there",
-              SidebarViewController.listTop(inFullScreen: true) == 0)
+
+        // The button that opens the sidebar keeps clear of the traffic lights,
+        // and in full screen there are none to keep clear of.
+        do {
+            let collapsed = DocumentViewController.toggleLeading(
+                pageStartsAt: 0, inFullScreen: false)
+            let open = DocumentViewController.toggleLeading(
+                pageStartsAt: 200, inFullScreen: false)
+            let full = DocumentViewController.toggleLeading(
+                pageStartsAt: 0, inFullScreen: true)
+            check("toggle: clear of the traffic lights with the sidebar shut",
+                  collapsed == DocumentViewController.toggleClearOfLights, "\(collapsed)")
+            check("toggle: at the page's own margin once the sidebar is open",
+                  open == DocumentViewController.toggleBesideText, "\(open)")
+            check("toggle: and in the corner in full screen, where there are no lights",
+                  full == DocumentViewController.toggleBesideText, "\(full)")
+        }
+        // In full screen there are no traffic lights over the sidebar, but the
+        // strip that slides down from the top edge would cover the folder's
+        // name, so the list starts where the strip ends.
+        check("sidebar: in full screen it clears the strip instead",
+              SidebarViewController.listTop(inFullScreen: true)
+                  == SidebarViewController.revealedStrip
+              && SidebarViewController.revealedStrip > 0,
+              "\(SidebarViewController.listTop(inFullScreen: true))")
 
         // Closed again. It was left on screen, so running the checks put a
         // stray empty window in front of whatever was there.
