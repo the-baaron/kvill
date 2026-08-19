@@ -555,6 +555,79 @@ enum SelfTest {
                   && options.contains(.autoHideMenuBar), "\(options.rawValue)")
         }
 
+        // --- What full screen does to the chrome --------------------------------
+        // The strip that slides down when the pointer reaches the top edge is
+        // the system's and cannot be done away with, but it does not have to be
+        // twice the size. Measured on a real full screen window: 32 points of
+        // title bar plus a 36 point scroll edge accessory is the 68 it came to,
+        // and Apple's own note on `fullScreenMinHeight` says why zero does not
+        // help — the accessory is clipped while hidden, never removed, so it is
+        // back to full height the moment the strip is revealed. Taken out for
+        // the length of full screen instead, and put back on the way out.
+        if let window = documentWindow.window {
+            let accessoriesBefore = window.titlebarAccessoryViewControllers.count
+            documentWindow.windowWillEnterFullScreen(
+                Notification(name: NSWindow.willEnterFullScreenNotification))
+            check("full screen: nothing of ours is left in the strip",
+                  window.toolbar == nil && window.titlebarAccessoryViewControllers.isEmpty,
+                  "toolbar \(window.toolbar == nil ? "gone" : "still there"), "
+                  + "\(window.titlebarAccessoryViewControllers.count) accessories")
+            check("full screen: and the title bar is painted rather than clear",
+                  !window.titlebarAppearsTransparent)
+
+            documentWindow.windowDidExitFullScreen(
+                Notification(name: NSWindow.didExitFullScreenNotification))
+            check("full screen: the toolbar comes back on the way out",
+                  window.toolbar != nil && window.toolbarStyle == .unified)
+            check("full screen: and so does the scroll edge",
+                  window.titlebarAccessoryViewControllers.count == accessoriesBefore,
+                  "\(window.titlebarAccessoryViewControllers.count) of \(accessoriesBefore)")
+            check("full screen: windowed is transparent again",
+                  window.titlebarAppearsTransparent
+                  && window.titlebarSeparatorStyle == .none)
+        }
+
+        // --- What full screen does to the chrome --------------------------------
+        // The strip that slides down when the pointer reaches the top edge is
+        // the system's and cannot be done away with, but it does not have to be
+        // twice the size. Measured on a real full screen window: 32 points of
+        // title bar plus a 36 point scroll edge accessory came to 68, and
+        // Apple's note on `fullScreenMinHeight` says why zero does not help -
+        // a hidden accessory is clipped, never removed, so it is back to full
+        // height the moment the strip is revealed. Taken out for the length of
+        // full screen instead, and put back on the way out. Measured again
+        // after: 32.
+        if let window = documentWindow.window {
+            let accessoriesBefore = window.titlebarAccessoryViewControllers.count
+            documentWindow.windowWillEnterFullScreen(
+                Notification(name: NSWindow.willEnterFullScreenNotification))
+            check("full screen: nothing of ours is left in the strip",
+                  window.toolbar == nil && window.titlebarAccessoryViewControllers.isEmpty,
+                  "toolbar \(window.toolbar == nil ? "gone" : "still there"), "
+                  + "\(window.titlebarAccessoryViewControllers.count) accessories")
+            check("full screen: and the title bar is painted rather than clear",
+                  !window.titlebarAppearsTransparent)
+
+            documentWindow.windowDidExitFullScreen(
+                Notification(name: NSWindow.didExitFullScreenNotification))
+            check("full screen: the toolbar comes back on the way out",
+                  window.toolbar != nil && window.toolbarStyle == .unified)
+            check("full screen: and so does the scroll edge",
+                  window.titlebarAccessoryViewControllers.count == accessoriesBefore,
+                  "\(window.titlebarAccessoryViewControllers.count) of \(accessoriesBefore)")
+            check("full screen: windowed is transparent again",
+                  window.titlebarAppearsTransparent
+                  && window.titlebarSeparatorStyle == .none)
+        }
+
+        // The sidebar holds room at the top for the traffic lights. In full
+        // screen they are in the strip rather than over the sidebar, so that
+        // room is 44 points of nothing above the first file.
+        check("sidebar: room for the traffic lights in a window",
+              SidebarViewController.listTop(inFullScreen: false) == WindowDragArea.height)
+        check("sidebar: and none in full screen, where they are not there",
+              SidebarViewController.listTop(inFullScreen: true) == 0)
+
         // Closed again. It was left on screen, so running the checks put a
         // stray empty window in front of whatever was there.
         documentWindow.window?.orderOut(nil)
@@ -1901,6 +1974,18 @@ enum SelfTest {
             check("sidebar: collapsing gives the room to the page",
                   split.page.view.frame.width > widthWithSidebar,
                   "\(Int(widthWithSidebar)) -> \(Int(split.page.view.frame.width))")
+
+            // No hairline under the title bar, from either pane. Checked again
+            // after a file switch, because the page pane used to be built twice
+            // and the second one came without it: the line appeared the moment
+            // anyone clicked a row in the sidebar and stayed for the rest of
+            // that window's life. In full screen it is the border across the
+            // strip that slides down from the top edge.
+            check("sidebar: no pane draws a hairline under the title bar",
+                  !split.drawsTitlebarSeparator)
+            split.showPage(DocumentViewController())
+            check("sidebar: and still none after switching files",
+                  !split.drawsTitlebarSeparator)
 
             host.close()
             try? FileManager.default.removeItem(at: folder)

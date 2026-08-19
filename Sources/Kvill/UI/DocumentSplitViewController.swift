@@ -26,6 +26,24 @@ final class DocumentSplitViewController: NSSplitViewController {
     /// can be given the same one.
     private(set) var folder: URL?
 
+    /// The page pane, built the same way wherever it is built.
+    ///
+    /// It used to be built twice, once here and once in `showPage`, and the
+    /// second one was missing `titlebarSeparatorStyle`. So the window had no
+    /// hairline under its title bar until you clicked a file in the sidebar,
+    /// and then it did, for the rest of that window's life. In full screen that
+    /// line is the border across the strip that slides down from the top.
+    private static func makePageItem(_ page: DocumentViewController) -> NSSplitViewItem {
+        let item = NSSplitViewItem(viewController: page)
+        item.canCollapse = false
+        item.minimumThickness = 380
+        // No separator lines. The window has a transparent title bar and, on a
+        // translucent palette, no opaque ground for a hairline to sit on, so the
+        // automatic one drew a seam with the desktop showing through beside it.
+        item.titlebarSeparatorStyle = .none
+        return item
+    }
+
     init(page: DocumentViewController) {
         self.page = page
         super.init(nibName: nil, bundle: nil)
@@ -54,10 +72,7 @@ final class DocumentSplitViewController: NSSplitViewController {
         sidebarItem.titlebarSeparatorStyle = .none
         addSplitViewItem(sidebarItem)
 
-        pageItem = NSSplitViewItem(viewController: page)
-        pageItem.canCollapse = false
-        pageItem.minimumThickness = 380
-        pageItem.titlebarSeparatorStyle = .none
+        pageItem = Self.makePageItem(page)
         addSplitViewItem(pageItem)
 
         // No autosaveName. It restores a divider position from a previous run,
@@ -135,9 +150,7 @@ final class DocumentSplitViewController: NSSplitViewController {
         let wasCollapsed = sidebarItem.isCollapsed
         removeSplitViewItem(pageItem)
         page = next
-        pageItem = NSSplitViewItem(viewController: next)
-        pageItem.canCollapse = false
-        pageItem.minimumThickness = 380
+        pageItem = Self.makePageItem(next)
         addSplitViewItem(pageItem)
         sidebarItem.isCollapsed = wasCollapsed
         if let folder { sidebar.tree.show(folder) }
@@ -164,4 +177,10 @@ final class DocumentSplitViewController: NSSplitViewController {
 
     /// Whether the sidebar is showing, for the self test.
     var isShowingFileTree: Bool { sidebarItem != nil && !sidebarItem.isCollapsed }
+
+    /// Whether any pane would draw a hairline under the title bar, for the
+    /// self test. Checked after a file switch as well as before one.
+    var drawsTitlebarSeparator: Bool {
+        splitViewItems.contains { $0.titlebarSeparatorStyle != .none }
+    }
 }

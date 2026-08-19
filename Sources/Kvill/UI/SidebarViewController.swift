@@ -15,6 +15,12 @@ final class SidebarViewController: NSViewController {
 
     let tree = FileTreeView()
 
+    /// How far the list sits below the top of the sidebar, so the traffic
+    /// lights have somewhere to be. Kept, because in full screen they are not
+    /// there and the room they need is 44 points of nothing at the top of the
+    /// list.
+    private var listTop: NSLayoutConstraint!
+
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
@@ -23,12 +29,17 @@ final class SidebarViewController: NSViewController {
         tree.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(tree)
 
+        // Clear of the traffic lights, which sit over a full-height sidebar
+        // exactly as they do in Finder.
+        listTop = tree.topAnchor.constraint(
+            equalTo: container.topAnchor, constant: Self.roomForTrafficLights)
+
         NSLayoutConstraint.activate([
             tree.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             tree.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             // Clear of the traffic lights, which sit over a full-height sidebar
             // exactly as they do in Finder.
-            tree.topAnchor.constraint(equalTo: container.topAnchor, constant: WindowDragArea.height),
+            listTop,
             tree.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
@@ -38,6 +49,28 @@ final class SidebarViewController: NSViewController {
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// The room the traffic lights need at the top of the sidebar.
+    static let roomForTrafficLights = WindowDragArea.height
+
+    /// What that room should be for a given window.
+    ///
+    /// None in full screen. The lights are in the strip that slides down from
+    /// the top edge, not over the sidebar, so holding 44 points open for them
+    /// leaves the folder's first file a long way down an otherwise empty
+    /// column.
+    static func listTop(inFullScreen: Bool) -> CGFloat {
+        inFullScreen ? 0 : roomForTrafficLights
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        let wanted = Self.listTop(
+            inFullScreen: view.window?.styleMask.contains(.fullScreen) ?? false)
+        // Only when it differs, so this settles after one further pass rather
+        // than asking a window that is laying out to lay out for ever.
+        if listTop.constant != wanted { listTop.constant = wanted }
+    }
 
     @objc private func applyTheme() {
         // Slightly raised off the page, so the divider is not the only thing

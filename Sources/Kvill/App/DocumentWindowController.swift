@@ -188,15 +188,53 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
     /// AppKit to rebuild the window's frame view in the middle of its own
     /// transform animation, and there is a crash report from that build with
     /// `-[_NSWindowTransformAnimation dealloc]` on the stack.
-    func windowDidEnterFullScreen(_ notification: Notification) {
-        window?.toolbar?.isVisible = false
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        // Before the transition rather than after it. Done afterwards, the
+        // whole animation played with the strip unpainted, which is the black
+        // band that flashes across the top on the way in.
         window?.titlebarAppearsTransparent = false
+        // Taken away, not hidden, and before the transition rather than after
+        // it. `toolbar.isVisible = false` does nothing, and removing the
+        // toolbar once AppKit has already built the full screen strip does
+        // nothing either: measured both ways, the strip stayed 68 points tall.
+        // Removed before the transition, it is built without one.
+        parkedToolbar = window?.toolbar
+        window?.toolbar = nil
+        // And the scroll edge strip with it. 32 points of title bar plus its
+        // 36 is the 68 the reveal measures; `fullScreenMinHeight = 0` does not
+        // keep it out of the strip, it only keeps it hidden until the strip
+        // itself is revealed.
+        parkedAccessories = window?.titlebarAccessoryViewControllers ?? []
+        while (window?.titlebarAccessoryViewControllers.isEmpty == false) {
+            window?.removeTitlebarAccessoryViewController(at: 0)
+        }
+        window?.titlebarSeparatorStyle = .none
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        window?.titlebarSeparatorStyle = .none
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
-        window?.toolbar?.isVisible = true
+        // After the transition, not before it. Nothing is mutated while
+        // AppKit's transform animation is running, which is where a crash
+        // report from build 27 points.
+        if let parkedToolbar {
+            window?.toolbar = parkedToolbar
+            window?.toolbarStyle = .unified
+        }
+        parkedToolbar = nil
+        for accessory in parkedAccessories { window?.addTitlebarAccessoryViewController(accessory) }
+        parkedAccessories = []
         window?.titlebarAppearsTransparent = true
+        window?.titlebarSeparatorStyle = .none
     }
+
+    /// The window's toolbar while full screen has it out of the way.
+    private var parkedToolbar: NSToolbar?
+
+    /// And its titlebar accessories, for the same reason.
+    private var parkedAccessories: [NSTitlebarAccessoryViewController] = []
 
     /// Matches the window chrome to the document's palette so the title bar does
     /// not sit as a grey strip above a sepia page.
