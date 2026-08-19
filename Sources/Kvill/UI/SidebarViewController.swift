@@ -15,6 +15,19 @@ final class SidebarViewController: NSViewController {
 
     let tree = FileTreeView()
 
+    /// The panel the sidebar is drawn as.
+    ///
+    /// Its own view rather than the controller's, so its top edge can move
+    /// without moving the list inside it. Windowed it fills the sidebar and
+    /// nothing shows behind it. In full screen AppKit puts the sidebar hard
+    /// against the top of the screen, and the panel starts where the floating
+    /// buttons start instead, so the column has a top edge rather than running
+    /// off the display.
+    private let panel = NSView()
+
+    /// Where the panel's top edge is, which is not where the list's is.
+    private var panelTop: NSLayoutConstraint!
+
     /// How far the list sits below the top of the sidebar, so the traffic
     /// lights have somewhere to be. Kept, because in full screen they are not
     /// there and the room they need is 44 points of nothing at the top of the
@@ -26,6 +39,11 @@ final class SidebarViewController: NSViewController {
         container.wantsLayer = true
         view = container
 
+        panel.wantsLayer = true
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(panel)
+        panelTop = panel.topAnchor.constraint(equalTo: container.topAnchor)
+
         tree.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(tree)
 
@@ -36,6 +54,11 @@ final class SidebarViewController: NSViewController {
             equalTo: container.topAnchor, constant: Self.roomForTrafficLights)
 
         NSLayoutConstraint.activate([
+            panelTop,
+            panel.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            panel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            panel.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
             tree.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             tree.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             // Clear of the traffic lights, which sit over a full-height sidebar
@@ -57,8 +80,9 @@ final class SidebarViewController: NSViewController {
     /// through to what is behind the *window* and the column takes the colour of
     /// the desktop.
     var paintsItsOwnSurfaceForTest: Bool {
-        guard let colour = view.layer?.backgroundColor else { return false }
-        return colour.alpha > 0.99
+        guard let ground = view.layer?.backgroundColor,
+              let surface = panel.layer?.backgroundColor else { return false }
+        return ground.alpha > 0.99 && surface.alpha > 0.99
     }
 
     /// Whether the panel is rounded and casts a shadow, for the checks.
@@ -69,7 +93,7 @@ final class SidebarViewController: NSViewController {
     /// 0.9804 and the pixels just right of the sidebar's edge read 0.9412 rising
     /// to 0.9647 over 12 points.
     var drawsItsOwnPanelForTest: Bool {
-        guard let layer = view.layer else { return false }
+        guard let layer = panel.layer else { return false }
         return layer.cornerRadius > 0 && layer.shadowOpacity > 0 && !layer.masksToBounds
     }
 
@@ -102,14 +126,24 @@ final class SidebarViewController: NSViewController {
         // than asking a window that is laying out to lay out for ever.
         let list = Self.listTop(inFullScreen: full)
         if listTop.constant != list { listTop.constant = list }
+        let top = Self.panelTop(inFullScreen: full)
+        if panelTop.constant != top { panelTop.constant = top }
+    }
+
+    /// Where the panel's top edge sits.
+    ///
+    /// Windowed, at the very top: the sidebar runs full height under the title
+    /// bar and the traffic lights sit over it, the way they do in Finder. In
+    /// full screen there is no title bar and AppKit puts the sidebar against the
+    /// top of the display, so the panel lines up with the floating buttons and
+    /// the column reads as a panel again rather than as the edge of the screen.
+    static func panelTop(inFullScreen: Bool) -> CGFloat {
+        inFullScreen ? DocumentViewController.chromeInset : 0
     }
 
     @objc private func applyTheme() {
         // The theme's raised colour, so the column reads as a surface above the
-        // page rather than a piece of it. Painted on this view itself: AppKit
-        // rounds and clips the sidebar's own view and casts its shadow, so the
-        // panel shape and the shadow stay the system's and only the colour is
-        // this app's.
+        // page rather than a piece of it.
         //
         // Opaque on purpose. macOS 26 puts every sidebar inside an
         // `NSContainerConcentricGlassEffectView`, which samples what is behind
@@ -119,21 +153,25 @@ final class SidebarViewController: NSViewController {
         // instead fixed the colour and not the behaviour, since a glass inside a
         // glass still follows the container's key state, so the sidebar darkened
         // when the window lost focus while the buttons brightened.
-        view.layer?.backgroundColor =
-            ThemeManager.shared.theme.colors.backgroundElevated.cgColor
+        let colors = ThemeManager.shared.theme.colors
+        // The ground the panel sits on, so that where the panel does not reach
+        // the column reads as page rather than as whatever is behind the window.
+        view.layer?.backgroundColor = colors.background.cgColor
+
+        panel.layer?.backgroundColor = colors.backgroundElevated.cgColor
 
         // The rounded panel and its shadow were the glass effect's, and painting
         // over the effect took both away with it. Drawn here instead, matching
         // what the system was drawing: measured off a photograph of the real
         // window, the corner's curve ran 15 points down from the panel's top
         // edge, which is a 10 point radius on a continuous curve.
-        view.layer?.cornerRadius = Self.cornerRadius
-        view.layer?.cornerCurve = .continuous
-        view.layer?.masksToBounds = false
-        view.layer?.shadowColor = NSColor.black.cgColor
-        view.layer?.shadowOpacity = 0.12
-        view.layer?.shadowRadius = 10
-        view.layer?.shadowOffset = .zero
+        panel.layer?.cornerRadius = Self.cornerRadius
+        panel.layer?.cornerCurve = .continuous
+        panel.layer?.masksToBounds = false
+        panel.layer?.shadowColor = NSColor.black.cgColor
+        panel.layer?.shadowOpacity = 0.12
+        panel.layer?.shadowRadius = 10
+        panel.layer?.shadowOffset = .zero
     }
 
     /// The radius of the sidebar's panel.

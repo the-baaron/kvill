@@ -654,6 +654,16 @@ enum SelfTest {
                   bar.paintsItsOwnSurfaceForTest)
             check("sidebar: and keeps the rounded panel and the shadow with it",
                   bar.drawsItsOwnPanelForTest)
+            // Windowed the panel runs to the top, under the traffic lights. In
+            // full screen there is no title bar and AppKit puts the sidebar
+            // against the top of the display, so the panel starts where the
+            // floating buttons start instead.
+            check("sidebar: the panel runs to the top of a window",
+                  SidebarViewController.panelTop(inFullScreen: false) == 0)
+            check("sidebar: and lines up with the floating buttons in full screen",
+                  SidebarViewController.panelTop(inFullScreen: true)
+                      == DocumentViewController.chromeInset,
+                  "\(SidebarViewController.panelTop(inFullScreen: true))")
         }
 
         check("sidebar: room for the traffic lights in a window",
