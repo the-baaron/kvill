@@ -446,8 +446,14 @@ enum SelfTest {
         // Scrolling past the end, checked through a route that actually
         // constrains. `NSClipView.scroll(to:)` does not: it sets the bounds
         // origin to whatever it is handed, so a check built on it passes by
-        // landing where it asked and proves nothing. `scrollToEndOfDocument` is
-        // the real thing, the same call Cmd Down makes.
+        // landing where it asked and proves nothing.
+        //
+        // `moveToEndOfDocument` is the call Cmd Down makes in a text view, and
+        // it is the one used here. `scrollToEndOfDocument` was used before and
+        // is a no-op on `NSTextView`: measured on a real document window it
+        // left the origin at 0 while `moveToEndOfDocument` reached 3187 of a
+        // possible 3444, and `NSScrollView` does not implement the selector at
+        // all. A check calling it was asking a question nothing answers.
         controller.view.layoutSubtreeIfNeeded()
         controller.view.layoutSubtreeIfNeeded()
 
@@ -464,7 +470,7 @@ enum SelfTest {
 
         clip.scroll(to: .zero)
         scrollView.reflectScrolledClipView(clip)
-        controller.editor.textView.scrollToEndOfDocument(nil)
+        controller.editor.textView.moveToEndOfDocument(nil)
         controller.view.layoutSubtreeIfNeeded()
         let reached = clip.bounds.origin.y
         let plainMax = max(0, content - viewport)
@@ -637,15 +643,15 @@ enum SelfTest {
         // The sidebar holds room at the top for the traffic lights. In full
         // screen they are in the strip rather than over the sidebar, so that
         // room is 44 points of nothing above the first file.
-        // The sidebar is the same material as the floating buttons, which means
-        // the list has to be the glass's own content. A glass with nothing in it
-        // draws nothing, and a sidebar that draws nothing looks like a plain
-        // fill rather than like a bug.
+        // The sidebar covers AppKit's own container completely. Without an
+        // opaque surface of its own the container samples what is behind the
+        // window, and on a coloured desktop the sidebar comes out the colour of
+        // the wallpaper.
         do {
             let bar = SidebarViewController()
             _ = bar.view
-            check("sidebar: the list is inside the glass, not on top of it",
-                  bar.listIsInsideTheGlassForTest)
+            check("sidebar: it paints an opaque surface rather than showing the desktop",
+                  bar.paintsItsOwnSurfaceForTest)
         }
 
         check("sidebar: room for the traffic lights in a window",

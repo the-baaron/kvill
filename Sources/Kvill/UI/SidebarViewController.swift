@@ -15,16 +15,28 @@ final class SidebarViewController: NSViewController {
 
     let tree = FileTreeView()
 
-    /// The material the sidebar is made of, matching the floating buttons.
+    /// The sidebar's own surface: opaque, and painted rather than sampled.
     ///
-    /// macOS 26 puts every sidebar in an `NSContainerConcentricGlassEffectView`
-    /// of its own, and that one samples what is behind the *window*: on a purple
-    /// desktop the sidebar came out purple while the buttons a hundred points to
-    /// its right stayed the colour of the page. They are two different glasses,
-    /// and only one of them is reaching through the window.
+    /// This is deliberately not glass, and it took three attempts to be sure
+    /// that was the right answer.
     ///
-    /// This is the buttons' glass, laid inside the sidebar so it samples the
-    /// window's own content the way theirs does. One material, one colour.
+    /// macOS 26 puts every sidebar inside an
+    /// `NSContainerConcentricGlassEffectView`, which samples what is behind the
+    /// *window*. On a purple desktop the sidebar came out purple while the
+    /// buttons a hundred points away stayed the colour of the page, because
+    /// those are `NSGlassEffectView` inside the window and sample the page.
+    ///
+    /// Laying the buttons' own glass inside the sidebar fixed the colour and
+    /// not the behaviour: a glass inside a glass still follows the container's
+    /// key state, so the sidebar darkened when the window lost focus while the
+    /// buttons brightened. Measured over the same 0.9804 ground, the panel
+    /// rendered 0.9412 and the button 0.9922; Liquid Glass renders by size, and
+    /// a 34 point capsule is nearly all edge lensing where a 180 point panel is
+    /// nearly all body. There is no tint that makes one behave like the other.
+    ///
+    /// So the sidebar is painted. It covers the container entirely, so nothing
+    /// reaches through to the desktop, and it looks the same whether the window
+    /// is key or not, which is the thing that actually reads as wrong.
     private let backdrop = NSView()
 
 
@@ -49,23 +61,14 @@ final class SidebarViewController: NSViewController {
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(backdrop)
 
-        // The list goes inside the glass, not on top of it. An
-        // `NSGlassEffectView` with no `contentView` draws nothing at all: the
-        // first attempt at this measured a flat 0.9569 straight across 180
-        // points, which is a plain fill showing through an inert view, while
-        // the buttons vary from 0.984 to 0.992 across theirs. Same class, same
-        // style, and the difference was that the buttons set `contentView` and
-        // this did not.
-        let holder = NSView()
-        holder.translatesAutoresizingMaskIntoConstraints = false
         tree.translatesAutoresizingMaskIntoConstraints = false
-        holder.addSubview(tree)
+        container.addSubview(tree)
 
 
         // Clear of the traffic lights, which sit over a full-height sidebar
         // exactly as they do in Finder.
         listTop = tree.topAnchor.constraint(
-            equalTo: holder.topAnchor, constant: Self.roomForTrafficLights)
+            equalTo: container.topAnchor, constant: Self.roomForTrafficLights)
 
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -73,15 +76,14 @@ final class SidebarViewController: NSViewController {
             backdrop.topAnchor.constraint(equalTo: container.topAnchor),
             backdrop.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
-            tree.leadingAnchor.constraint(equalTo: holder.leadingAnchor),
-            tree.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+            tree.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            tree.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             // Clear of the traffic lights, which sit over a full-height sidebar
             // exactly as they do in Finder.
             listTop,
-            tree.bottomAnchor.constraint(equalTo: holder.bottomAnchor),
+            tree.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        buildBackdrop(around: holder)
         applyTheme()
         NotificationCenter.default.addObserver(
             self, selector: #selector(applyTheme), name: .kvillThemeChanged, object: nil)
@@ -89,23 +91,14 @@ final class SidebarViewController: NSViewController {
 
     deinit { NotificationCenter.default.removeObserver(self) }
 
-    /// Whether the list is inside the glass rather than sitting on top of it,
-    /// for the checks.
+    /// Whether the sidebar paints an opaque surface of its own, for the checks.
     ///
-    /// An `NSGlassEffectView` with no `contentView` draws nothing at all, and
-    /// nothing looks exactly like a plain fill. The first version of this
-    /// measured a flat 0.9569 straight across 180 points, which is what an
-    /// inert glass over a solid colour reads as.
-    var listIsInsideTheGlassForTest: Bool {
-        guard #available(macOS 26.0, *) else { return true }
-        var candidate: NSView? = tree
-        while let current = candidate {
-            if let glass = current.superview as? NSGlassEffectView {
-                return glass.contentView != nil
-            }
-            candidate = current.superview
-        }
-        return false
+    /// Not glass, on purpose: see `backdrop`. If this ever goes back to nothing,
+    /// AppKit's own container shows through to the desktop and the sidebar takes
+    /// the colour of the wallpaper.
+    var paintsItsOwnSurfaceForTest: Bool {
+        guard let colour = backdrop.layer?.backgroundColor else { return false }
+        return colour.alpha > 0.99
     }
 
     /// The room the traffic lights need at the top of the sidebar.
@@ -139,58 +132,16 @@ final class SidebarViewController: NSViewController {
         if listTop.constant != list { listTop.constant = list }
     }
 
-    /// Builds the glass, once, into `backdrop`.
-    private func buildBackdrop(around holder: NSView) {
-        let material: NSView
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = Self.cornerRadius
-            glass.style = .regular
-            glass.contentView = holder
-            material = glass
-        } else {
-            holder.translatesAutoresizingMaskIntoConstraints = false
-            let effect = NSVisualEffectView()
-            effect.material = .hudWindow
-            effect.blendingMode = .withinWindow
-            effect.state = .active
-            effect.wantsLayer = true
-            effect.layer?.cornerRadius = Self.cornerRadius
-            effect.layer?.cornerCurve = .continuous
-            effect.layer?.masksToBounds = true
-            effect.addSubview(holder)
-            material = effect
-        }
-        material.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(material)
-        NSLayoutConstraint.activate([
-            material.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            material.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            material.topAnchor.constraint(equalTo: view.topAnchor),
-            material.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            holder.leadingAnchor.constraint(equalTo: material.leadingAnchor),
-            holder.trailingAnchor.constraint(equalTo: material.trailingAnchor),
-            holder.topAnchor.constraint(equalTo: material.topAnchor),
-            holder.bottomAnchor.constraint(equalTo: material.bottomAnchor),
-        ])
-    }
-
     /// Measured off a photograph of the real window rather than guessed: the
     /// corner's curve runs 15 points down from the panel's top edge, which is a
     /// 10 point radius drawn as a continuous curve.
     static let cornerRadius: CGFloat = 10
 
     @objc private func applyTheme() {
-        // Page colour under the glass, and nothing else here.
-        //
-        // The glass above is `NSGlassEffectView` at `.regular`, the same view
-        // the floating buttons are made of. It was still coming out the colour
-        // of the desktop, because glass is translucent and what sits behind it
-        // in a sidebar is AppKit's own container glass, which is a hole through
-        // to the wallpaper. The buttons look the way they do because what is
-        // behind *them* is the page. So the page's colour goes under this
-        // glass, and then the two stacks are identical.
-        backdrop.layer?.backgroundColor = ThemeManager.shared.theme.colors.page.cgColor
+        // The raised colour, so the column reads as a surface above the page
+        // rather than a piece of it.
+        backdrop.layer?.backgroundColor =
+            ThemeManager.shared.theme.colors.backgroundElevated.cgColor
     }
 
 

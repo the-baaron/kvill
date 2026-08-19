@@ -382,8 +382,12 @@ This is the rule that would have saved the most time today.
 said 2619 characters and Apple received 80, for hours. The scroll-past-end
 checks called `NSClipView.scroll(to:)`, which does not clamp, so "can scroll
 past the last line" passed by landing exactly where it was asked to. Read the
-value back from App Store Connect. Scroll through `scrollToEndOfDocument`, the
-call ⌘↓ makes.
+value back from App Store Connect. Scroll through `moveToEndOfDocument`, the
+call ⌘↓ actually makes in a text view. `scrollToEndOfDocument` was used here
+instead and is a no-op on `NSTextView`: measured on a real document window it
+left the origin at 0 while `moveToEndOfDocument` reached 3187 of a possible
+3444, and `NSScrollView` does not implement the selector at all. **A check
+built on a call that does nothing cannot fail for the right reason.**
 
 **Never state a number you did not measure.** The promotional text claimed an
 editor takes eleven seconds to start. That was invented for rhythm and went out
