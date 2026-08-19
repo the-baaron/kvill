@@ -218,6 +218,14 @@ struct Metrics {
     /// line sits rather than jammed against the top edge.
     var firstLineMargin: CGFloat { base * 3 }
 
+    /// Air between the window's title bar and the document's first line.
+    ///
+    /// Less than `firstLineMargin`, because a page with no chrome above it is
+    /// not the same as a page under a 66 point title bar, and because a heading
+    /// carries a third of a line of its own leading above its capitals. All
+    /// three added up put the first word 151 points down a 720 point window.
+    var topMargin: CGFloat { base * 2 }
+
     /// Horizontal space a task checkbox reserves inside the text column.
     var checkboxAdvance: CGFloat { checkboxSize + checkboxGap }
 

@@ -531,6 +531,30 @@ enum SelfTest {
         let documentWindow = DocumentWindowController.create()
         check("window title bar is empty",
               documentWindow.window?.titleVisibility == .hidden)
+
+        // --- Nothing paints a bar across the top --------------------------------
+        // Two bands shipped, one windowed and one in full screen, and both were
+        // this app painting something the system had left alone.
+        //
+        // The windowed one was the scroll edge accessory given a background
+        // colour: an opaque strip over the sidebar's shadow and over any line
+        // scrolled under it, which cut a heading in half. The accessory is
+        // there to be scrolled behind, so it must draw nothing at all.
+        let accessories = documentWindow.window?.titlebarAccessoryViewControllers ?? []
+        check("the scroll edge strip draws nothing",
+              accessories.allSatisfy { $0.view.layer?.backgroundColor == nil },
+              "\(accessories.count) accessories")
+
+        // The full screen one was the empty toolbar. AppKit keeps a toolbar on
+        // screen in full screen, and this window's title bar is transparent
+        // with no window behind it there, so the strip came out black.
+        if let window = documentWindow.window {
+            let options = documentWindow.window(window, willUseFullScreenPresentationOptions: [])
+            check("full screen hides the toolbar until the pointer asks for it",
+                  options.contains(.autoHideToolbar) && options.contains(.fullScreen)
+                  && options.contains(.autoHideMenuBar), "\(options.rawValue)")
+        }
+
         // Closed again. It was left on screen, so running the checks put a
         // stray empty window in front of whatever was there.
         documentWindow.window?.orderOut(nil)
@@ -1169,10 +1193,12 @@ enum SelfTest {
         // above the first line was a fixed number, and the first heading ended
         // up behind the tab bar the day tabs were allowed.
         do {
-            let plain = EditorViewController.topInset(systemChrome: 28, firstLine: 20)
-            let tabbed = EditorViewController.topInset(systemChrome: 56, firstLine: 20)
-            check("top inset: a plain window keeps the margin it always had",
-                  plain == 76, "\(plain)")
+            // 66 is a measured title bar with the empty unified toolbar this
+            // app carries; a tab bar adds 28 to it.
+            let plain = EditorViewController.topInset(systemChrome: 66, firstLine: 40)
+            let tabbed = EditorViewController.topInset(systemChrome: 94, firstLine: 40)
+            check("top inset: the air under the title bar is the page's own margin, once",
+                  plain - 66 == 40, "\(plain - 66)")
             check("top inset: a tab bar pushes the first line down",
                   tabbed > plain, "\(plain) then \(tabbed)")
             check("top inset: by the height the tab bar actually takes",

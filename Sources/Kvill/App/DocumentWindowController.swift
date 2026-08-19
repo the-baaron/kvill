@@ -82,8 +82,7 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
     /// switch to a dark theme.
     private func start() {
         // Set explicitly. An NSWindowController adopts the delegate only for a
-        // window that came out of a nib, and this one is built in code, so
-        // without this the full screen notifications never arrive.
+        // window that came out of a nib, and this one is built in code.
         window?.delegate = self
         addSoftScrollEdge()
         applyTheme()
@@ -109,13 +108,14 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
         guard #available(macOS 26.1, *), let window else { return }
 
         let accessory = NSTitlebarAccessoryViewController()
+        // Empty, and not layer-backed. A layer-backed view here is a surface
+        // with nothing in it, and in full screen, where the title bar is a
+        // strip of its own with no material behind it, that surface composited
+        // as the black band across the top. A plain view draws nothing at all.
+        // Its height is asked for and ignored: AppKit gives the strip 36 points
+        // whatever this says, measured from 0 up to 36.
         let host = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
-        host.wantsLayer = true
         accessory.view = host
-        // Kept, so a palette change can repaint it. In full screen the title bar
-        // is a strip of its own above the content, and painting it the page's
-        // colour is what stops a seam showing across the top.
-        scrollEdgeHost = host
         accessory.layoutAttribute = .bottom
         accessory.automaticallyAdjustsSize = false
         // Nothing across the top in full screen. Without this AppKit keeps the
@@ -130,9 +130,6 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
         window.addTitlebarAccessoryViewController(accessory)
     }
 
-    /// The accessory's view, so the palette can reach it.
-    private weak var scrollEdgeHost: NSView?
-
     /// Whether the system scroll edge effect was asked for.
     var hasSoftScrollEdge: Bool {
         guard #available(macOS 26.1, *), let window else { return false }
@@ -142,36 +139,31 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
     }
 
 
-    /// In full screen the title bar is its own strip above the content, and a
-    /// transparent one is painted by nothing at all.
+    /// Nothing across the top in full screen, until the pointer goes looking
+    /// for it.
     ///
-    /// Windowed, the page runs up under a transparent title bar and the window's
-    /// own background fills whatever the content does not, which is why nothing
-    /// showed through there. Full screen puts the title bar in a separate window
-    /// of its own, 102 points tall across the whole display, and that one has no
-    /// background to inherit: it came out black above the page.
+    /// The black band was the toolbar. This window carries an empty one purely
+    /// for the taller title bar it brings, and AppKit keeps a toolbar on screen
+    /// in full screen: a strip the width of the display, transparent because
+    /// this window's title bar is, with no window background behind it to show
+    /// through. Painted by nothing, it came out black, and the first heading
+    /// was cut in half behind it.
     ///
-    /// Opaque for the length of full screen, so AppKit paints it with the
-    /// window's colour, which is the palette's. Transparent again on the way
-    /// out, because windowed is where the transparency earns its keep.
-    /// Full screen puts the title bar in a strip of its own above the page,
-    /// across the whole display, and there is no colour that makes a strip
-    /// belong there.
+    /// Two earlier attempts missed it, both reasoned about rather than
+    /// photographed. Making the title bar opaque replaced a black strip with a
+    /// grey one. Painting the scroll edge accessory the page colour put a
+    /// second opaque band across the *windowed* title bar as well, over the
+    /// sidebar's shadow and over anything scrolled under it.
     ///
-    /// Transparent, nothing paints it and it comes out near black on a paper
-    /// page. Opaque, AppKit paints it with the window's own material, which
-    /// follows the palette's appearance and sits against the page instead of
-    /// against the desktop. Both were tried and photographed; this is the one
-    /// that does not put a dark band across the top.
-    func windowWillEnterFullScreen(_ notification: Notification) {
-        window?.titlebarAppearsTransparent = false
-        window?.titlebarSeparatorStyle = .none
-    }
-
-    func windowWillExitFullScreen(_ notification: Notification) {
-        // Windowed is where the transparency earns its keep: the page runs up
-        // under the title bar and the window's own background fills the rest.
-        window?.titlebarAppearsTransparent = true
+    /// `.autoHideToolbar` is the system's own answer, the one every full screen
+    /// app on the machine uses: the strip is gone and slides down when the
+    /// pointer reaches the top edge. It is only legal alongside `.fullScreen`
+    /// and `.autoHideMenuBar`, so all three go together.
+    func window(
+        _ window: NSWindow,
+        willUseFullScreenPresentationOptions proposed: NSApplication.PresentationOptions
+    ) -> NSApplication.PresentationOptions {
+        proposed.union([.fullScreen, .autoHideMenuBar, .autoHideToolbar])
     }
 
     /// Matches the window chrome to the document's palette so the title bar does
@@ -180,9 +172,6 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
         let theme = ThemeManager.shared.theme
         window?.isOpaque = true
         window?.backgroundColor = theme.colors.background
-        // The strip AppKit puts above the content in full screen takes this
-        // colour, so a palette change has to reach it too.
-        scrollEdgeHost?.layer?.backgroundColor = theme.colors.background.cgColor
         // Drives the traffic lights and the title text. Without an explicit
         // appearance they follow the system, so light buttons end up on a dark
         // page, or dark ones on Sepia.

@@ -264,9 +264,14 @@ final class EditorViewController: NSViewController {
     /// under a transparent title bar, so 56 points was right until tabs were
     /// allowed and the first heading ended up behind the tab bar.
     static func topInset(systemChrome: CGFloat, firstLine: CGFloat) -> CGFloat {
-        // 28 points of air under whatever the system is showing, and never less
-        // than the 56 a plain window has always had.
-        max(56, systemChrome + 28) + firstLine
+        // The page's own margin, under whatever the system is showing, and never
+        // less than the 56 a plain window has always had.
+        //
+        // One margin, not two. This used to add 28 points of its own on top of
+        // the document's first line margin, and with a measured 102 points of
+        // chrome that put the first heading 187 points down a 720 point window:
+        // a quarter of the page gone before a word of it.
+        max(56, systemChrome + firstLine)
     }
 
     /// The least space kept either side of the text in a narrow window.
@@ -301,10 +306,19 @@ final class EditorViewController: NSViewController {
         var systemChrome: CGFloat = 0
         if let window = view.window, let content = window.contentView {
             systemChrome = max(0, content.bounds.height - window.contentLayoutRect.height)
+            // Less the empty strip the scroll edge effect needs. It holds
+            // nothing and is there to be scrolled behind, so it is air already:
+            // counting it as chrome and then adding a page margin under it
+            // meant paying for the same white space twice. Measured on this
+            // machine: a title bar is 66 points and the strip takes it to 102.
+            systemChrome -= window.titlebarAccessoryViewControllers
+                .filter { $0.layoutAttribute == .bottom }
+                .reduce(0) { $0 + $1.view.frame.height }
+            systemChrome = max(0, systemChrome)
         }
         let vertical = Self.topInset(
             systemChrome: systemChrome,
-            firstLine: opensWithFrontMatter ? metrics.base * 1.1 : metrics.firstLineMargin)
+            firstLine: opensWithFrontMatter ? metrics.base * 1.1 : metrics.topMargin)
 
         if textView.textContainerInset.width != horizontal
             || textView.textContainerInset.height != vertical {
