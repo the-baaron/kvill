@@ -315,6 +315,14 @@ final class EditorViewController: NSViewController {
                 .filter { $0.layoutAttribute == .bottom }
                 .reduce(0) { $0 + $1.view.frame.height }
             systemChrome = max(0, systemChrome)
+            // In full screen the chrome hides altogether, so this measures
+            // zero and the page would climb the height of a title bar the
+            // moment the window filled the screen. The window remembers what
+            // its title bar took, and the page keeps its margin either way.
+            if window.styleMask.contains(.fullScreen),
+               let controller = window.windowController as? DocumentWindowController {
+                systemChrome = controller.windowedTitleBar
+            }
         }
         let vertical = Self.topInset(
             systemChrome: systemChrome,

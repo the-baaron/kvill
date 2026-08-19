@@ -188,7 +188,23 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
     /// AppKit to rebuild the window's frame view in the middle of its own
     /// transform animation, and there is a crash report from that build with
     /// `-[_NSWindowTransformAnimation dealloc]` on the stack.
+    /// What the title bar takes when this window is not in full screen, less
+    /// the empty scroll edge strip.
+    ///
+    /// Kept, because the page's margin is measured from the bottom of the
+    /// chrome and in full screen there is none: the first line would climb 34
+    /// points the moment the window filled the screen and drop back on the way
+    /// out. A document that moves when the window does reads as a bug.
+    private(set) var windowedTitleBar: CGFloat = 66
+
     func windowWillEnterFullScreen(_ notification: Notification) {
+        if let window, let content = window.contentView {
+            let strip = window.titlebarAccessoryViewControllers
+                .filter { $0.layoutAttribute == .bottom }
+                .reduce(0) { $0 + $1.view.frame.height }
+            windowedTitleBar = max(
+                0, content.bounds.height - window.contentLayoutRect.height - strip)
+        }
         // Before the transition rather than after it. Done afterwards, the
         // whole animation played with the strip unpainted, which is the black
         // band that flashes across the top on the way in.
@@ -208,6 +224,15 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
         while (window?.titlebarAccessoryViewControllers.isEmpty == false) {
             window?.removeTitlebarAccessoryViewController(at: 0)
         }
+        // And the full size content view, which is a macOS 26 bug rather than
+        // a choice: with it set, `NSSplitViewItem(sidebarWithViewController:)`
+        // stops short of the top of the screen in full screen and leaves a gap
+        // the height of the strip above it. Reported as FB20291636, no fix and
+        // no reply from Apple. Dropping the style mask for the length of full
+        // screen is the workaround from that thread, and the gap measures 0
+        // rather than 32 with it. The page still fills the screen, because
+        // there is no title bar up there to be pushed below.
+        window?.styleMask.remove(.fullSizeContentView)
         window?.titlebarSeparatorStyle = .none
     }
 
@@ -226,6 +251,7 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
         parkedToolbar = nil
         for accessory in parkedAccessories { window?.addTitlebarAccessoryViewController(accessory) }
         parkedAccessories = []
+        window?.styleMask.insert(.fullSizeContentView)
         window?.titlebarAppearsTransparent = true
         window?.titlebarSeparatorStyle = .none
     }

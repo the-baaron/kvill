@@ -628,6 +628,56 @@ enum SelfTest {
         check("sidebar: and none in full screen, where they are not there",
               SidebarViewController.listTop(inFullScreen: true) == 0)
 
+        // --- What full screen does to the chrome --------------------------------
+        // The strip that slides down when the pointer reaches the top edge is
+        // the system's and cannot be done away with, but it does not have to be
+        // twice the size. Measured on a real full screen window, listing only
+        // this app's own windows: the reveal was 68 points. 32 of that is the
+        // title bar and the other 36 is the scroll edge accessory, and Apple's
+        // note on `fullScreenMinHeight` says why zero does not help - a hidden
+        // accessory is clipped by an internal clip view, never removed, so it
+        // is back to full height the moment the strip is revealed. Taken out
+        // for the length of full screen instead. Measured again: 32.
+        if let window = documentWindow.window {
+            let accessoriesBefore = window.titlebarAccessoryViewControllers.count
+            documentWindow.windowWillEnterFullScreen(
+                Notification(name: NSWindow.willEnterFullScreenNotification))
+            check("full screen: nothing of ours is left in the strip",
+                  window.toolbar == nil && window.titlebarAccessoryViewControllers.isEmpty,
+                  "toolbar \(window.toolbar == nil ? "gone" : "still there"), "
+                  + "\(window.titlebarAccessoryViewControllers.count) accessories")
+            check("full screen: the title bar is painted rather than clear",
+                  !window.titlebarAppearsTransparent)
+            // FB20291636: a sidebar stops short of the top of the screen in
+            // full screen while this is set, leaving a gap the height of the
+            // strip above the file list.
+            check("full screen: the full size content view is out of the way",
+                  !window.styleMask.contains(.fullSizeContentView))
+            check("full screen: the title bar height is remembered for the page",
+                  documentWindow.windowedTitleBar > 0,
+                  "\(documentWindow.windowedTitleBar)")
+
+            documentWindow.windowDidExitFullScreen(
+                Notification(name: NSWindow.didExitFullScreenNotification))
+            check("full screen: the toolbar comes back on the way out",
+                  window.toolbar != nil && window.toolbarStyle == .unified)
+            check("full screen: and so does the scroll edge",
+                  window.titlebarAccessoryViewControllers.count == accessoriesBefore,
+                  "\(window.titlebarAccessoryViewControllers.count) of \(accessoriesBefore)")
+            check("full screen: and the window is a window again",
+                  window.titlebarAppearsTransparent
+                  && window.titlebarSeparatorStyle == .none
+                  && window.styleMask.contains(.fullSizeContentView))
+        }
+
+        // The sidebar holds room at the top for the traffic lights. In full
+        // screen they are in the strip rather than over the sidebar, so that
+        // room is 44 points of nothing above the first file.
+        check("sidebar: room for the traffic lights in a window",
+              SidebarViewController.listTop(inFullScreen: false) == WindowDragArea.height)
+        check("sidebar: and none in full screen, where they are not there",
+              SidebarViewController.listTop(inFullScreen: true) == 0)
+
         // Closed again. It was left on screen, so running the checks put a
         // stray empty window in front of whatever was there.
         documentWindow.window?.orderOut(nil)

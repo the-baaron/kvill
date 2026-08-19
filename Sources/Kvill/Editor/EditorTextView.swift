@@ -209,6 +209,34 @@ final class EditorTextView: NSTextView {
 
     // MARK: - Drawing
 
+    /// Stays where the reader left it when the window changes size.
+    ///
+    /// `NSTextView` scrolls to the insertion point at the end of a live resize,
+    /// through a private `_setFrameSize:forceScroll:`. Opening a folder slides
+    /// the sidebar in, which is a live resize of this view, so a document you
+    /// had just opened jumped 62 points down the moment the sidebar arrived.
+    /// Entering full screen did the same. Caught by watching the clip view's
+    /// origin and printing who moved it, because nothing in this app was
+    /// scrolling anything.
+    ///
+    /// The caret is not what someone is looking at while they resize a window.
+    /// Where they had scrolled to is.
+    ///
+    /// Not covered by a check, deliberately. AppKit only scrolls from inside
+    /// its own `_setFrameSize:forceScroll:`, which nothing here can bring about
+    /// on demand: a synthetic resize scrolls before this override is reached
+    /// and so passes whether the override exists or not. Verified instead by
+    /// measuring the clip view's origin through a real sidebar animation and a
+    /// real full screen transition, where it went from 62 to 0 and stayed.
+    override func viewDidEndLiveResize() {
+        let clip = enclosingScrollView?.contentView
+        let origin = clip?.bounds.origin
+        super.viewDidEndLiveResize()
+        guard let clip, let origin, clip.bounds.origin != origin else { return }
+        clip.setBoundsOrigin(origin)
+        enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         fillPage(dirtyRect)
         drawDecorations(in: dirtyRect)
