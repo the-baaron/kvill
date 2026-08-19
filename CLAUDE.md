@@ -195,6 +195,25 @@ sleeping display makes it fail on a window and return solid black for the whole
 screen, which reads as a permission problem and is not one. `caffeinate -u`
 first.
 
+## Two builds, two preference files
+
+`build/Kvill.app` built with `QUILL_SANDBOX=0` is **not** sandboxed, so it reads
+`~/Library/Preferences/design.baars.Signet.plist`. The App Store and TestFlight
+copy in `/Applications` is, so it reads
+`~/Library/Containers/design.baars.Signet/Data/Library/Preferences/design.baars.Signet.plist`.
+
+They are different files and settings do not carry between them. `defaults
+read` and `defaults write` follow cfprefsd to the **container**, so they reach
+the installed app and not the development build, which is how a check that
+reads a setting can keep failing while `defaults read` swears the key is gone.
+Read the file with `plutil -p` to see what a build will actually get, and edit
+the unsandboxed one with `plistlib` rather than `defaults` (`plutil -replace`
+reads the dot in `kvill.showContents` as a key path and writes the wrong thing).
+
+**A test that writes a setting has changed someone's editor.** `--selftest`
+puts settings back; ad-hoc probes have to as well, and one here turned the
+document index on and left it on.
+
 ## When the layout changes, the pictures are wrong
 
 **Anything that changes what a window looks like makes the App Store
