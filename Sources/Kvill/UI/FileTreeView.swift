@@ -204,6 +204,25 @@ final class FileTreeView: NSView {
 
     /// How many documents the tree is listing, folders not counted. One file is
     /// not worth a sidebar: it is a list of the thing already on screen.
+    /// What a drag out of a row would put on the pasteboard, for the checks.
+    ///
+    /// Called through the delegate method itself rather than reimplementing it,
+    /// so a check cannot pass while the real drag does nothing.
+    func pasteboardURLForTest(row: Int) -> URL? {
+        guard row >= 0, row < outline.numberOfRows, let item = outline.item(atRow: row) else {
+            return nil
+        }
+        return (outlineView(outline, pasteboardWriterForItem: item) as? NSURL) as URL?
+    }
+
+    /// Whether the row is a folder, so a check can say which row it is asking
+    /// about without reaching into the node type.
+    func isFolderRowForTest(_ row: Int) -> Bool {
+        guard row >= 0, row < outline.numberOfRows, let item = outline.item(atRow: row) as? Node
+        else { return false }
+        return item.isFolder
+    }
+
     var documentCount: Int {
         var total = 0
         func walk(_ nodes: [Node]) {
@@ -257,6 +276,16 @@ final class FileTreeView: NSView {
 // MARK: - Contents
 
 extension FileTreeView: NSOutlineViewDataSource, NSOutlineViewDelegate {
+
+    /// A row can be dragged out, which is how a second document gets into the
+    /// window. The pasteboard carries the file's own URL, so the same drag works
+    /// into any other app and a drag out of the Finder works into this one.
+    func outlineView(
+        _ outlineView: NSOutlineView, pasteboardWriterForItem item: Any
+    ) -> NSPasteboardWriting? {
+        guard let node = item as? Node, !node.isFolder else { return nil }
+        return node.url as NSURL
+    }
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
         ((item as? Node) ?? root)?.children.count ?? 0

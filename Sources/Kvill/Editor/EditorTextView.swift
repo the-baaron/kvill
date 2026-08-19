@@ -53,6 +53,9 @@ final class EditorTextView: NSTextView {
     /// A folder was dropped on the page, which asks for the sidebar.
     var onFolderDrop: ((URL) -> Void)?
 
+    /// A text file dropped on the page, which opens it beside this one.
+    var onDocumentDrop: ((URL) -> Void)?
+
     /// Called when a click-drag selection finishes, so the formatting bar can
     /// appear once rather than following the pointer during the drag.
     var onSelectionGestureEnded: (() -> Void)?
@@ -139,13 +142,19 @@ final class EditorTextView: NSTextView {
     // MARK: - Dropping images
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if ImageDrop.canAccept(sender) || Self.folder(in: sender) != nil { return .copy }
+        if accepts(sender) { return .copy }
         return super.draggingEntered(sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if ImageDrop.canAccept(sender) || Self.folder(in: sender) != nil { return .copy }
+        if accepts(sender) { return .copy }
         return super.draggingUpdated(sender)
+    }
+
+    private func accepts(_ sender: NSDraggingInfo) -> Bool {
+        ImageDrop.canAccept(sender)
+            || Self.folder(in: sender) != nil
+            || Self.document(in: sender) != nil
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -157,12 +166,36 @@ final class EditorTextView: NSTextView {
             onFolderDrop?(folder)
             return true
         }
+        // A document dropped on the page is a request to read it, not to type
+        // its path. Without this it fell through to NSTextView and inserted
+        // "/Users/.../notes.md" into whatever was being written.
+        if let document = Self.document(in: sender) {
+            onDocumentDrop?(document)
+            return true
+        }
         if ImageDrop.canAccept(sender) {
             let point = convert(sender.draggingLocation, from: nil)
             let index = characterIndexForInsertion(at: point)
             if onImageDrop?(sender, index) == true { return true }
         }
         return super.performDragOperation(sender)
+    }
+
+    /// The one text file being dragged, if that is what this is.
+    ///
+    /// Images are not included: a picture dropped on a page is a picture to put
+    /// in it, which is what `ImageDrop` is for, and that behaviour predates this
+    /// one. Anything else that reads as text opens beside.
+    static func document(in info: NSDraggingInfo) -> URL? {
+        let urls = info.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard urls.count == 1, let url = urls.first else { return nil }
+        guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory != true else {
+            return nil
+        }
+        guard !ImageDrop.imageURLs(in: info.draggingPasteboard).contains(url) else { return nil }
+        return KvillDocumentController.isReadableAsText(url) ? url : nil
     }
 
     /// The one folder being dragged, if that is what this is.

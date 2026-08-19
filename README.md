@@ -115,6 +115,7 @@ everywhere.
 | `⌃⌘]` `⌃⌘[` | Next theme, next typeface |
 | `⌘+` `⌘-` `⌥⌘0` | Text size |
 | `⇧⌘F` `⇧⌘Y` `⇧⌘M` | Focus mode, typewriter, always show markers |
+| `⌃⌘\` | Close the second pane |
 | `⌃⌘F` | Full screen |
 
 Return continues a list or quote and ends it on an empty item. Tab and Shift-Tab
@@ -131,6 +132,17 @@ Opening a folder does one other thing worth knowing: macOS then lets Kvill read
 everything inside it, which is what makes images stored beside your documents
 load. Kvill remembers the folders you have opened, so it only has to be done
 once.
+
+## Two files at once
+
+Drag a file out of the sidebar and drop it on the page, and it opens beside what
+you were reading. A file dragged in from the Finder does the same. The divider
+between them moves; **View › Close Split**, or `⌃⌘\`, puts it back to one.
+
+Both halves are real editors. Each has its own file, its own undo, and saves
+itself on its own, so typing in one cannot reach the other's file. The same file
+cannot be opened on both sides, because two views of one text is something this
+app has no way to keep in step.
 
 ## Images
 

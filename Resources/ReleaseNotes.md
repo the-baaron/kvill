@@ -1,3 +1,7 @@
+**Two files side by side** - 19 August 2026
+Drag a file from the sidebar or the Finder onto the page and it opens
+beside what you were reading. Control Cmd \ closes it again.
+
 **Document index** - 18 August 2026
 A long document's headings, in the margin beside it, the way a
 documentation site does. Turn it on in Settings.

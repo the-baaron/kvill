@@ -83,6 +83,17 @@ final class KvillDocumentController: NSDocumentController {
         }
         if isWanted(current.fileURL) { return true }
 
+        // Already in this window's second pane. Clicking its row is a request to
+        // look at it, which it already is, so nothing moves. Without this the
+        // click found it in `documents`, saw no window controller, and closed
+        // the pane out from under it.
+        if let window = current.windowControllers.first?.window,
+           let split = window.contentViewController as? DocumentSplitViewController,
+           isWanted(split.companion?.documentURL) {
+            window.makeFirstResponder(split.companion?.editor.textView)
+            return true
+        }
+
         // Already open in a window of its own: raise that rather than showing the
         // same file twice. "In a window" matters, because a document on its way
         // out sits here briefly with none, and treating that one as on screen
@@ -134,6 +145,86 @@ final class KvillDocumentController: NSDocumentController {
 
         current.autosave(withImplicitCancellability: false) { _ in current.close() }
         return true
+    }
+
+    // MARK: - Two documents in one window
+
+    /// Opens `url` beside whatever the window is already showing.
+    ///
+    /// The second document is a real `NSDocument`, added to the controller so it
+    /// autosaves, watches its file and shows up in the Window menu, but it is
+    /// given no window controller of its own: the window belongs to the first
+    /// document and a second controller would want a second window. Everything
+    /// this app's documents do is driven by the editor they have adopted, not by
+    /// a window, so the companion needs nothing else.
+    @discardableResult
+    func openBeside(_ url: URL, in window: NSWindow) -> Bool {
+        guard let split = window.contentViewController as? DocumentSplitViewController else {
+            return false
+        }
+        let wanted = url.standardizedFileURL.resolvingSymlinksInPath()
+        func isWanted(_ other: URL?) -> Bool {
+            other?.standardizedFileURL.resolvingSymlinksInPath() == wanted
+        }
+        // Already the one on the left. Splitting a window into the same file
+        // twice is two views of one text, which this app has no way to keep in
+        // step and nobody asked for.
+        if isWanted(split.page.documentURL) { return false }
+        // Already open somewhere else. Two editors on one document is exactly
+        // the data loss `MarkdownDocument.adopt` exists to prevent.
+        if let already = documents.first(where: { isWanted($0.fileURL) }),
+           already !== companionDocument(in: split) {
+            if let other = already.windowControllers.first?.window, other.isVisible, other !== window {
+                other.makeKeyAndOrderFront(nil)
+                return false
+            }
+            already.close()
+        }
+        guard KvillDocumentController.isReadableAsText(url),
+              let document = try? makeDocument(withContentsOf: url, ofType: typeName(for: url))
+        else { return false }
+
+        closeCompanion(in: split)
+        addDocument(document)
+        let editor = DocumentViewController()
+        (document as? MarkdownDocument)?.adopt(editor)
+        split.showBeside(editor)
+        return true
+    }
+
+    /// The document showing in the window's second pane, if any.
+    func companionDocument(in split: DocumentSplitViewController) -> NSDocument? {
+        guard let companion = split.companion else { return nil }
+        return documents.first { ($0 as? MarkdownDocument)?.controller === companion }
+    }
+
+    /// Closes the second pane, writing whatever is in it first.
+    func closeCompanion(in split: DocumentSplitViewController) {
+        guard let document = companionDocument(in: split) else {
+            split.closeCompanion()
+            return
+        }
+        // Before the editor is detached, or the final autosave reads an editor
+        // that is no longer this document's.
+        (document as? MarkdownDocument)?.captureText()
+        split.closeCompanion()
+        document.autosave(withImplicitCancellability: false) { _ in document.close() }
+    }
+
+    /// The document a keystroke belongs to.
+    ///
+    /// AppKit decides this from the key window, which in a split window is the
+    /// first document whichever pane is being typed in. Cmd S in the second pane
+    /// therefore saved the first one, and Cmd R reloaded it.
+    override var currentDocument: NSDocument? {
+        guard let window = NSApp.keyWindow,
+              let split = window.contentViewController as? DocumentSplitViewController,
+              let responder = window.firstResponder as? NSView,
+              let pane = split.pane(containing: responder),
+              pane === split.companion,
+              let document = companionDocument(in: split)
+        else { return super.currentDocument }
+        return document
     }
 
     private func typeName(for url: URL) -> String {

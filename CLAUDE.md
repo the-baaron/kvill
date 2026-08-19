@@ -38,7 +38,7 @@ main claim, not just in a benchmark.
 
 ## Staying small
 
-Kvill is 1.7MB, 52 Swift files, 13,558 lines and **no dependencies at all**.
+Kvill is 1.8MB, 53 Swift files, 15,467 lines and **no dependencies at all**.
 That is the product, not an accident of it: the pitch is that a document opens
 before you have finished letting go of the mouse, and every one of those numbers
 is why it can.
@@ -49,8 +49,8 @@ Measured on this machine, and worth re-measuring rather than trusting:
 
 | | |
 |---|---|
-| Bundle | 1.8MB, binary 1.57MB |
-| Source | 55 files, ~14,200 lines |
+| Bundle | 1.8MB, binary 1.67MB |
+| Source | 53 files, 15,467 lines |
 | Dependencies | none, and adding one is a decision rather than a convenience |
 | Cold launch to a window on screen | ~280ms |
 | Warm open, app already running | ~100ms |
@@ -111,8 +111,8 @@ The syntax highlighter here is language-agnostic on purpose: a real grammar per
 language is a megabyte and a maintenance burden for a panel most documents do
 not have.
 
-**Features are refused, not deferred.** No preview pane, no tabs, no plugins, no
-sync, no accounts. Each of those is defensible on its own and none of them is
+**Features are refused, not deferred.** No preview pane, no plugins, no sync, no
+accounts. Each of those is defensible on its own and none of them is
 why anyone opens this app. `README.md` keeps the list, and the list is a feature.
 
 ## What the interface is allowed to do
@@ -160,6 +160,7 @@ one item at a time rather than as a whole.
 | Detects external changes | Yes, and marks the words that changed |
 | Auto table of contents | Yes, floating in the page's margin, off by default |
 | Multi-tab | Yes, the system's own window tabbing |
+| Two files side by side | Yes, drag one onto the page |
 | Inline annotations | Yes, as a highlight and a footnote, in the file |
 | Built-in terminal | **Refused**, see below |
 | Diff view | Ours marks changes in place; theirs is a panel |
@@ -172,6 +173,18 @@ program. Anyone who wants a terminal has one.
 an annotation is text the user can read in any other editor, in a diff and on
 GitHub. A sidecar file of comments would be a private format that only this app
 understands, which is the thing this app exists not to be.
+
+**A split window is two documents, not two views.** Each pane is a real
+`NSDocument` with its own editor, and the second one is added to the document
+controller without a window controller of its own: the window belongs to the
+first document, and everything a document here does is driven by the editor it
+has adopted rather than by a window. Verified rather than assumed, because it is
+the part that would be silent data loss: a companion autosaves on its own, and
+`--selftest` types into both halves, waits out the autosave delay, and reads
+both files back off disk to prove neither took the other's text.
+
+`NSDocumentController.currentDocument` is overridden to follow the focused pane.
+Without it, Cmd S in the right-hand pane saved the left-hand file.
 
 **Tabs are the system's.** `window.tabbingMode` moves from `.disallowed` to
 `.automatic`, which respects the "Prefer tabs" setting in System Settings, so

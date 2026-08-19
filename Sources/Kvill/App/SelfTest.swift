@@ -322,6 +322,20 @@ enum SelfTest {
             check("file tree: leaves empty folders out", !listed.contains("empty"),
                   listed.joined(separator: ", "))
 
+            // A row can be dragged out. That is the whole gesture for opening a
+            // second document beside the first, so a row that carries nothing on
+            // the pasteboard is split mode with no way in.
+            tree.prepareForRender()
+            var draggableFiles = 0
+            var draggableFolders = 0
+            for row in 0..<tree.rowCountForTest where tree.pasteboardURLForTest(row: row) != nil {
+                if tree.isFolderRowForTest(row) { draggableFolders += 1 } else { draggableFiles += 1 }
+            }
+            check("file tree: a file can be dragged out of the sidebar",
+                  draggableFiles > 0, "\(draggableFiles) files")
+            check("file tree: a folder cannot, since two folders is not a split",
+                  draggableFolders == 0, "\(draggableFolders) folders")
+
             check("file tree: opening a folder grants what is inside it",
                   FolderAccess.isReachable(nested.appendingPathComponent("two.md")), "")
 
@@ -966,6 +980,115 @@ enum SelfTest {
                       !d.contains("GAMMA-ONLY") && !d.contains("# Gamma"), "\(d.count) bytes")
             } else {
                 check("switch: a document opened to switch away from", false)
+            }
+
+            documentController.documents.forEach { $0.close() }
+            try? FileManager.default.removeItem(at: folder)
+        }
+
+        // --- Two documents in one window ---------------------------------------
+        // Split mode. The failure to be afraid of is the one that already
+        // happened once with a shared editor: two documents writing into each
+        // other's files. So the check is not "are there two panes", it is "does
+        // each file still hold only its own words after both have been typed
+        // into and saved".
+        do {
+            let settled = { RunLoop.current.run(until: Date().addingTimeInterval(0.4)) }
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kvill-split-\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true)
+            let left = folder.appendingPathComponent("Left.md")
+            let right = folder.appendingPathComponent("Right.md")
+            try? "# Left\n\nLeft body.\n".write(to: left, atomically: true, encoding: .utf8)
+            try? "# Right\n\nRight body.\n".write(to: right, atomically: true, encoding: .utf8)
+
+            var host: NSDocument?
+            documentController.openDocument(withContentsOf: left, display: true) { d, _, _ in
+                host = d
+                hide(d)
+            }
+            settled()
+
+            if let document = host, let window = document.windowControllers.first?.window,
+               let split = window.contentViewController as? DocumentSplitViewController {
+                let before = documentController.documents.count
+                let opened = documentController.openBeside(right, in: window)
+                settled()
+                check("split: a document dropped on the page opens beside it", opened)
+                check("split: the window is showing two", split.isSplit)
+                check("split: and there are two documents open",
+                      documentController.documents.count == before + 1,
+                      "\(before) -> \(documentController.documents.count)")
+                check("split: the second pane brought its own editor",
+                      split.companion !== split.page && split.companion != nil)
+                check("split: each pane is showing its own file",
+                      split.page.documentURL?.lastPathComponent == "Left.md"
+                      && split.companion?.documentURL?.lastPathComponent == "Right.md",
+                      "\(split.page.documentURL?.lastPathComponent ?? "-") | "
+                      + "\(split.companion?.documentURL?.lastPathComponent ?? "-")")
+                check("split: the second pane offers no sidebar button of its own",
+                      split.companion?.isCompanion == true && split.page.isCompanion == false)
+                check("split: no second window appeared",
+                      documentController.documents
+                        .compactMap { $0.windowControllers.first?.window }
+                        .filter { $0.isVisible }.count <= 1)
+
+                // The same file on both sides is two editors on one text with no
+                // way to keep them in step.
+                check("split: the file already on the left is refused",
+                      !documentController.openBeside(left, in: window))
+
+                // Typing into both, then saving both.
+                split.page.editor.textView.insertText(
+                    "LEFT-ONLY\n", replacementRange: NSRange(location: 0, length: 0))
+                split.companion?.editor.textView.insertText(
+                    "RIGHT-ONLY\n", replacementRange: NSRange(location: 0, length: 0))
+                documentController.documents.forEach { $0.updateChangeCount(.changeDone) }
+                settled()
+                documentController.documents.forEach {
+                    $0.save(withDelegate: nil, didSave: nil, contextInfo: nil)
+                }
+                settled(); settled()
+
+                let l = (try? String(contentsOf: left, encoding: .utf8)) ?? ""
+                let r = (try? String(contentsOf: right, encoding: .utf8)) ?? ""
+                check("split: Left.md kept the text typed into it", l.contains("LEFT-ONLY"))
+                check("split: Left.md did not take Right's text",
+                      !l.contains("RIGHT-ONLY") && !l.contains("# Right"), "\(l.count) bytes")
+                check("split: Right.md kept the text typed into it", r.contains("RIGHT-ONLY"))
+                check("split: Right.md did not take Left's text",
+                      !r.contains("LEFT-ONLY") && !r.contains("# Left"), "\(r.count) bytes")
+
+                // The one that would be silent data loss. A companion has no
+                // window controller, and AppKit's autosave timer is started by
+                // `updateChangeCount`, so whether it runs for a document with no
+                // window is not something to assume. Typed, left alone for
+                // longer than the half second autosave delay, then read off
+                // disk.
+                if let companion = split.companion,
+                   let companionDocument = documentController.companionDocument(in: split) {
+                    companion.editor.textView.insertText(
+                        "AUTOSAVED\n", replacementRange: NSRange(location: 0, length: 0))
+                    companionDocument.updateChangeCount(.changeDone)
+                    RunLoop.current.run(until: Date().addingTimeInterval(1.6))
+                    let written = (try? String(contentsOf: right, encoding: .utf8)) ?? ""
+                    check("split: the second pane autosaves without a window of its own",
+                          written.contains("AUTOSAVED"),
+                          written.contains("AUTOSAVED") ? "" : "\(written.count) bytes on disk")
+                }
+
+                // Closing the split writes what was in it and lets its document
+                // go, rather than leaving an invisible document open for ever.
+                let openBefore = documentController.documents.count
+                documentController.closeCompanion(in: split)
+                settled(); settled()
+                check("split: closing it leaves one pane", !split.isSplit)
+                check("split: and closes the document that was in it",
+                      documentController.documents.count == openBefore - 1,
+                      "\(openBefore) -> \(documentController.documents.count)")
+            } else {
+                check("split: a document opened to split", false)
             }
 
             documentController.documents.forEach { $0.close() }

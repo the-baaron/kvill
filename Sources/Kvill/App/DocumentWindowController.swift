@@ -262,6 +262,19 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
     /// And its titlebar accessories, for the same reason.
     private var parkedAccessories: [NSTitlebarAccessoryViewController] = []
 
+    /// A second document in the window is this window's to close.
+    ///
+    /// It has no window controller of its own, which is what lets it share this
+    /// window, and that also means AppKit will not close it when the window
+    /// goes. Written first: everything else here writes on a half second
+    /// autosave, and closing is exactly when that half second is not available.
+    func windowWillClose(_ notification: Notification) {
+        guard let split = window?.contentViewController as? DocumentSplitViewController,
+              let controller = NSDocumentController.shared as? KvillDocumentController
+        else { return }
+        controller.closeCompanion(in: split)
+    }
+
     /// Matches the window chrome to the document's palette so the title bar does
     /// not sit as a grey strip above a sepia page.
     @objc private func applyTheme() {

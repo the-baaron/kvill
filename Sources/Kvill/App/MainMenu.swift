@@ -310,6 +310,11 @@ enum MainMenu {
             // the title flips between Show and Hide without this app doing it.
             add(menu, "Show Sidebar", #selector(NSSplitViewController.toggleSidebar(_:)), "s",
                 modifiers: [.command, .control])
+            // Opening a split is a drag: a file from the sidebar or the Finder,
+            // dropped on the page. Closing one is not a gesture anybody would
+            // guess, so it is here.
+            add(menu, "Close Split", #selector(DocumentViewController.closeSplit(_:)), "\\",
+                modifiers: [.command, .control])
             add(menu, "Hide Interface", #selector(DocumentViewController.toggleInterface(_:)), ".")
             add(menu, "Display Options", #selector(DocumentViewController.toggleThemePanel(_:)), "t")
             add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f",

@@ -131,6 +131,20 @@ final class DocumentViewController: NSViewController {
             }
         }
 
+        // A document dropped on the page opens beside it. The same drag works
+        // from the sidebar and from the Finder, because both put a file URL on
+        // the pasteboard and neither knows about the other.
+        editor.textView.onDocumentDrop = { [weak self] url in
+            // Off the drop, for the reason above it: a drop runs a nested run
+            // loop and AppKit lays the window out inside it, so adding a split
+            // view item there is mutating layout from inside a layout pass.
+            DispatchQueue.main.async {
+                guard let window = self?.view.window else { return }
+                (NSDocumentController.shared as? KvillDocumentController)?
+                    .openBeside(url, in: window)
+            }
+        }
+
         NotificationCenter.default.addObserver(
             self, selector: #selector(themeChanged), name: .kvillThemeChanged, object: nil)
         NotificationCenter.default.addObserver(
@@ -188,8 +202,12 @@ final class DocumentViewController: NSViewController {
         // viewDidLayout asks a window that is laying out to lay out again, and
         // that is an abort.
         let split = view.window?.contentViewController as? DocumentSplitViewController
-        // No sidebar worth opening means no button offering to open it.
+        // No sidebar worth opening means no button offering to open it, and the
+        // second pane in a split never offers: there is one sidebar and it
+        // belongs to the window, not to a pane, so a second button would be two
+        // controls for one thing sitting a few hundred points apart.
         sidebarToggle.isHidden = ThemeManager.shared.chromeHidden
+            || isCompanion
             || !(split?.hasSomethingToSwitchBetween ?? false)
 
         // Follows the page's own edge rather than flipping between two numbers.
@@ -325,6 +343,14 @@ final class DocumentViewController: NSViewController {
     /// once typing stops rather than on every key.
     private var statsWork: DispatchWorkItem?
 
+    /// Whether this page is the second one in a split window.
+    ///
+    /// It is a whole editor either way. The only difference is the chrome that
+    /// belongs to the window rather than to a document.
+    var isCompanion = false {
+        didSet { view.needsLayout = true }
+    }
+
     /// The document's own headings, floating in the right margin.
     let contents = ContentsView()
 
@@ -441,6 +467,22 @@ final class DocumentViewController: NSViewController {
         contents.show(Outline.entries(of: editor.parsed, in: editor.text))
         contents.select(at: editor.textView.selectedRange().location)
         view.needsLayout = true
+    }
+
+    /// Takes the second document away, from the View menu.
+    ///
+    /// Only enabled while there are two: an item that does nothing is worse
+    /// than one that is not there, and `validateUserInterfaceItem` is how AppKit
+    /// asks.
+    @objc func closeSplit(_ sender: Any?) {
+        guard let split, let controller = NSDocumentController.shared as? KvillDocumentController
+        else { return }
+        controller.closeCompanion(in: split)
+    }
+
+    @objc func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(closeSplit(_:)) { return split?.isSplit == true }
+        return true
     }
 
     /// The split view this page is in, if it is in one.

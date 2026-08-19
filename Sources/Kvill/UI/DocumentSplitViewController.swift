@@ -22,6 +22,17 @@ final class DocumentSplitViewController: NSSplitViewController {
     /// switch files, which is why it is not a `let`.
     private(set) var page: DocumentViewController
 
+    /// The second document, when there is one.
+    ///
+    /// A pane, not a window: `NSSplitViewItem` already does the divider, the
+    /// dragging, the minimum widths and the collapse, and every one of those is
+    /// something a hand-written two-up view would have to do again.
+    private(set) var companion: DocumentViewController?
+    private var companionItem: NSSplitViewItem?
+
+    /// Whether this window is showing two documents.
+    var isSplit: Bool { companion != nil }
+
     /// The folder the sidebar is showing, so a document arriving in this window
     /// can be given the same one.
     private(set) var folder: URL?
@@ -141,6 +152,39 @@ final class DocumentSplitViewController: NSSplitViewController {
     /// Lights the row for the file this window is actually showing.
     func syncSelection() { sidebar.tree.select(page.documentURL) }
 
+    // MARK: - Two documents at once
+
+    /// Shows a second document beside the first.
+    ///
+    /// Replaces whatever was there if the window is already split, which is
+    /// what dropping a third file has to mean: three panes at 380 points each
+    /// do not fit in a window anyone has.
+    func showBeside(_ editor: DocumentViewController) {
+        if let existing = companionItem {
+            removeSplitViewItem(existing)
+        }
+        editor.isCompanion = true
+        let item = Self.makePageItem(editor)
+        addSplitViewItem(item)
+        companionItem = item
+        companion = editor
+        // Even halves to begin with. Whatever the reader drags it to afterwards
+        // is theirs, and AppKit remembers it for the length of the window.
+        let panes = splitView.frame.width - (sidebarItem.isCollapsed ? 0 : 188)
+        splitView.setPosition(splitView.frame.width - panes / 2, ofDividerAt: splitViewItems.count - 2)
+    }
+
+    /// Takes the second document away and gives the width back to the first.
+    @discardableResult
+    func closeCompanion() -> DocumentViewController? {
+        guard let item = companionItem, let editor = companion else { return nil }
+        removeSplitViewItem(item)
+        companionItem = nil
+        companion = nil
+        editor.isCompanion = false
+        return editor
+    }
+
     /// Puts a different document's editor in the window, keeping the sidebar.
     ///
     /// The editor is replaced rather than reused. A document reads its text out
@@ -151,7 +195,8 @@ final class DocumentSplitViewController: NSSplitViewController {
         removeSplitViewItem(pageItem)
         page = next
         pageItem = Self.makePageItem(next)
-        addSplitViewItem(pageItem)
+        // Back in the middle, before the companion rather than after it.
+        insertSplitViewItem(pageItem, at: 1)
         sidebarItem.isCollapsed = wasCollapsed
         if let folder { sidebar.tree.show(folder) }
         sidebar.tree.select(next.documentURL)
@@ -177,6 +222,18 @@ final class DocumentSplitViewController: NSSplitViewController {
 
     /// Whether the sidebar is showing, for the self test.
     var isShowingFileTree: Bool { sidebarItem != nil && !sidebarItem.isCollapsed }
+
+    /// The pane a view belongs to, so a keystroke can be attributed to the right
+    /// document. Without this, Cmd S in the second pane saved the first one.
+    func pane(containing view: NSView) -> DocumentViewController? {
+        var candidate: NSView? = view
+        while let current = candidate {
+            if current === page.view { return page }
+            if let companion, current === companion.view { return companion }
+            candidate = current.superview
+        }
+        return nil
+    }
 
     /// Whether any pane would draw a hairline under the title bar, for the
     /// self test. Checked after a file switch as well as before one.
