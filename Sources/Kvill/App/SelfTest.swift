@@ -652,6 +652,8 @@ enum SelfTest {
             _ = bar.view
             check("sidebar: it paints an opaque surface rather than showing the desktop",
                   bar.paintsItsOwnSurfaceForTest)
+            check("sidebar: and keeps the rounded panel and the shadow with it",
+                  bar.drawsItsOwnPanelForTest)
         }
 
         check("sidebar: room for the traffic lights in a window",

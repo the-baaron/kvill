@@ -15,31 +15,6 @@ final class SidebarViewController: NSViewController {
 
     let tree = FileTreeView()
 
-    /// The sidebar's own surface: opaque, and painted rather than sampled.
-    ///
-    /// This is deliberately not glass, and it took three attempts to be sure
-    /// that was the right answer.
-    ///
-    /// macOS 26 puts every sidebar inside an
-    /// `NSContainerConcentricGlassEffectView`, which samples what is behind the
-    /// *window*. On a purple desktop the sidebar came out purple while the
-    /// buttons a hundred points away stayed the colour of the page, because
-    /// those are `NSGlassEffectView` inside the window and sample the page.
-    ///
-    /// Laying the buttons' own glass inside the sidebar fixed the colour and
-    /// not the behaviour: a glass inside a glass still follows the container's
-    /// key state, so the sidebar darkened when the window lost focus while the
-    /// buttons brightened. Measured over the same 0.9804 ground, the panel
-    /// rendered 0.9412 and the button 0.9922; Liquid Glass renders by size, and
-    /// a 34 point capsule is nearly all edge lensing where a 180 point panel is
-    /// nearly all body. There is no tint that makes one behave like the other.
-    ///
-    /// So the sidebar is painted. It covers the container entirely, so nothing
-    /// reaches through to the desktop, and it looks the same whether the window
-    /// is key or not, which is the thing that actually reads as wrong.
-    private let backdrop = NSView()
-
-
     /// How far the list sits below the top of the sidebar, so the traffic
     /// lights have somewhere to be. Kept, because in full screen they are not
     /// there and the room they need is 44 points of nothing at the top of the
@@ -51,16 +26,6 @@ final class SidebarViewController: NSViewController {
         container.wantsLayer = true
         view = container
 
-        // Something opaque for the glass to sit on. Without it the glass samples
-        // AppKit's own sidebar container, which is a hole through to the
-        // desktop, and the sidebar came out the colour of the wallpaper.
-        backdrop.wantsLayer = true
-        backdrop.layer?.cornerRadius = Self.cornerRadius
-        backdrop.layer?.cornerCurve = .continuous
-        backdrop.layer?.masksToBounds = true
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(backdrop)
-
         tree.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(tree)
 
@@ -71,11 +36,6 @@ final class SidebarViewController: NSViewController {
             equalTo: container.topAnchor, constant: Self.roomForTrafficLights)
 
         NSLayoutConstraint.activate([
-            backdrop.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            backdrop.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            backdrop.topAnchor.constraint(equalTo: container.topAnchor),
-            backdrop.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
             tree.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             tree.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             // Clear of the traffic lights, which sit over a full-height sidebar
@@ -93,12 +53,24 @@ final class SidebarViewController: NSViewController {
 
     /// Whether the sidebar paints an opaque surface of its own, for the checks.
     ///
-    /// Not glass, on purpose: see `backdrop`. If this ever goes back to nothing,
-    /// AppKit's own container shows through to the desktop and the sidebar takes
-    /// the colour of the wallpaper.
+    /// If this ever goes back to nothing, macOS 26's own sidebar container shows
+    /// through to what is behind the *window* and the column takes the colour of
+    /// the desktop.
     var paintsItsOwnSurfaceForTest: Bool {
-        guard let colour = backdrop.layer?.backgroundColor else { return false }
+        guard let colour = view.layer?.backgroundColor else { return false }
         return colour.alpha > 0.99
+    }
+
+    /// Whether the panel is rounded and casts a shadow, for the checks.
+    ///
+    /// Both were the glass effect's, and painting over the effect took them with
+    /// it: the column went square-edged and flat against the page, and the only
+    /// way that showed up was a photograph. Measured after: the page reads
+    /// 0.9804 and the pixels just right of the sidebar's edge read 0.9412 rising
+    /// to 0.9647 over 12 points.
+    var drawsItsOwnPanelForTest: Bool {
+        guard let layer = view.layer else { return false }
+        return layer.cornerRadius > 0 && layer.shadowOpacity > 0 && !layer.masksToBounds
     }
 
     /// The room the traffic lights need at the top of the sidebar.
@@ -132,17 +104,40 @@ final class SidebarViewController: NSViewController {
         if listTop.constant != list { listTop.constant = list }
     }
 
-    /// Measured off a photograph of the real window rather than guessed: the
-    /// corner's curve runs 15 points down from the panel's top edge, which is a
-    /// 10 point radius drawn as a continuous curve.
-    static let cornerRadius: CGFloat = 10
-
     @objc private func applyTheme() {
-        // The raised colour, so the column reads as a surface above the page
-        // rather than a piece of it.
-        backdrop.layer?.backgroundColor =
+        // The theme's raised colour, so the column reads as a surface above the
+        // page rather than a piece of it. Painted on this view itself: AppKit
+        // rounds and clips the sidebar's own view and casts its shadow, so the
+        // panel shape and the shadow stay the system's and only the colour is
+        // this app's.
+        //
+        // Opaque on purpose. macOS 26 puts every sidebar inside an
+        // `NSContainerConcentricGlassEffectView`, which samples what is behind
+        // the *window*: with nothing painted here the column came out the colour
+        // of the desktop while the floating buttons, which are glass inside the
+        // window, stayed the colour of the page. Making it the buttons' glass
+        // instead fixed the colour and not the behaviour, since a glass inside a
+        // glass still follows the container's key state, so the sidebar darkened
+        // when the window lost focus while the buttons brightened.
+        view.layer?.backgroundColor =
             ThemeManager.shared.theme.colors.backgroundElevated.cgColor
+
+        // The rounded panel and its shadow were the glass effect's, and painting
+        // over the effect took both away with it. Drawn here instead, matching
+        // what the system was drawing: measured off a photograph of the real
+        // window, the corner's curve ran 15 points down from the panel's top
+        // edge, which is a 10 point radius on a continuous curve.
+        view.layer?.cornerRadius = Self.cornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = false
+        view.layer?.shadowColor = NSColor.black.cgColor
+        view.layer?.shadowOpacity = 0.12
+        view.layer?.shadowRadius = 10
+        view.layer?.shadowOffset = .zero
     }
+
+    /// The radius of the sidebar's panel.
+    static let cornerRadius: CGFloat = 10
 
 
 
