@@ -15,6 +15,7 @@ final class SidebarViewController: NSViewController {
 
     let tree = FileTreeView()
 
+
     /// How far the list sits below the top of the sidebar, so the traffic
     /// lights have somewhere to be. Kept, because in full screen they are not
     /// there and the room they need is 44 points of nothing at the top of the
@@ -28,6 +29,7 @@ final class SidebarViewController: NSViewController {
 
         tree.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(tree)
+
 
         // Clear of the traffic lights, which sit over a full-height sidebar
         // exactly as they do in Finder.
@@ -74,16 +76,24 @@ final class SidebarViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        let wanted = Self.listTop(
-            inFullScreen: view.window?.styleMask.contains(.fullScreen) ?? false)
-        // Only when it differs, so this settles after one further pass rather
+        let full = view.window?.styleMask.contains(.fullScreen) ?? false
+        // Only when they differ, so this settles after one further pass rather
         // than asking a window that is laying out to lay out for ever.
-        if listTop.constant != wanted { listTop.constant = wanted }
+        let list = Self.listTop(inFullScreen: full)
+        if listTop.constant != list { listTop.constant = list }
     }
 
     @objc private func applyTheme() {
-        // Slightly raised off the page, so the divider is not the only thing
-        // telling the two apart.
-        view.layer?.backgroundColor = ThemeManager.shared.theme.colors.backgroundElevated.cgColor
+        // Nothing. The sidebar is glass, and the glass is AppKit's: macOS 26
+        // puts every sidebar in an `NSContainerConcentricGlassEffectView` and
+        // this used to paint an opaque colour straight over it.
+        //
+        // Painting it over was also why the panel and its shadow could come
+        // apart. The shadow belongs to the glass, so a background inset from
+        // the glass left the shadow tracing a rectangle the colour no longer
+        // filled. Nothing of ours is drawn here now, so there is nothing to
+        // come apart.
     }
+
+
 }

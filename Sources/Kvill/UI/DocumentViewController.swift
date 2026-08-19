@@ -114,8 +114,6 @@ final class DocumentViewController: NSViewController {
             // the list is the expensive half and that is debounced below.
             self?.contents.select(at: self?.editor.textView.selectedRange().location ?? 0)
         }
-        editor.onScroll = { [weak self] _, _ in
-        }
         editor.textView.onSelectionGestureEnded = { [weak self] in self?.updateSelectionToolbar() }
         // Dropping a folder on the page shows its Markdown down the side, and
         // grants access to what is in it, exactly as File > Open Folder does.
@@ -180,7 +178,7 @@ final class DocumentViewController: NSViewController {
     /// They used to be centred on the traffic lights, measured off
     /// `standardWindowButton`. That put them higher than this, and the two
     /// cannot both be true: the lights' centre is the system's to place.
-    private static let chromeInset: CGFloat = 18
+    static let chromeInset: CGFloat = 18
 
     override func viewWillLayout() {
         super.viewWillLayout()
@@ -366,20 +364,71 @@ final class DocumentViewController: NSViewController {
         contents.isHidden = !wanted
         // The page's width follows, whether or not the index is showing, so
         // turning it off puts the column back in the middle.
-        let reserved = wanted ? Self.contentsWidth + Self.contentsGap * 2 : 0
-        if editorTrailing.constant != -reserved { editorTrailing.constant = -reserved }
+        reservePageEdge(wanted ? Self.contentsWidth + Self.contentsGap * 2 : 0)
         guard wanted else { return }
 
-        // Below the floating buttons, and down to the bottom of the window: a
-        // list cut off two thirds of the way down loses its last heading and
-        // looks like a bug rather than a boundary.
-        let top = Self.chromeInset + 44
+        // Beside the text, not against the window's edge. The index belongs to
+        // the column it lists, so it is placed off the column's right edge and
+        // stays there whatever is left over on the outside.
+        //
+        // Measured against where the column will be when the page has finished
+        // moving, not where it is this frame, so the list does not slide along
+        // with it.
+        let pageWidth = max(0, view.bounds.width - reservedForContents)
+        let column = min(theme.metrics.contentWidth, pageWidth)
+        let columnRight = (pageWidth - column) / 2 + column
+        let x = min(columnRight + Self.contentsGap,
+                    view.bounds.width - Self.contentsWidth - Self.contentsGap)
+
+        // Level with the document's first line, so the two lists of words start
+        // together. Down to the bottom of the window from there: a list cut off
+        // two thirds of the way down loses its last heading and looks like a
+        // bug rather than a boundary.
+        let top = editor.textView.textContainerInset.height
         let height = max(0, view.bounds.height - top - Self.chromeInset)
         contents.frame = NSRect(
-            x: view.bounds.width - Self.contentsWidth - Self.contentsGap,
-            y: Self.chromeInset,
-            width: Self.contentsWidth, height: height)
+            x: x, y: Self.chromeInset, width: Self.contentsWidth, height: height)
     }
+
+    /// What the page is currently giving up to the index.
+    ///
+    /// Held separately from the constraint, because while the page is gliding
+    /// across the constraint holds whatever this frame's value is and comparing
+    /// against that would start the animation again on every frame.
+    private var reservedForContents: CGFloat = 0
+
+    /// Pulls the page's right edge in, or lets it back out, gliding.
+    ///
+    /// The column used to jump the width of the index the instant one appeared.
+    /// Nothing else in this window moves like that: the sidebar slides, the
+    /// index fades, and a page that snaps sideways reads as a glitch.
+    private func reservePageEdge(_ reserved: CGFloat) {
+        guard reserved != reservedForContents else { return }
+        reservedForContents = reserved
+        // The first pass places the page rather than moving it. Sliding in from
+        // the wrong width every time a document opens is not an animation, it
+        // is a delay.
+        guard hasPlacedPage else {
+            hasPlacedPage = true
+            editorTrailing.constant = -reserved
+            return
+        }
+        // Out of the layout pass this is called from. Animating a constraint
+        // from inside one asks a window that is laying out to lay out again.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.reservedForContents == reserved else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+                self.editorTrailing.animator().constant = -reserved
+            }
+        }
+    }
+
+    /// Whether the page has been laid out once, so the first placement is
+    /// instant and every one after it glides.
+    private var hasPlacedPage = false
 
     /// Rebuilds the list from the page's own parse.
     func refreshContents() {
