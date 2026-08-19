@@ -166,6 +166,38 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
         proposed.union([.fullScreen, .autoHideMenuBar, .autoHideToolbar])
     }
 
+    /// The strip that slides down when the pointer reaches the top edge is the
+    /// system's, and it cannot be done away with: it is where the traffic
+    /// lights and the menu bar live in full screen. It can be half the size,
+    /// and it can be painted.
+    ///
+    /// Windowed, this app carries an empty toolbar for one reason: a plain
+    /// title bar is 32 points and puts the traffic lights hard against the top
+    /// edge with the sidebar's first row right underneath. A unified toolbar
+    /// takes it to 66. Both measured on this machine. In full screen nothing
+    /// sits under the strip to be crowded, so the toolbar has no work to do and
+    /// the reveal is 32 points instead of 66.
+    ///
+    /// Opaque for the length of full screen as well, because a transparent
+    /// title bar has a window background behind it only when there is a window:
+    /// the full screen strip is its own, with nothing behind it, and painted by
+    /// nothing it came out black.
+    ///
+    /// Both changes are made after the transition rather than during it. The
+    /// earlier version did this in `willEnter` and `willExit`, which asks
+    /// AppKit to rebuild the window's frame view in the middle of its own
+    /// transform animation, and there is a crash report from that build with
+    /// `-[_NSWindowTransformAnimation dealloc]` on the stack.
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        window?.toolbar?.isVisible = false
+        window?.titlebarAppearsTransparent = false
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        window?.toolbar?.isVisible = true
+        window?.titlebarAppearsTransparent = true
+    }
+
     /// Matches the window chrome to the document's palette so the title bar does
     /// not sit as a grey strip above a sepia page.
     @objc private func applyTheme() {
