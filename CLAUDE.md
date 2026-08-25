@@ -38,7 +38,7 @@ main claim, not just in a benchmark.
 
 ## Staying small
 
-Kvill is 1.8MB, 53 Swift files, 15,467 lines and **no dependencies at all**.
+Kvill is 1.8MB, 53 Swift files, 15,651 lines and **no dependencies at all**.
 That is the product, not an accident of it: the pitch is that a document opens
 before you have finished letting go of the mouse, and every one of those numbers
 is why it can.
@@ -50,7 +50,7 @@ Measured on this machine, and worth re-measuring rather than trusting:
 | | |
 |---|---|
 | Bundle | 1.8MB, binary 1.67MB |
-| Source | 53 files, 15,467 lines |
+| Source | 53 files, 15,651 lines |
 | Dependencies | none, and adding one is a decision rather than a convenience |
 | Cold launch to a window on screen | ~280ms |
 | Warm open, app already running | ~100ms |
