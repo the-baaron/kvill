@@ -70,9 +70,31 @@ final class SidebarViewController: NSViewController {
         applyTheme()
         NotificationCenter.default.addObserver(
             self, selector: #selector(applyTheme), name: .kvillThemeChanged, object: nil)
+
+        // Where the panel starts depends on whether the window is in full
+        // screen, and a layout pass is not guaranteed to happen after that
+        // changes. A window restored straight into full screen at launch laid
+        // the sidebar out before the style mask said `.fullScreen`, so the panel
+        // kept the windowed value and ran off the top of the display, while the
+        // same window toggled into full screen by hand came out right. Asked for
+        // again on the transitions themselves, so the order does not matter.
+        for name: NSNotification.Name in [
+            NSWindow.didEnterFullScreenNotification,
+            NSWindow.didExitFullScreenNotification,
+        ] {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(chromeChanged), name: name, object: nil)
+        }
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// The window entered or left full screen, so the panel's top has moved.
+    @objc private func chromeChanged(_ note: Notification) {
+        guard note.object as? NSWindow === view.window else { return }
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+    }
 
     /// Whether the sidebar paints an opaque surface of its own, for the checks.
     ///
@@ -137,9 +159,15 @@ final class SidebarViewController: NSViewController {
     /// full screen there is no title bar and AppKit puts the sidebar against the
     /// top of the display, so the panel lines up with the floating buttons and
     /// the column reads as a panel again rather than as the edge of the screen.
-    static func panelTop(inFullScreen: Bool) -> CGFloat {
-        inFullScreen ? DocumentViewController.chromeInset : 0
-    }
+    /// Always flush with the container it is in.
+    ///
+    /// The panel used to be inset in full screen so it would not run to the top
+    /// of the display, and that was the wrong lever: the container AppKit draws
+    /// around it, and the shadow that comes with it, stayed full height, so the
+    /// shape moved and the shadow did not. The container is inset instead, by
+    /// `DocumentSplitViewController` turning full height layout off in full
+    /// screen, and then panel and shadow arrive together.
+    static func panelTop(inFullScreen: Bool) -> CGFloat { 0 }
 
     @objc private func applyTheme() {
         // The theme's raised colour, so the column reads as a surface above the

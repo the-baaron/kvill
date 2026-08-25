@@ -81,6 +81,22 @@ final class DocumentSplitViewController: NSSplitViewController {
         // translucent palette, no opaque ground for a hairline to sit on, so the
         // automatic one drew a seam with the desktop showing through beside it.
         sidebarItem.titlebarSeparatorStyle = .none
+
+        // Full height under the title bar in a window, so the traffic lights sit
+        // over the sidebar the way they do in Finder. Not in full screen: there
+        // is no title bar to run under, and full height there means the system's
+        // own panel, and the shadow it draws, run to the very top of the display
+        // while everything else in the app starts below it. Turning it off in
+        // full screen insets the container itself, shadow included, which is the
+        // one thing this app cannot do from the inside: measured, the container
+        // goes from {{8, 8}, {180, 1076}} to {{8, 8}, {180, 1068}} in a 1084
+        // point window, so 8 points down from the top rather than none.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(fullScreenChanged),
+            name: NSWindow.willEnterFullScreenNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(fullScreenChanged),
+            name: NSWindow.willExitFullScreenNotification, object: nil)
         addSplitViewItem(sidebarItem)
 
         pageItem = Self.makePageItem(page)
@@ -89,6 +105,36 @@ final class DocumentSplitViewController: NSSplitViewController {
         // No autosaveName. It restores a divider position from a previous run,
         // which quietly uncollapses a sidebar that is meant to start closed
         // until a folder is opened.
+    }
+
+    /// Whether the sidebar runs under the title bar, which only a window has.
+    /// Set on the way in and out, not afterwards.
+    ///
+    /// Changing it once the window is already in full screen does nothing: the
+    /// container measured {{8, 8}, {180, 1076}} in a 1084 point window either
+    /// way, which is flush with the top. Set before the transition it measures
+    /// 1068, which is the 8 points down this is for.
+    @objc private func fullScreenChanged(_ note: Notification) {
+        guard note.object as? NSWindow === view.window else { return }
+        let entering = note.name == NSWindow.willEnterFullScreenNotification
+        setFullHeightLayout(!entering)
+    }
+
+    private func setFullHeightLayout(_ wanted: Bool) {
+        guard sidebarItem.allowsFullHeightLayout != wanted else { return }
+        sidebarItem.allowsFullHeightLayout = wanted
+        // Laid out at once, not left to the transition. Setting the property
+        // and waiting measured {{8, 8}, {180, 1076}} in a 1084 point window,
+        // which is flush with the top; forcing the pass here measures 1068.
+        splitView.adjustSubviews()
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        // A window restored straight into full screen never sees a transition.
+        setFullHeightLayout(!(view.window?.styleMask.contains(.fullScreen) ?? false))
     }
 
     // MARK: - The folder

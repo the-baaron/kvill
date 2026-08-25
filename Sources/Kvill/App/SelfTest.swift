@@ -660,10 +660,8 @@ enum SelfTest {
             // floating buttons start instead.
             check("sidebar: the panel runs to the top of a window",
                   SidebarViewController.panelTop(inFullScreen: false) == 0)
-            check("sidebar: and lines up with the floating buttons in full screen",
-                  SidebarViewController.panelTop(inFullScreen: true)
-                      == DocumentViewController.chromeInset,
-                  "\(SidebarViewController.panelTop(inFullScreen: true))")
+            check("sidebar: and flush in full screen too, since the container moves instead",
+                  SidebarViewController.panelTop(inFullScreen: true) == 0)
         }
 
         check("sidebar: room for the traffic lights in a window",
