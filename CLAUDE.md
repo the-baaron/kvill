@@ -281,11 +281,44 @@ version number says nothing to anyone who was not watching the version numbers.
 ## Releasing
 
 Bump `CFBundleVersion` in `Resources/Info.plist` (Apple refuses a repeated build
-number), then:
+number), then, **in this order**:
 
-    ./package.sh --upload
-    node store/push-listing.mjs
+    ./package.sh --upload                    # build, sign, send to App Store Connect
+    # wait for Apple to finish processing; push-testflight.mjs lists build states
+    # 1. a version record has to exist and be editable
+    # 2. attach the build to it
+    # 3. write What's New, which is REQUIRED for an update
+    node store/push-listing.mjs              # text and screenshots
+    node store/push-review-notes.mjs --apply # App Review Information
     node store/submit.mjs
+
+**The three numbered steps are not scripted and are the ones that bite.** Every
+one of them was found by a 409 rather than by reading anything.
+
+**A new version record does not create itself.** `push-listing.mjs` and
+`submit.mjs` both take `appStoreVersions[0]`, which with no new record is the
+**live** version: running either would edit or resubmit what is already on sale.
+1.2.0 had to be created first with `POST /v1/appStoreVersions`, platform
+`MAC_OS`, which lands in `PREPARE_FOR_SUBMISSION`. **Read the version list back
+before pushing anything.**
+
+**Attaching the build is nobody's job.** `submit.mjs` never mentions builds, so
+a version goes to review with nothing in it. `PATCH
+/v1/appStoreVersions/{id}/relationships/build`.
+
+**What's New is required for an update and nothing fills it in.** Submission
+fails with `STATE_ERROR.ENTITY_STATE_INVALID`, whose text says only "check
+associated errors"; the real answer is in `meta.associatedErrors`, which named
+`whatsNew` on the localization. `PATCH /v1/appStoreVersionLocalizations/{id}`.
+**When Apple says to check associated errors, print them rather than guessing.**
+
+Two 409s on a `PREPARE_FOR_SUBMISSION` version are expected and harmless:
+`subtitle`, `privacyPolicyUrl` and the categories live on the app record rather
+than the version, and are already set.
+
+A failed `submit.mjs` leaves an empty `reviewSubmission` in `READY_FOR_REVIEW`
+that cannot be deleted (403). It is inert, and the next run logs it and carries
+on.
 
 Only two things ever needed a browser, and both are done: creating the app
 record (the API answers `403 "The resource 'apps' does not allow 'CREATE'"`) and
