@@ -240,8 +240,15 @@ screenshots stale.** A new sidebar, a moved button, a changed margin, a palette
 that was removed: the store is still showing the old one, and the store is what
 people decide on.
 
+    QUILL_SANDBOX=0 ./build.sh          # publishing leaves a sandboxed build
     ./store/make-screenshots.sh        # regenerates all five
     open store/screenshots             # look at them, do not assume
+
+**Rebuild without the sandbox first.** `package.sh --upload` leaves
+`build/Kvill.app` signed for distribution, and a sandboxed build cannot read a
+path handed to it on the command line. The screenshot run then fails with
+`Could not read store/shot-1.md: ... no such file`, which reads like a missing
+file and is not.
 
 Shot 2 is a photograph of the real window through `store/capture-window.sh`, so
 it picks up interface changes on its own. The other four are composed around a
